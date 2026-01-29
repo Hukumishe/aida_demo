@@ -1,3 +1,3 @@
 release: npx prisma migrate deploy && npx prisma generate
-web: node dist/main.js
+web: npm run build && node dist/main.js
 
