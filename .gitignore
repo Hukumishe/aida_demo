@@ -40,5 +40,5 @@ lerna-debug.log*
 .env.*.local
 
 # Prisma
-prisma/migrations
+# prisma/migrations - migrations should be committed
 
