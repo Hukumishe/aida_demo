@@ -8,7 +8,8 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
-import { JwtPayload, JwtRefreshPayload } from './strategies/jwt.strategy';
+import { JwtPayload } from './strategies/jwt.strategy';
+import { JwtRefreshPayload } from './strategies/jwt-refresh.strategy';
 
 @Injectable()
 export class AuthService {
@@ -123,10 +124,6 @@ export class AuthService {
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        studio: true,
-        staffProfile: true,
-      },
       select: {
         id: true,
         email: true,
