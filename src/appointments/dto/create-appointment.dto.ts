@@ -24,7 +24,10 @@ export class CreateAppointmentDto {
   @IsNotEmpty()
   serviceId: string;
 
-  @ApiProperty({ example: '2024-01-15T10:00:00Z' })
+  @ApiProperty({ 
+    example: '2024-01-15T10:00:00+06:00',
+    description: 'ISO 8601 date-time string with timezone offset. For Almaty use +06:00 (e.g., 2024-01-15T09:00:00+06:00 for 9:00 AM Almaty time)'
+  })
   @IsDateString()
   @IsNotEmpty()
   startAt: string;
@@ -35,4 +38,5 @@ export class CreateAppointmentDto {
   @Min(0)
   prepaymentAmount?: number;
 }
+
 

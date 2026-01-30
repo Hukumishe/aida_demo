@@ -29,7 +29,7 @@ export class StudiosService {
       data: {
         name: createStudioDto.name,
         address: createStudioDto.address,
-        timezone: createStudioDto.timezone || 'Europe/Moscow',
+        timezone: createStudioDto.timezone || 'Asia/Almaty',
       },
     });
   }
@@ -56,4 +56,5 @@ export class StudiosService {
     return studio;
   }
 }
+
 

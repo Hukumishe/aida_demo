@@ -32,3 +32,4 @@ export class UpdateScheduleDayDto {
   isDayOff?: boolean;
 }
 
+

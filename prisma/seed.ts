@@ -9,9 +9,9 @@ async function main() {
   // Create studio
   const studio = await prisma.studio.create({
     data: {
-      name: 'Beauty Studio Moscow',
-      address: 'Moscow, Tverskaya st. 1',
-      timezone: 'Europe/Moscow',
+      name: 'Beauty Studio Almaty',
+      address: 'Almaty, Abay Ave 150',
+      timezone: 'Asia/Almaty',
     },
   });
 
@@ -147,4 +147,5 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
 

@@ -10,7 +10,11 @@ import { ApiProperty } from '@nestjs/swagger';
 import { AppointmentStatus } from '@prisma/client';
 
 export class UpdateAppointmentDto {
-  @ApiProperty({ example: '2024-01-15T10:00:00Z', required: false })
+  @ApiProperty({ 
+    example: '2024-01-15T10:00:00+06:00',
+    description: 'ISO 8601 date-time string with timezone offset. For Almaty use +06:00',
+    required: false 
+  })
   @IsDateString()
   @IsOptional()
   startAt?: string;
@@ -26,4 +30,5 @@ export class UpdateAppointmentDto {
   @IsOptional()
   status?: AppointmentStatus;
 }
+
 

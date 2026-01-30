@@ -7,12 +7,18 @@ export class CreateBusySlotDto {
   @IsNotEmpty()
   staffUserId: string;
 
-  @ApiProperty({ example: '2024-01-15T10:00:00Z' })
+  @ApiProperty({ 
+    example: '2024-01-15T10:00:00+06:00',
+    description: 'ISO 8601 date-time string with timezone offset. For Almaty use +06:00'
+  })
   @IsDateString()
   @IsNotEmpty()
   startAt: string;
 
-  @ApiProperty({ example: '2024-01-15T12:00:00Z' })
+  @ApiProperty({ 
+    example: '2024-01-15T12:00:00+06:00',
+    description: 'ISO 8601 date-time string with timezone offset. For Almaty use +06:00'
+  })
   @IsDateString()
   @IsNotEmpty()
   endAt: string;
@@ -28,4 +34,5 @@ export class CreateBusySlotDto {
   @Min(0)
   forfeitedPrepaymentAmount?: number;
 }
+
 

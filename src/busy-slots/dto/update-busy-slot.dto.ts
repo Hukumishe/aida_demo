@@ -2,12 +2,20 @@ import { IsString, IsOptional, IsInt, IsDateString, Min } from 'class-validator'
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateBusySlotDto {
-  @ApiProperty({ example: '2024-01-15T10:00:00Z', required: false })
+  @ApiProperty({ 
+    example: '2024-01-15T10:00:00+06:00',
+    description: 'ISO 8601 date-time string with timezone offset. For Almaty use +06:00',
+    required: false 
+  })
   @IsDateString()
   @IsOptional()
   startAt?: string;
 
-  @ApiProperty({ example: '2024-01-15T12:00:00Z', required: false })
+  @ApiProperty({ 
+    example: '2024-01-15T12:00:00+06:00',
+    description: 'ISO 8601 date-time string with timezone offset. For Almaty use +06:00',
+    required: false 
+  })
   @IsDateString()
   @IsOptional()
   endAt?: string;
@@ -23,4 +31,5 @@ export class UpdateBusySlotDto {
   @Min(0)
   forfeitedPrepaymentAmount?: number;
 }
+
 

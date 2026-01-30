@@ -2,19 +2,20 @@ import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateStudioDto {
-  @ApiProperty({ example: 'Beauty Studio Moscow' })
+  @ApiProperty({ example: 'Beauty Studio Almaty' })
   @IsString()
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ example: 'Moscow, Tverskaya st. 1', required: false })
+  @ApiProperty({ example: 'Almaty, Abay Ave 150', required: false })
   @IsString()
   @IsOptional()
   address?: string;
 
-  @ApiProperty({ example: 'Europe/Moscow', required: false })
+  @ApiProperty({ example: 'Asia/Almaty', required: false })
   @IsString()
   @IsOptional()
   timezone?: string;
 }
+
 

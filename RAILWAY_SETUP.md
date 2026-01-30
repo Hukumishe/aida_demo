@@ -106,3 +106,4 @@ git push
 - Проверьте, что в Procfile есть `npx prisma generate`
 - Проверьте логи сборки в Railway
 
+
