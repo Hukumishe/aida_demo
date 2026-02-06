@@ -49,6 +49,7 @@ export class ServicesService {
         name: createServiceDto.name,
         defaultDurationMin: createServiceDto.defaultDurationMin,
         defaultPrice: createServiceDto.defaultPrice,
+        requiredStaffCount: createServiceDto.requiredStaffCount ?? 1,
       },
     });
   }
@@ -78,5 +79,7 @@ export class ServicesService {
     });
   }
 }
+
+
 
 

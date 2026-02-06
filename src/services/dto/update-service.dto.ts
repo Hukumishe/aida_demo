@@ -19,10 +19,18 @@ export class UpdateServiceDto {
   @Min(0)
   defaultPrice?: number;
 
+  @ApiProperty({ example: 1, required: false, description: 'Количество человек для выполнения услуги' })
+  @IsInt()
+  @IsOptional()
+  @Min(1)
+  requiredStaffCount?: number;
+
   @ApiProperty({ example: true, required: false })
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
 }
+
+
 
 

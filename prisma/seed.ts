@@ -98,6 +98,7 @@ async function main() {
       name: 'Haircut',
       defaultDurationMin: 60,
       defaultPrice: 2000,
+      requiredStaffCount: 1,
       isActive: true,
     },
   });

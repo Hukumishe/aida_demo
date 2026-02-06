@@ -71,15 +71,23 @@ export class ClientsService {
       throw new BadRequestException('Client with this phone already exists in this studio');
     }
 
-    return this.prisma.client.create({
-      data: {
-        studioId,
-        firstName: createClientDto.firstName,
-        lastName: createClientDto.lastName,
-        phone: createClientDto.phone,
-        notes: createClientDto.notes,
-      },
-    });
+    try {
+      return await this.prisma.client.create({
+        data: {
+          studioId,
+          firstName: createClientDto.firstName,
+          lastName: createClientDto.lastName,
+          phone: createClientDto.phone,
+          notes: createClientDto.notes,
+        },
+      });
+    } catch (error: any) {
+      // Handle Prisma unique constraint errors
+      if (error.code === 'P2002') {
+        throw new BadRequestException('Client with this phone already exists in this studio');
+      }
+      throw error;
+    }
   }
 
   async findOne(id: string, userRole?: string, userStudioId?: string) {
@@ -148,5 +156,7 @@ export class ClientsService {
     });
   }
 }
+
+
 
 

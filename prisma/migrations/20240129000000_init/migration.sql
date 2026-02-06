@@ -234,3 +234,5 @@ ALTER TABLE "appointments" ADD CONSTRAINT "appointments_serviceId_fkey" FOREIGN 
 ALTER TABLE "appointments" ADD CONSTRAINT "appointments_arrivedByUserId_fkey" FOREIGN KEY ("arrivedByUserId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 
+
+

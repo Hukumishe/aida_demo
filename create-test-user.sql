@@ -38,3 +38,5 @@ ON CONFLICT ("email") DO NOTHING;
 -- console.log(hash);
 
 
+
+
