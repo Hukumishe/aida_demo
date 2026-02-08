@@ -68,7 +68,9 @@ export class ScheduleService {
     const where: any = { studioId };
 
     if (date) {
-      const dateObj = new Date(date);
+      // Normalize date: interpret the date string as a date in Asia/Almaty timezone
+      const dateStr = date; // Should already be in YYYY-MM-DD format
+      const dateObj = new Date(dateStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
       where.date = dateObj;
     }
 
@@ -116,7 +118,11 @@ export class ScheduleService {
       throw new NotFoundException('Staff member not found or does not belong to this studio');
     }
 
-    const date = new Date(createScheduleDayDto.date);
+    // Normalize date: interpret the date string as a date in Asia/Almaty timezone
+    // When date comes as "2024-02-08", we want it to represent Feb 8 in Almaty, not UTC
+    // So we create a date at midnight Almaty time (which is 18:00 previous day UTC)
+    const dateStr = createScheduleDayDto.date; // Already in YYYY-MM-DD format
+    const date = new Date(dateStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
 
     // Validate time range
     if (!createScheduleDayDto.isDayOff) {
@@ -194,8 +200,11 @@ export class ScheduleService {
       generateScheduleDto.breakEnd,
     );
 
-    const dateFrom = new Date(generateScheduleDto.dateFrom);
-    const dateTo = new Date(generateScheduleDto.dateTo);
+    // Normalize dates: interpret date strings as dates in Asia/Almaty timezone
+    const dateFromStr = generateScheduleDto.dateFrom; // Already in YYYY-MM-DD format
+    const dateToStr = generateScheduleDto.dateTo; // Already in YYYY-MM-DD format
+    const dateFrom = new Date(dateFromStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
+    const dateTo = new Date(dateToStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
 
     if (dateTo < dateFrom) {
       throw new BadRequestException('dateTo must be greater than or equal to dateFrom');
@@ -217,10 +226,15 @@ export class ScheduleService {
       }
 
       if (isWorkDay) {
+        // Normalize date for storage: use the date in Almaty timezone
+        // Get the date string in YYYY-MM-DD format from the current date in Almaty timezone
+        const dateStr = currentDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Almaty' }); // Returns YYYY-MM-DD
+        const normalizedDate = new Date(dateStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
+        
         schedules.push({
           studioId,
           staffUserId: generateScheduleDto.staffUserId,
-          date: new Date(currentDate),
+          date: normalizedDate,
           startTime: generateScheduleDto.startTime,
           endTime: generateScheduleDto.endTime,
           breakStart: generateScheduleDto.breakStart,

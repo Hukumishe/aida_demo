@@ -14,6 +14,21 @@ export class AvailabilityService {
     return hours * 60 + minutes;
   }
 
+  /**
+   * Extract time in HH:MM format from a Date object in Asia/Almaty timezone.
+   * This ensures we get the correct local time regardless of server timezone.
+   */
+  private extractTime(date: Date): string {
+    // Use toLocaleTimeString with Asia/Almaty timezone to get correct local time
+    const timeStr = date.toLocaleTimeString('en-US', {
+      timeZone: 'Asia/Almaty',
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    return timeStr;
+  }
+
   private isTimeInRange(time: string, startTime: string, endTime: string): boolean {
     const timeMinutes = this.timeToMinutes(time);
     const startMinutes = this.timeToMinutes(startTime);
@@ -36,8 +51,9 @@ export class AvailabilityService {
     startAt: Date,
     endAt: Date,
   ): Promise<void> {
-    const date = new Date(startAt);
-    date.setHours(0, 0, 0, 0);
+    // Normalize date: get the date in Almaty timezone from startAt
+    const almatyDateStr = startAt.toLocaleDateString('en-CA', { timeZone: 'Asia/Almaty' }); // Returns YYYY-MM-DD
+    const date = new Date(almatyDateStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
 
     // Get work schedule for the date
     const schedule = await this.prisma.workScheduleDay.findUnique({
@@ -55,8 +71,8 @@ export class AvailabilityService {
     }
 
     // Check if busy slot is within work hours
-    const startTime = startAt.toTimeString().slice(0, 5); // HH:MM
-    const endTime = endAt.toTimeString().slice(0, 5);
+    const startTime = this.extractTime(startAt); // HH:MM
+    const endTime = this.extractTime(endAt);
 
     if (
       !this.isTimeInRange(startTime, schedule.startTime, schedule.endTime) ||
@@ -87,8 +103,10 @@ export class AvailabilityService {
     endAt: Date,
     appointmentId?: string,
   ): Promise<void> {
-    const date = new Date(startAt);
-    date.setHours(0, 0, 0, 0);
+    // Normalize date: get the date in Almaty timezone from startAt
+    // Convert startAt to Almaty timezone and extract the date part
+    const almatyDateStr = startAt.toLocaleDateString('en-CA', { timeZone: 'Asia/Almaty' }); // Returns YYYY-MM-DD
+    const date = new Date(almatyDateStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
 
     // 1. Check work schedule
     const schedule = await this.prisma.workScheduleDay.findUnique({
@@ -106,8 +124,8 @@ export class AvailabilityService {
     }
 
     // 2. Check if appointment is within work hours
-    const startTime = startAt.toTimeString().slice(0, 5); // HH:MM
-    const endTime = endAt.toTimeString().slice(0, 5);
+    const startTime = this.extractTime(startAt); // HH:MM
+    const endTime = this.extractTime(endAt);
 
     if (
       !this.isTimeInRange(startTime, schedule.startTime, schedule.endTime) ||

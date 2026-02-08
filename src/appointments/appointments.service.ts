@@ -44,13 +44,15 @@ export class AppointmentsService {
     }
 
     if (date) {
-      const dateObj = new Date(date);
-      const nextDay = new Date(dateObj);
-      nextDay.setDate(nextDay.getDate() + 1);
+      // Normalize date: interpret the date string as a date in Asia/Almaty timezone
+      // Date should come in YYYY-MM-DD format
+      const dateStr = date.includes('T') ? date.split('T')[0] : date;
+      const dateStart = new Date(dateStr + 'T00:00:00+06:00'); // Start of day in Almaty
+      const dateEnd = new Date(dateStr + 'T23:59:59.999+06:00'); // End of day in Almaty
 
       where.startAt = {
-        gte: dateObj,
-        lt: nextDay,
+        gte: dateStart,
+        lte: dateEnd,
       };
     }
 
