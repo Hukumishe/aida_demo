@@ -51,9 +51,9 @@ export class AvailabilityService {
     startAt: Date,
     endAt: Date,
   ): Promise<void> {
-    // Normalize date: get the date in Almaty timezone from startAt
+    // Normalize date: get the date in Almaty timezone from startAt, then convert to UTC midnight
     const almatyDateStr = startAt.toLocaleDateString('en-CA', { timeZone: 'Asia/Almaty' }); // Returns YYYY-MM-DD
-    const date = new Date(almatyDateStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
+    const date = new Date(almatyDateStr + 'T00:00:00.000Z'); // UTC midnight for that date
 
     // Get work schedule for the date
     const schedule = await this.prisma.workScheduleDay.findUnique({
@@ -103,10 +103,10 @@ export class AvailabilityService {
     endAt: Date,
     appointmentId?: string,
   ): Promise<void> {
-    // Normalize date: get the date in Almaty timezone from startAt
-    // Convert startAt to Almaty timezone and extract the date part
+    // Normalize date: get the date in Almaty timezone from startAt, then convert to UTC midnight
+    // This ensures we match the date as stored in PostgreSQL (@db.Date)
     const almatyDateStr = startAt.toLocaleDateString('en-CA', { timeZone: 'Asia/Almaty' }); // Returns YYYY-MM-DD
-    const date = new Date(almatyDateStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
+    const date = new Date(almatyDateStr + 'T00:00:00.000Z'); // UTC midnight for that date
 
     // 1. Check work schedule
     const schedule = await this.prisma.workScheduleDay.findUnique({

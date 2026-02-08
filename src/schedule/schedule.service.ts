@@ -68,9 +68,9 @@ export class ScheduleService {
     const where: any = { studioId };
 
     if (date) {
-      // Normalize date: interpret the date string as a date in Asia/Almaty timezone
-      const dateStr = date; // Should already be in YYYY-MM-DD format
-      const dateObj = new Date(dateStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
+      // Normalize date: use UTC midnight to ensure date matching works correctly
+      const dateStr = date.includes('T') ? date.split('T')[0] : date; // Extract YYYY-MM-DD
+      const dateObj = new Date(dateStr + 'T00:00:00.000Z'); // UTC midnight
       where.date = dateObj;
     }
 
@@ -118,11 +118,12 @@ export class ScheduleService {
       throw new NotFoundException('Staff member not found or does not belong to this studio');
     }
 
-    // Normalize date: interpret the date string as a date in Asia/Almaty timezone
-    // When date comes as "2024-02-08", we want it to represent Feb 8 in Almaty, not UTC
-    // So we create a date at midnight Almaty time (which is 18:00 previous day UTC)
+    // Normalize date: when date comes as "2024-02-08", interpret it as Feb 8 in Almaty
+    // For PostgreSQL @db.Date, we need to store it as UTC midnight of that date
+    // This ensures that when Prisma converts to UTC, it still represents the correct date
     const dateStr = createScheduleDayDto.date; // Already in YYYY-MM-DD format
-    const date = new Date(dateStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
+    // Use UTC midnight to ensure the date is preserved correctly in PostgreSQL
+    const date = new Date(dateStr + 'T00:00:00.000Z'); // UTC midnight
 
     // Validate time range
     if (!createScheduleDayDto.isDayOff) {
@@ -200,11 +201,11 @@ export class ScheduleService {
       generateScheduleDto.breakEnd,
     );
 
-    // Normalize dates: interpret date strings as dates in Asia/Almaty timezone
+    // Normalize dates: use UTC midnight to ensure dates are preserved correctly in PostgreSQL
     const dateFromStr = generateScheduleDto.dateFrom; // Already in YYYY-MM-DD format
     const dateToStr = generateScheduleDto.dateTo; // Already in YYYY-MM-DD format
-    const dateFrom = new Date(dateFromStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
-    const dateTo = new Date(dateToStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
+    const dateFrom = new Date(dateFromStr + 'T00:00:00.000Z'); // UTC midnight
+    const dateTo = new Date(dateToStr + 'T00:00:00.000Z'); // UTC midnight
 
     if (dateTo < dateFrom) {
       throw new BadRequestException('dateTo must be greater than or equal to dateFrom');
@@ -226,10 +227,9 @@ export class ScheduleService {
       }
 
       if (isWorkDay) {
-        // Normalize date for storage: use the date in Almaty timezone
-        // Get the date string in YYYY-MM-DD format from the current date in Almaty timezone
-        const dateStr = currentDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Almaty' }); // Returns YYYY-MM-DD
-        const normalizedDate = new Date(dateStr + 'T00:00:00+06:00'); // Midnight in Almaty timezone
+        // Normalize date for storage: use UTC midnight to ensure date is preserved correctly
+        const dateStr = currentDate.toISOString().split('T')[0]; // Get YYYY-MM-DD from UTC date
+        const normalizedDate = new Date(dateStr + 'T00:00:00.000Z'); // UTC midnight
         
         schedules.push({
           studioId,
