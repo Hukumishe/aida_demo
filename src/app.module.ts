@@ -9,6 +9,7 @@ import { ServicesModule } from './services/services.module';
 import { ScheduleModule } from './schedule/schedule.module';
 import { BusySlotsModule } from './busy-slots/busy-slots.module';
 import { AppointmentsModule } from './appointments/appointments.module';
+import { UploadModule } from './upload/upload.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -26,6 +27,7 @@ import { AppController } from './app.controller';
     ScheduleModule,
     BusySlotsModule,
     AppointmentsModule,
+    UploadModule,
   ],
   controllers: [AppController],
 })
