@@ -312,5 +312,28 @@ export class ScheduleService {
       data: updateScheduleDayDto,
     });
   }
+
+  async remove(
+    id: string,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    const scheduleDay = await this.prisma.workScheduleDay.findUnique({
+      where: { id },
+    });
+
+    if (!scheduleDay) {
+      throw new NotFoundException(`Schedule day with ID ${id} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== scheduleDay.studioId) {
+      throw new ForbiddenException('Access denied to this schedule');
+    }
+
+    return this.prisma.workScheduleDay.delete({
+      where: { id },
+    });
+  }
 }
 

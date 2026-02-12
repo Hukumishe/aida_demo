@@ -29,6 +29,11 @@ export class UsersService {
       },
       include: {
         staffProfile: true,
+        staffServices: {
+          include: {
+            service: true,
+          },
+        },
       },
       orderBy: {
         createdAt: 'desc',
@@ -180,6 +185,142 @@ export class UsersService {
       },
       include: {
         staffProfile: true,
+      },
+    });
+  }
+
+  async addService(
+    staffUserId: string,
+    serviceId: string,
+    userRole: string,
+    userStudioId?: string,
+  ) {
+    // Get staff user
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffUserId },
+      include: { studio: true },
+    });
+
+    if (!staff) {
+      throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+      throw new ForbiddenException('Access denied to this staff member');
+    }
+
+    // Verify service exists and belongs to same studio
+    const service = await this.prisma.service.findUnique({
+      where: { id: serviceId },
+    });
+
+    if (!service) {
+      throw new NotFoundException(`Service with ID ${serviceId} not found`);
+    }
+
+    if (service.studioId !== staff.studioId) {
+      throw new BadRequestException('Service does not belong to the same studio');
+    }
+
+    // Check if already exists
+    const existing = await this.prisma.staffService.findUnique({
+      where: {
+        studioId_staffUserId_serviceId: {
+          studioId: staff.studioId!,
+          staffUserId,
+          serviceId,
+        },
+      },
+    });
+
+    if (existing) {
+      throw new BadRequestException('Service is already assigned to this staff member');
+    }
+
+    // Create staff service
+    return this.prisma.staffService.create({
+      data: {
+        studioId: staff.studioId!,
+        staffUserId,
+        serviceId,
+      },
+      include: {
+        service: true,
+      },
+    });
+  }
+
+  async removeService(
+    staffUserId: string,
+    serviceId: string,
+    userRole: string,
+    userStudioId?: string,
+  ) {
+    // Get staff user
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffUserId },
+    });
+
+    if (!staff) {
+      throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+      throw new ForbiddenException('Access denied to this staff member');
+    }
+
+    // Find and delete staff service
+    const staffService = await this.prisma.staffService.findUnique({
+      where: {
+        studioId_staffUserId_serviceId: {
+          studioId: staff.studioId!,
+          staffUserId,
+          serviceId,
+        },
+      },
+    });
+
+    if (!staffService) {
+      throw new NotFoundException('Service is not assigned to this staff member');
+    }
+
+    return this.prisma.staffService.delete({
+      where: { id: staffService.id },
+    });
+  }
+
+  async getStaffServices(
+    staffUserId: string,
+    userRole: string,
+    userStudioId?: string,
+  ) {
+    // Get staff user
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffUserId },
+    });
+
+    if (!staff) {
+      throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+      throw new ForbiddenException('Access denied to this staff member');
+    }
+
+    return this.prisma.staffService.findMany({
+      where: {
+        staffUserId,
+      },
+      include: {
+        service: true,
+      },
+      orderBy: {
+        service: {
+          name: 'asc',
+        },
       },
     });
   }

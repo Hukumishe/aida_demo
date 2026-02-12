@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Patch,
+  Delete,
   Param,
   Query,
   UseGuards,
@@ -80,6 +81,18 @@ export class ScheduleController {
     @CurrentUser() user?: any,
   ) {
     return this.scheduleService.update(id, updateScheduleDayDto, user?.role, user?.studioId);
+  }
+
+  @Delete('schedule/day/:id')
+  @ApiOperation({ summary: 'Delete schedule day' })
+  @ApiResponse({ status: 200, description: 'Schedule day deleted' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Schedule day not found' })
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.scheduleService.remove(id, user?.role, user?.studioId);
   }
 }
 

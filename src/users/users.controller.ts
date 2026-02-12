@@ -5,6 +5,7 @@ import {
   Body,
   Patch,
   Param,
+  Delete,
   UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
@@ -17,6 +18,7 @@ import {
 import { UsersService } from './users.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
+import { AddStaffServiceDto } from './dto/add-staff-service.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
@@ -63,6 +65,50 @@ export class UsersController {
     @CurrentUser() user: any,
   ) {
     return this.usersService.update(userId, updateStaffDto, user.role, user.studioId);
+  }
+
+  @Get('staff/:staffUserId/services')
+  @ApiOperation({ summary: 'Get all services for a staff member' })
+  @ApiResponse({ status: 200, description: 'List of staff services' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Staff member not found' })
+  async getStaffServices(
+    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.getStaffServices(staffUserId, user.role, user.studioId);
+  }
+
+  @Post('staff/:staffUserId/services')
+  @ApiOperation({ summary: 'Add a service to a staff member' })
+  @ApiResponse({ status: 201, description: 'Service added to staff member' })
+  @ApiResponse({ status: 400, description: 'Bad request (service already assigned or wrong studio)' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Staff member or service not found' })
+  async addService(
+    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
+    @Body() addStaffServiceDto: AddStaffServiceDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.addService(
+      staffUserId,
+      addStaffServiceDto.serviceId,
+      user.role,
+      user.studioId,
+    );
+  }
+
+  @Delete('staff/:staffUserId/services/:serviceId')
+  @ApiOperation({ summary: 'Remove a service from a staff member' })
+  @ApiResponse({ status: 200, description: 'Service removed from staff member' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Staff member or service assignment not found' })
+  async removeService(
+    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
+    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.removeService(staffUserId, serviceId, user.role, user.studioId);
   }
 }
 
