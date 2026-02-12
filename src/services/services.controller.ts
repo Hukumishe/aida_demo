@@ -33,11 +33,23 @@ export class ServicesController {
   @ApiOperation({ summary: 'Get all services for a studio' })
   @ApiResponse({ status: 200, description: 'List of services' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   async findAll(
     @Param('studioId', ParseUUIDPipe) studioId: string,
     @CurrentUser() user?: any,
   ) {
-    return this.servicesService.findAll(studioId, user?.role, user?.studioId);
+    try {
+      return await this.servicesService.findAll(studioId, user?.role, user?.studioId);
+    } catch (error) {
+      console.error('Error in ServicesController.findAll:', {
+        studioId,
+        userRole: user?.role,
+        userStudioId: user?.studioId,
+        error: error.message,
+        stack: error.stack,
+      });
+      throw error;
+    }
   }
 
   @Post('studios/:studioId/services')

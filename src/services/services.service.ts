@@ -13,15 +13,33 @@ export class ServicesService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(studioId: string, userRole?: string, userStudioId?: string) {
-    // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
-      throw new ForbiddenException('Access denied to this studio');
-    }
+    try {
+      // Check access
+      if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
 
-    return this.prisma.service.findMany({
-      where: { studioId },
-      orderBy: { name: 'asc' },
-    });
+      // Validate studioId
+      if (!studioId) {
+        throw new NotFoundException('Studio ID is required');
+      }
+
+      return await this.prisma.service.findMany({
+        where: { 
+          studioId,
+          // Возвращаем все услуги, включая неактивные (можно отфильтровать на frontend если нужно)
+        },
+        orderBy: { name: 'asc' },
+      });
+    } catch (error) {
+      // Если это уже NestJS исключение, пробрасываем дальше
+      if (error instanceof ForbiddenException || error instanceof NotFoundException) {
+        throw error;
+      }
+      // Логируем неожиданные ошибки
+      console.error('Error in ServicesService.findAll:', error);
+      throw error;
+    }
   }
 
   async create(
