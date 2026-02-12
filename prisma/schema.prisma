@@ -70,12 +70,16 @@ model User {
 }
 
 model StaffProfile {
-  userId          String  @id
+  userId          String   @id
   firstName       String
   lastName        String?
   title           String?
   category        String?
   providesServices Boolean @default(true)
+  avatar          String?
+  bio             String?
+  portfolioPhotos String[]
+  rank            String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

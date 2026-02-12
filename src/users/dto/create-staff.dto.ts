@@ -5,6 +5,8 @@ import {
   IsOptional,
   IsEnum,
   MinLength,
+  IsArray,
+  IsUrl,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '../../common/decorators/roles.decorator';
@@ -54,6 +56,32 @@ export class CreateStaffDto {
   @ApiProperty({ example: true, required: false })
   @IsOptional()
   providesServices?: boolean;
+
+  @ApiProperty({ example: 'https://example.com/avatar.jpg', required: false })
+  @IsString()
+  @IsOptional()
+  @IsUrl()
+  avatar?: string;
+
+  @ApiProperty({ example: 'Опытный мастер с 10-летним стажем', required: false })
+  @IsString()
+  @IsOptional()
+  bio?: string;
+
+  @ApiProperty({
+    example: ['https://example.com/work1.jpg', 'https://example.com/work2.jpg'],
+    required: false,
+    type: [String],
+  })
+  @IsArray()
+  @IsOptional()
+  @IsUrl({}, { each: true })
+  portfolioPhotos?: string[];
+
+  @ApiProperty({ example: '1-я категория', required: false })
+  @IsString()
+  @IsOptional()
+  rank?: string;
 }
 
 

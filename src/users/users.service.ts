@@ -8,6 +8,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
+import { UpdateStaffProfileDto } from './dto/update-staff-profile.dto';
 import { UserRole } from '../common/decorators/roles.decorator';
 
 @Injectable()
@@ -119,6 +120,10 @@ export class UsersService {
             title: createStaffDto.title,
             category: createStaffDto.category,
             providesServices: createStaffDto.providesServices ?? true,
+            avatar: createStaffDto.avatar,
+            bio: createStaffDto.bio,
+            portfolioPhotos: createStaffDto.portfolioPhotos || [],
+            rank: createStaffDto.rank,
           },
         },
       },
@@ -182,15 +187,22 @@ export class UsersService {
       updateData.passwordHash = await bcrypt.hash(updateStaffDto.password, 10);
     }
 
+    const hasProfileUpdate =
+      updateStaffDto.firstName !== undefined ||
+      updateStaffDto.lastName !== undefined ||
+      updateStaffDto.title !== undefined ||
+      updateStaffDto.category !== undefined ||
+      updateStaffDto.providesServices !== undefined ||
+      updateStaffDto.avatar !== undefined ||
+      updateStaffDto.bio !== undefined ||
+      updateStaffDto.portfolioPhotos !== undefined ||
+      updateStaffDto.rank !== undefined;
+
     return this.prisma.user.update({
       where: { id: userId },
       data: {
         ...updateData,
-        staffProfile: updateStaffDto.firstName ||
-          updateStaffDto.lastName !== undefined ||
-          updateStaffDto.title !== undefined ||
-          updateStaffDto.category !== undefined ||
-          updateStaffDto.providesServices !== undefined
+        staffProfile: hasProfileUpdate
           ? {
               update: {
                 firstName: updateStaffDto.firstName,
@@ -198,6 +210,10 @@ export class UsersService {
                 title: updateStaffDto.title,
                 category: updateStaffDto.category,
                 providesServices: updateStaffDto.providesServices,
+                avatar: updateStaffDto.avatar,
+                bio: updateStaffDto.bio,
+                portfolioPhotos: updateStaffDto.portfolioPhotos,
+                rank: updateStaffDto.rank,
               },
             }
           : undefined,
@@ -339,6 +355,117 @@ export class UsersService {
       orderBy: {
         service: {
           name: 'asc',
+        },
+      },
+    });
+  }
+
+  async getStaffProfile(
+    userId: string,
+    userRole: string,
+    userStudioId?: string,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        staffProfile: true,
+        staffServices: {
+          include: {
+            service: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== user.studioId) {
+      throw new ForbiddenException('Access denied to this user');
+    }
+
+    // Return user with profile, services, and basic info
+    return {
+      id: user.id,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      isActive: user.isActive,
+      staffProfile: user.staffProfile,
+      services: user.staffServices.map((ss) => ss.service),
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+  }
+
+  async updateStaffProfile(
+    userId: string,
+    updateProfileDto: UpdateStaffProfileDto,
+    userRole: string,
+    userStudioId?: string,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { staffProfile: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== user.studioId) {
+      throw new ForbiddenException('Access denied to this user');
+    }
+
+    // Ensure staff profile exists
+    if (!user.staffProfile) {
+      throw new NotFoundException('Staff profile not found');
+    }
+
+    // Prepare update data
+    const profileUpdateData: any = {};
+
+    if (updateProfileDto.avatar !== undefined) {
+      profileUpdateData.avatar = updateProfileDto.avatar || null;
+    }
+    if (updateProfileDto.bio !== undefined) {
+      profileUpdateData.bio = updateProfileDto.bio || null;
+    }
+    if (updateProfileDto.portfolioPhotos !== undefined) {
+      profileUpdateData.portfolioPhotos = updateProfileDto.portfolioPhotos || [];
+    }
+    if (updateProfileDto.rank !== undefined) {
+      profileUpdateData.rank = updateProfileDto.rank || null;
+    }
+    if (updateProfileDto.firstName !== undefined) {
+      profileUpdateData.firstName = updateProfileDto.firstName;
+    }
+    if (updateProfileDto.lastName !== undefined) {
+      profileUpdateData.lastName = updateProfileDto.lastName || null;
+    }
+    if (updateProfileDto.title !== undefined) {
+      profileUpdateData.title = updateProfileDto.title || null;
+    }
+    if (updateProfileDto.category !== undefined) {
+      profileUpdateData.category = updateProfileDto.category || null;
+    }
+
+    // Update staff profile
+    return this.prisma.staffProfile.update({
+      where: { userId },
+      data: profileUpdateData,
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            role: true,
+            isActive: true,
+          },
         },
       },
     });

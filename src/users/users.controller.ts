@@ -18,6 +18,7 @@ import {
 import { UsersService } from './users.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
+import { UpdateStaffProfileDto } from './dto/update-staff-profile.dto';
 import { AddStaffServiceDto } from './dto/add-staff-service.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -109,6 +110,31 @@ export class UsersController {
     @CurrentUser() user: any,
   ) {
     return this.usersService.removeService(staffUserId, serviceId, user.role, user.studioId);
+  }
+
+  @Get('staff/:userId/profile')
+  @ApiOperation({ summary: 'Get staff member profile' })
+  @ApiResponse({ status: 200, description: 'Staff member profile' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Staff member not found' })
+  async getStaffProfile(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.getStaffProfile(userId, user.role, user.studioId);
+  }
+
+  @Patch('staff/:userId/profile')
+  @ApiOperation({ summary: 'Update staff member profile' })
+  @ApiResponse({ status: 200, description: 'Staff member profile updated' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Staff member not found' })
+  async updateStaffProfile(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body() updateProfileDto: UpdateStaffProfileDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.updateStaffProfile(userId, updateProfileDto, user.role, user.studioId);
   }
 }
 

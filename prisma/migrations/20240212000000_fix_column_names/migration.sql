@@ -4,13 +4,19 @@
 
 DO $$
 BEGIN
-    -- Check if column exists with lowercase name
+    -- Check if column exists with lowercase name AND requiredStaffCount doesn't exist yet
     IF EXISTS (
         SELECT 1 
         FROM information_schema.columns 
         WHERE table_schema = 'public' 
         AND table_name = 'services' 
         AND column_name = 'requiredstaffcount'
+    ) AND NOT EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'services' 
+        AND column_name = 'requiredStaffCount'
     ) THEN
         -- Rename column to match Prisma schema
         ALTER TABLE "services" RENAME COLUMN "requiredstaffcount" TO "requiredStaffCount";
@@ -75,4 +81,5 @@ BEGIN
         FOREIGN KEY ("serviceId") REFERENCES "services"("id") ON DELETE CASCADE ON UPDATE CASCADE;
     END IF;
 END $$;
+
 
