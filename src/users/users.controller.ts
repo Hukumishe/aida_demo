@@ -136,6 +136,19 @@ export class UsersController {
   ) {
     return this.usersService.updateStaffProfile(userId, updateProfileDto, user.role, user.studioId);
   }
+
+  @Delete('staff/:userId')
+  @ApiOperation({ summary: 'Delete staff member' })
+  @ApiResponse({ status: 200, description: 'Staff member deleted' })
+  @ApiResponse({ status: 400, description: 'Bad request (cannot delete OWNER)' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Staff member not found' })
+  async remove(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.remove(userId, user.role, user.studioId);
+  }
 }
 
 

@@ -10,7 +10,9 @@
 - Должность (title)
 - Специализация (category)
 
-**Важно:** Email, телефон, роль и услуги редактируются через другие эндпоинты (см. раздел "Дополнительные эндпоинты").
+**Важно:** 
+- Email, телефон, роль и услуги редактируются через другие эндпоинты (см. раздел "Дополнительные эндпоинты").
+- **КРИТИЧЕСКИ ВАЖНО:** При нажатии кнопки "Удалить" на фото (avatar или portfolioPhotos) изменения должны **немедленно сохраняться на сервере** через PATCH запрос. Не нужно ждать нажатия кнопки "Сохранить" - удаление должно происходить сразу при клике на кнопку "Удалить".
 
 ---
 
@@ -518,11 +520,67 @@ function EditStaffProfileForm({
     }
   };
 
-  const removePortfolioPhoto = (index: number) => {
+  const removePortfolioPhoto = async (index: number) => {
+    // Сохраняем текущее значение для возможного отката
+    const currentPhotos = formData.portfolioPhotos || [];
+    
+    // Обновляем локальное состояние
+    const updatedPhotos = currentPhotos.filter((_, i) => i !== index);
     setFormData({
       ...formData,
-      portfolioPhotos: formData.portfolioPhotos?.filter((_, i) => i !== index) || [],
+      portfolioPhotos: updatedPhotos,
     });
+
+    // Сразу сохраняем изменения на сервере
+    setLoading(true);
+    setError(null);
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(
+        `https://aidaproject-production.up.railway.app/staff/${userId}/profile`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            portfolioPhotos: updatedPhotos,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        // Если ошибка, возвращаем фото обратно
+        setFormData({
+          ...formData,
+          portfolioPhotos: currentPhotos,
+        });
+        
+        if (response.status === 400) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Неверные данные');
+        }
+        if (response.status === 403) {
+          throw new Error('Нет доступа к этому профилю');
+        }
+        if (response.status === 404) {
+          throw new Error('Профиль не найден');
+        }
+        throw new Error('Ошибка при удалении фото');
+      }
+
+      setLoading(false);
+    } catch (err: any) {
+      // Если ошибка, возвращаем фото обратно
+      setFormData({
+        ...formData,
+        portfolioPhotos: currentPhotos,
+      });
+      setError(err.message);
+      setLoading(false);
+    }
   };
 
   return (
@@ -582,9 +640,60 @@ function EditStaffProfileForm({
               <img src={formData.avatar} alt="Avatar preview" />
               <button
                 type="button"
-                onClick={() => setFormData({ ...formData, avatar: null })}
+                onClick={async () => {
+                  // Сохраняем текущее значение для возможного отката
+                  const currentAvatar = formData.avatar;
+                  
+                  // Обновляем локальное состояние
+                  setFormData({ ...formData, avatar: null });
+                  
+                  // Сразу сохраняем изменения на сервере
+                  setLoading(true);
+                  setError(null);
+
+                  try {
+                    const token = localStorage.getItem('accessToken');
+                    const response = await fetch(
+                      `https://aidaproject-production.up.railway.app/staff/${userId}/profile`,
+                      {
+                        method: 'PATCH',
+                        headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                      },
+                      body: JSON.stringify({
+                        avatar: null,
+                      }),
+                    });
+
+                    if (!response.ok) {
+                      // Если ошибка, возвращаем фото обратно
+                      setFormData({ ...formData, avatar: currentAvatar || null });
+                      
+                      if (response.status === 400) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || 'Неверные данные');
+                      }
+                      if (response.status === 403) {
+                        throw new Error('Нет доступа к этому профилю');
+                      }
+                      if (response.status === 404) {
+                        throw new Error('Профиль не найден');
+                      }
+                      throw new Error('Ошибка при удалении фото');
+                    }
+
+                    setLoading(false);
+                  } catch (err: any) {
+                    // Если ошибка, возвращаем фото обратно
+                    setFormData({ ...formData, avatar: currentAvatar || null });
+                    setError(err.message);
+                    setLoading(false);
+                  }
+                }}
+                disabled={loading}
               >
-                Удалить фото
+                {loading ? 'Удаление...' : 'Удалить фото'}
               </button>
             </div>
           )}
@@ -739,8 +848,9 @@ function EditStaffProfileForm({
                 <button
                   type="button"
                   onClick={() => removePortfolioPhoto(index)}
+                  disabled={loading}
                 >
-                  Удалить
+                  {loading ? 'Удаление...' : 'Удалить'}
                 </button>
               </div>
             ))}
@@ -895,4 +1005,10 @@ function StaffProfilePage() {
    - Фото профиля: максимум 5MB
    - Фото работ: максимум 10MB
    - Форматы: jpg, jpeg, png, gif, webp
+
+9. **Удаление фото:**
+   - **ВАЖНО:** При нажатии кнопки "Удалить" на фото (avatar или portfolioPhotos) изменения должны **немедленно сохраняться на сервере**
+   - Не нужно ждать нажатия кнопки "Сохранить" - удаление должно происходить сразу
+   - После удаления нужно отправить PATCH запрос с обновленным массивом `portfolioPhotos` или `avatar: null`
+   - Если запрос не удался, нужно вернуть фото обратно в состояние формы
 

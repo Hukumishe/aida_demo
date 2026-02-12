@@ -470,6 +470,35 @@ export class UsersService {
       },
     });
   }
+
+  async remove(
+    userId: string,
+    userRole: string,
+    userStudioId?: string,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== user.studioId) {
+      throw new ForbiddenException('Access denied to this user');
+    }
+
+    // Cannot delete OWNER
+    if (user.role === UserRole.OWNER) {
+      throw new BadRequestException('Cannot delete OWNER role');
+    }
+
+    // Delete user (cascade will delete related records: staffProfile, workSchedules, busySlots, appointments, staffServices, etc.)
+    return this.prisma.user.delete({
+      where: { id: userId },
+    });
+  }
 }
 
 
