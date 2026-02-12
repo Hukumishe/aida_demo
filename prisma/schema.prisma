@@ -145,7 +145,7 @@ model Service {
   name             String
   defaultDurationMin Int
   defaultPrice     Int?
-  requiredStaffCount Int   @default(1)
+  requiredStaffCount Int   @default(1) @map("requiredStaffCount")
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
