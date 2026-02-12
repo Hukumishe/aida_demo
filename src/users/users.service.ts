@@ -38,6 +38,25 @@ export class UsersService {
       orderBy: {
         createdAt: 'desc',
       },
+    }).catch((error) => {
+      // Если таблица staff_services еще не создана, возвращаем без staffServices
+      if (error.message?.includes('staff_services') || error.message?.includes('does not exist')) {
+        return this.prisma.user.findMany({
+          where: {
+            studioId,
+            role: {
+              in: [UserRole.MANAGER, UserRole.MASTER],
+            },
+          },
+          include: {
+            staffProfile: true,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        });
+      }
+      throw error;
     });
   }
 
