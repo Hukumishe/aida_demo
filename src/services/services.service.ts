@@ -97,9 +97,17 @@ export class ServicesService {
       throw new NotFoundException('Service not found in this studio');
     }
 
+    // Исключаем defaultDurationMin из обновления - стандартное время нельзя изменить
+    // Для изменения времени конкретного мастера используйте StaffServiceOverride
+    const { defaultDurationMin, ...updateData } = updateServiceDto as any;
+    if (defaultDurationMin !== undefined) {
+      // Игнорируем попытку изменить стандартное время
+      // Можно добавить логирование, если нужно
+    }
+
     return this.prisma.service.update({
       where: { id },
-      data: updateServiceDto,
+      data: updateData,
     });
   }
 }

@@ -7,11 +7,8 @@ export class UpdateServiceDto {
   @IsOptional()
   name?: string;
 
-  @ApiProperty({ example: 60, required: false })
-  @IsInt()
-  @IsOptional()
-  @Min(1)
-  defaultDurationMin?: number;
+  // defaultDurationMin НЕ включено - стандартное время нельзя изменить после создания услуги
+  // Для изменения времени конкретного мастера используйте StaffServiceOverride
 
   @ApiProperty({ example: 2000, required: false })
   @IsInt()
