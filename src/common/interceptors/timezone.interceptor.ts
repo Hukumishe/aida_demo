@@ -55,32 +55,24 @@ export class TimezoneInterceptor implements NestInterceptor {
 
   /**
    * Конвертирует Date объект в ISO строку с таймзоной Asia/Almaty (+06:00)
+   * Date объект из базы данных хранится в UTC, нужно конвертировать в Алмату
+   * Алмата = UTC + 6 часов
    */
   private convertToAlmatyISO(date: Date): string {
-    // Используем Intl.DateTimeFormat для получения компонентов в таймзоне Алматы
-    const formatter = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Almaty',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
+    // Создаем копию даты и добавляем 6 часов (offset для Алматы)
+    const almatyDate = new Date(date.getTime() + 6 * 60 * 60 * 1000);
 
-    // Форматируем дату
-    const parts = formatter.formatToParts(date);
-    const year = parts.find(p => p.type === 'year')?.value;
-    const month = parts.find(p => p.type === 'month')?.value;
-    const day = parts.find(p => p.type === 'day')?.value;
-    const hour = parts.find(p => p.type === 'hour')?.value;
-    const minute = parts.find(p => p.type === 'minute')?.value;
-    const second = parts.find(p => p.type === 'second')?.value;
-    const milliseconds = date.getMilliseconds().toString().padStart(3, '0');
+    // Получаем компоненты из скорректированной даты
+    const year = almatyDate.getUTCFullYear();
+    const month = String(almatyDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(almatyDate.getUTCDate()).padStart(2, '0');
+    const hours = String(almatyDate.getUTCHours()).padStart(2, '0');
+    const minutes = String(almatyDate.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(almatyDate.getUTCSeconds()).padStart(2, '0');
+    const milliseconds = String(almatyDate.getUTCMilliseconds()).padStart(3, '0');
 
     // Формируем ISO строку с таймзоной +06:00
-    return `${year}-${month}-${day}T${hour}:${minute}:${second}.${milliseconds}+06:00`;
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${milliseconds}+06:00`;
   }
 }
 
