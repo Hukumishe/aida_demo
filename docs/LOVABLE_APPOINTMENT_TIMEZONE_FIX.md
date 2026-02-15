@@ -1,6 +1,17 @@
-# Исправление ошибки "Appointment is outside work hours"
+# Время везде по Алмате (Asia/Almaty, UTC+6)
 
-## Проблема
+## ✅ ВАЖНО: Все даты автоматически возвращаются в таймзоне Алматы
+
+**Бэкенд автоматически конвертирует все DateTime поля в таймзону Asia/Almaty (+06:00) во всех ответах API.**
+
+Это означает:
+- ✅ Все даты в ответах API имеют формат `YYYY-MM-DDTHH:mm:ss.sss+06:00`
+- ✅ Не нужно конвертировать время на фронтенде
+- ✅ Время отображается сразу в таймзоне Алматы
+
+---
+
+## Проблема (если всё ещё возникает)
 
 При создании записи на 15:00 возникает ошибка: **"Appointment is outside work hours"**
 
@@ -29,33 +40,39 @@ startAt: "2026-02-15T15:00:00"
 startAt: "2026-02-15T15:00:00+06:00"
 ```
 
-### ⚠️ ВАЖНО: Обработка ответа от бэкенда
+### ✅ Обработка ответа от бэкенда
 
-**Бэкенд сохраняет время в UTC и возвращает в UTC.**
+**Бэкенд автоматически возвращает все даты в таймзоне Asia/Almaty (+06:00).**
 
-Когда бэкенд возвращает запись, `startAt` будет в формате UTC:
+Когда бэкенд возвращает запись, `startAt` уже в формате Алматы:
 ```json
 {
-  "startAt": "2026-02-15T09:00:00.000Z"  // Это 09:00 UTC = 15:00 Almaty
+  "startAt": "2026-02-15T15:00:00.000+06:00"  // ✅ Уже в таймзоне Алматы!
 }
 ```
 
-**На фронтенде нужно конвертировать UTC время обратно в таймзону студии для отображения:**
+**На фронтенде НЕ нужно конвертировать время - оно уже в правильной таймзоне!**
 
+Просто используйте время напрямую:
 ```typescript
-function formatAppointmentTime(utcDateString: string, timezone: string = 'Asia/Almaty'): string {
-  const date = new Date(utcDateString);
-  return date.toLocaleTimeString('ru-RU', {
-    timeZone: timezone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-}
-
-// Использование:
+// Время уже в таймзоне Алматы, можно использовать напрямую
 const appointment = await response.json();
-const displayTime = formatAppointmentTime(appointment.startAt); // "15:00"
+const startAt = appointment.startAt; // "2026-02-15T15:00:00.000+06:00"
+
+// Для отображения времени:
+const time = startAt.split('T')[1].split('+')[0]; // "15:00:00.000"
+const displayTime = time.substring(0, 5); // "15:00" ✅
+```
+
+Или используйте стандартный Date объект (он правильно распарсит строку с таймзоной):
+```typescript
+const appointment = await response.json();
+const date = new Date(appointment.startAt); // Правильно распарсит +06:00
+const displayTime = date.toLocaleTimeString('ru-RU', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+}); // "15:00" ✅
 ```
 
 ---
@@ -136,19 +153,18 @@ console.log(startAt); // "2026-02-15T15:00:00+06:00"
 
 ### 2. Функция для отображения времени из ответа бэкенда
 
-**ВАЖНО:** Бэкенд возвращает время в UTC. Нужно конвертировать обратно в таймзону студии.
+**ВАЖНО:** Бэкенд возвращает время уже в таймзоне Алматы (+06:00), конвертация не нужна!
 
 ```typescript
 /**
- * Конвертирует UTC время из ответа бэкенда в локальное время студии
- * @param utcDateString - ISO строка в UTC (например, "2026-02-15T09:00:00.000Z")
- * @param timezone - Таймзона студии (по умолчанию "Asia/Almaty")
- * @returns Время в формате "HH:MM" в таймзоне студии
+ * Извлекает время из ISO строки с таймзоной Алматы
+ * @param almatyDateString - ISO строка с таймзоной (например, "2026-02-15T15:00:00.000+06:00")
+ * @returns Время в формате "HH:MM"
  */
-function formatAppointmentTime(utcDateString: string, timezone: string = 'Asia/Almaty'): string {
-  const date = new Date(utcDateString);
+function formatAppointmentTime(almatyDateString: string): string {
+  // Время уже в таймзоне Алматы, просто извлекаем его
+  const date = new Date(almatyDateString); // Правильно распарсит +06:00
   return date.toLocaleTimeString('ru-RU', {
-    timeZone: timezone,
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
@@ -157,15 +173,14 @@ function formatAppointmentTime(utcDateString: string, timezone: string = 'Asia/A
 
 // Использование:
 const appointment = await response.json();
-// appointment.startAt = "2026-02-15T09:00:00.000Z" (09:00 UTC)
+// appointment.startAt = "2026-02-15T15:00:00.000+06:00" (уже в Алмате!)
 const displayTime = formatAppointmentTime(appointment.startAt); 
-console.log(displayTime); // "15:00" (15:00 Almaty)
+console.log(displayTime); // "15:00" ✅
 
 // Для отображения полной даты и времени:
-function formatAppointmentDateTime(utcDateString: string, timezone: string = 'Asia/Almaty'): string {
-  const date = new Date(utcDateString);
+function formatAppointmentDateTime(almatyDateString: string): string {
+  const date = new Date(almatyDateString);
   return date.toLocaleString('ru-RU', {
-    timeZone: timezone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -176,7 +191,7 @@ function formatAppointmentDateTime(utcDateString: string, timezone: string = 'As
 }
 
 const displayDateTime = formatAppointmentDateTime(appointment.startAt);
-console.log(displayDateTime); // "15.02.2026, 15:00"
+console.log(displayDateTime); // "15.02.2026, 15:00" ✅
 ```
 
 ---
@@ -261,30 +276,32 @@ async function createAppointment(appointmentData) {
    startAt: "2026-02-15T15:00:00+06:00" // ✅ Правильно
    ```
    - Должно работать без ошибок
-   - В ответе от бэкенда будет `startAt: "2026-02-15T09:00:00.000Z"` (09:00 UTC)
-   - На фронтенде конвертируйте в Almaty: должно отображаться как **15:00**
+   - В ответе от бэкенда будет `startAt: "2026-02-15T15:00:00.000+06:00"` (уже в Алмате!)
+   - На фронтенде должно отображаться как **15:00** ✅
 
 2. **Создайте запись на 09:00:**
    ```javascript
    startAt: "2026-02-15T09:00:00+06:00" // ✅ Правильно
    ```
    - Должно работать без ошибок
-   - В ответе будет `startAt: "2026-02-15T03:00:00.000Z"` (03:00 UTC)
-   - На фронтенде должно отображаться как **09:00**
+   - В ответе будет `startAt: "2026-02-15T09:00:00.000+06:00"` (уже в Алмате!)
+   - На фронтенде должно отображаться как **09:00** ✅
 
 3. **Создайте запись на 18:00:**
    ```javascript
    startAt: "2026-02-15T18:00:00+06:00" // ✅ Правильно
    ```
    - Должно работать без ошибок (если услуга помещается в рабочие часы)
-   - В ответе будет `startAt: "2026-02-15T12:00:00.000Z"` (12:00 UTC)
-   - На фронтенде должно отображаться как **18:00**
+   - В ответе будет `startAt: "2026-02-15T18:00:00.000+06:00"` (уже в Алмате!)
+   - На фронтенде должно отображаться как **18:00** ✅
 
 ### Проверка отображения времени
 
-**Проблема:** Если запись создается на 15:00, но отображается как 09:00, значит фронтенд не конвертирует UTC время обратно в таймзону студии.
+**ВАЖНО:** Бэкенд автоматически возвращает все даты в таймзоне Алматы (+06:00).
 
-**Решение:** Используйте функцию `formatAppointmentTime` для отображения времени из ответа бэкенда.
+**Если запись создается на 15:00 и отображается как 15:00** - всё работает правильно! ✅
+
+**Если запись создается на 15:00, но отображается как 09:00** - значит фронтенд неправильно обрабатывает строку с таймзоной. Используйте `new Date(appointment.startAt)` - он правильно распарсит `+06:00`.
 
 ---
 

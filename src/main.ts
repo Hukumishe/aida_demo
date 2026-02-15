@@ -7,6 +7,7 @@ import { join } from 'path';
 import * as fs from 'fs';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { TimezoneInterceptor } from './common/interceptors/timezone.interceptor';
 
 async function bootstrap() {
   // Create logs directory if it doesn't exist
@@ -48,6 +49,9 @@ async function bootstrap() {
   // Global exception filter (with logger injection)
   const httpExceptionFilter = app.get(HttpExceptionFilter);
   app.useGlobalFilters(httpExceptionFilter);
+
+  // Global timezone interceptor - все даты возвращаются в таймзоне Asia/Almaty (+06:00)
+  app.useGlobalInterceptors(new TimezoneInterceptor());
 
   // Swagger
   const config = new DocumentBuilder()
