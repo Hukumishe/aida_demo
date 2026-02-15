@@ -21,6 +21,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "seed": "ts-node prisma/seed.ts",
+    "add-services-moscow": "ts-node scripts/add-services-beauty-studio-moscow.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
