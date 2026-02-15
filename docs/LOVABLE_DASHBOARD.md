@@ -61,7 +61,7 @@ GET /studios/123/dashboard?period=all
   },
   "overview": {
     "totalAppointments": 150,
-    "revenue": 300000,
+    "revenue": 300000,  // в тенге (300,000 〒)
     "cancellationRate": 5.33,
     "completionRate": 85.5
   },
@@ -75,7 +75,7 @@ GET /studios/123/dashboard?period=all
     {
       "name": "Haircut",
       "count": 45,
-      "revenue": 90000
+      "revenue": 90000  // в тенге (90,000 〒)
     },
     {
       "name": "Coloring",
@@ -88,7 +88,7 @@ GET /studios/123/dashboard?period=all
       "id": "staff-1",
       "name": "Иван Иванов",
       "count": 50,
-      "revenue": 100000
+      "revenue": 100000  // в тенге (100,000 〒)
     },
     {
       "id": "staff-2",
@@ -101,7 +101,7 @@ GET /studios/123/dashboard?period=all
     {
       "date": "2024-01-01",
       "count": 5,
-      "revenue": 10000
+      "revenue": 10000  // в тенге (10,000 〒)
     },
     {
       "date": "2024-01-02",
@@ -249,6 +249,36 @@ GET /dashboard/all?startDate=2024-01-01&endDate=2024-01-31
 
 ## 📋 Примеры кода для фронтенда
 
+### Форматирование валюты
+
+**ВАЖНО:** Цены в API уже в тенге, НЕ нужно делить на 100!
+
+```typescript
+// ПРАВИЛЬНО: просто форматируем число
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: 'KZT',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+  // Или проще:
+  // return `${value.toLocaleString('ru-RU')} 〒`;
+}
+
+// НЕПРАВИЛЬНО: не делите на 100!
+function formatCurrencyWrong(value: number): string {
+  return `${(value / 100).toLocaleString('ru-RU')} 〒`; // ❌ НЕ ДЕЛАЙТЕ ТАК!
+}
+```
+
+**Примеры:**
+- `formatCurrency(300000)` → `"300 000 〒"` или `"300,000 〒"`
+- `formatCurrency(2000)` → `"2 000 〒"` или `"2,000 〒"`
+- `formatCurrency(1000)` → `"1 000 〒"` или `"1,000 〒"`
+
+---
+
 ### Получение данных дэшборда
 
 ```typescript
@@ -386,6 +416,11 @@ function Dashboard({ studioId, userRole }) {
           value={`${formatCurrency(data.overview.revenue)}`}
           icon="💰"
         />
+        {/* 
+          ВАЖНО: formatCurrency НЕ должна делить на 100!
+          revenue уже в тенге, просто форматируйте число с символом 〒
+          Пример: formatCurrency(300000) => "300,000 〒"
+        */}
         <MetricCard
           title="Отмена"
           value={`${data.overview.cancellationRate}%`}
@@ -438,12 +473,26 @@ function Dashboard({ studioId, userRole }) {
 
 ## 🔄 Логика работы
 
+### ⚠️ ВАЖНО: Единицы измерения цен
+
+**Цены в API хранятся и возвращаются в ТЕНГЕ (не в тиынах).**
+
+- `defaultPrice: 2000` = 2000 тенге
+- `prepaymentAmount: 1000` = 1000 тенге
+- `revenue: 300000` = 300,000 тенге
+
+**На фронтенде НЕ нужно делить на 100!** Цены уже в тенге.
+
+Если вы видите функцию `formatCurrency`, которая делит на 100, её нужно убрать или изменить, чтобы она просто форматировала число с символом валюты.
+
 ### Расчет дохода
 
 Доход рассчитывается как сумма:
 - `prepaymentAmount` для всех записей со статусом не CANCELLED
 - Если `prepaymentAmount` не указан, используется `service.defaultPrice`
 - Если и `prepaymentAmount`, и `defaultPrice` отсутствуют, запись не учитывается в доходе
+
+**Все значения возвращаются в тенге.**
 
 ### Расчет процентов
 
