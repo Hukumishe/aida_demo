@@ -64,17 +64,18 @@ export class ServicesController {
     return this.servicesService.create(studioId, createServiceDto, user?.role, user?.studioId);
   }
 
-  @Patch('services/:id')
+  @Patch('studios/:studioId/services/:id')
   @ApiOperation({ summary: 'Update service' })
   @ApiResponse({ status: 200, description: 'Service updated' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Service not found' })
   async update(
+    @Param('studioId', ParseUUIDPipe) studioId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateServiceDto: UpdateServiceDto,
     @CurrentUser() user?: any,
   ) {
-    return this.servicesService.update(id, updateServiceDto, user?.role, user?.studioId);
+    return this.servicesService.update(studioId, id, updateServiceDto, user?.role, user?.studioId);
   }
 }
 

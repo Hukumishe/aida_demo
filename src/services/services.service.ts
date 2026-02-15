@@ -73,11 +73,17 @@ export class ServicesService {
   }
 
   async update(
+    studioId: string,
     id: string,
     updateServiceDto: UpdateServiceDto,
     userRole?: string,
     userStudioId?: string,
   ) {
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
+      throw new ForbiddenException('Access denied to this studio');
+    }
+
     const service = await this.prisma.service.findUnique({
       where: { id },
     });
@@ -86,9 +92,9 @@ export class ServicesService {
       throw new NotFoundException(`Service with ID ${id} not found`);
     }
 
-    // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== service.studioId) {
-      throw new ForbiddenException('Access denied to this service');
+    // Verify service belongs to the studio
+    if (service.studioId !== studioId) {
+      throw new NotFoundException('Service not found in this studio');
     }
 
     return this.prisma.service.update({
