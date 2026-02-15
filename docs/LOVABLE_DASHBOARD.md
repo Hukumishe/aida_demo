@@ -487,10 +487,14 @@ function Dashboard({ studioId, userRole }) {
 
 ### Расчет дохода
 
+**ВАЖНО:** Доход рассчитывается **только для завершенных записей** (статус `DONE`).
+
 Доход рассчитывается как сумма:
-- `prepaymentAmount` для всех записей со статусом не CANCELLED
+- `prepaymentAmount` для всех записей со статусом `DONE` (выполнено)
 - Если `prepaymentAmount` не указан, используется `service.defaultPrice`
 - Если и `prepaymentAmount`, и `defaultPrice` отсутствуют, запись не учитывается в доходе
+
+**Записи со статусом `BOOKED`, `ARRIVED` или `CANCELLED` НЕ учитываются в доходе.**
 
 **Все значения возвращаются в тенге.**
 

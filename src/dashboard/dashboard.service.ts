@@ -103,10 +103,10 @@ export class DashboardService {
     };
 
     // Calculate revenue
-    // Revenue = sum of prepaymentAmount for non-cancelled appointments
-    // + sum of service prices for completed appointments (if we had final price field)
+    // Revenue = sum of prepaymentAmount for DONE appointments only
+    // Доход считается только после завершения записи (статус DONE)
     const revenue = appointments
-      .filter(a => a.status !== AppointmentStatus.CANCELLED)
+      .filter(a => a.status === AppointmentStatus.DONE)
       .reduce((sum, a) => {
         // Use prepaymentAmount if available, otherwise use service defaultPrice
         const amount = a.prepaymentAmount || a.service.defaultPrice || 0;
@@ -114,9 +114,10 @@ export class DashboardService {
       }, 0);
 
     // Popular services (top 10)
+    // Считаем только завершенные записи (DONE) для дохода
     const serviceCounts = new Map<string, { name: string; count: number; revenue: number }>();
     appointments.forEach(a => {
-      if (a.status !== AppointmentStatus.CANCELLED) {
+      if (a.status === AppointmentStatus.DONE) {
         const serviceId = a.serviceId;
         const current = serviceCounts.get(serviceId) || { name: a.service.name, count: 0, revenue: 0 };
         current.count++;
@@ -129,6 +130,7 @@ export class DashboardService {
       .slice(0, 10);
 
     // Staff statistics (top 10)
+    // Считаем только завершенные записи (DONE) для дохода
     const staffCounts = new Map<string, { 
       id: string; 
       name: string; 
@@ -136,7 +138,7 @@ export class DashboardService {
       revenue: number;
     }>();
     appointments.forEach(a => {
-      if (a.status !== AppointmentStatus.CANCELLED) {
+      if (a.status === AppointmentStatus.DONE) {
         const staffId = a.staffUserId;
         const current = staffCounts.get(staffId) || { 
           id: staffId,
@@ -154,9 +156,10 @@ export class DashboardService {
       .slice(0, 10);
 
     // Daily statistics for charts
+    // Считаем только завершенные записи (DONE) для дохода
     const dailyStats = new Map<string, { date: string; count: number; revenue: number }>();
     appointments.forEach(a => {
-      if (a.status !== AppointmentStatus.CANCELLED) {
+      if (a.status === AppointmentStatus.DONE) {
         const dateKey = a.startAt.toISOString().split('T')[0];
         const current = dailyStats.get(dateKey) || { date: dateKey, count: 0, revenue: 0 };
         current.count++;
@@ -242,8 +245,9 @@ export class DashboardService {
         [AppointmentStatus.DONE]: appointments.filter(a => a.status === AppointmentStatus.DONE).length,
       };
 
+      // Доход считается только для завершенных записей (DONE)
       const revenue = appointments
-        .filter(a => a.status !== AppointmentStatus.CANCELLED)
+        .filter(a => a.status === AppointmentStatus.DONE)
         .reduce((sum, a) => {
           const amount = a.prepaymentAmount || a.service.defaultPrice || 0;
           return sum + amount;
