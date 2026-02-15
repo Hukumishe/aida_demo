@@ -112,7 +112,7 @@ export class AppointmentsController {
   @ApiResponse({ status: 200, description: 'Appointment marked as done' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Appointment not found' })
-  @ApiResponse({ status: 400, description: 'Bad request - appointment is cancelled or already done' })
+  @ApiResponse({ status: 400, description: 'Bad request - appointment already done or cancelled' })
   async markDone(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user?: any,

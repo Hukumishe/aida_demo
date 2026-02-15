@@ -1,12 +1,8 @@
-# Кнопка "Завершить" для записи
+# Завершение записи (Mark as Done)
 
-## Проблема
+## Обзор
 
-В модальном окне "Детали записи" есть кнопки "Отменить" и "Закрыть", но нет кнопки "Завершить" для изменения статуса записи на `DONE`.
-
-## Решение
-
-Добавлен новый endpoint для завершения записи.
+После того как услуга была оказана клиенту, запись нужно отметить как завершенную (статус `DONE`). Это обновит статистику в дэшборде и покажет правильный процент "Выполнено".
 
 ---
 
@@ -16,10 +12,10 @@
 
 **Endpoint:** `POST /appointments/:id/done`
 
-**Описание:** Изменяет статус записи на `DONE` (выполнено).
+**Описание:** Отмечает запись как завершенную (статус `DONE`).
 
 **Параметры:**
-- `id` (path) - UUID записи
+- `id` (path) - ID записи
 
 **Ответ:**
 ```json
@@ -39,8 +35,6 @@
   "updatedAt": "2024-02-15T11:30:00.000Z",
   "staff": {
     "id": "staff-uuid",
-    "email": "staff@example.com",
-    "phone": "+79991234568",
     "staffProfile": {
       "firstName": "TEST",
       "lastName": "TEST"
@@ -54,14 +48,13 @@
   "service": {
     "id": "service-uuid",
     "name": "Шугаринг",
-    "defaultPrice": 2000,
-    "defaultDurationMin": 30
+    "defaultPrice": 2000
   }
 }
 ```
 
 **Ошибки:**
-- `400` - Запись отменена или уже завершена
+- `400` - Запись уже завершена или отменена
 - `403` - Нет доступа к записи
 - `404` - Запись не найдена
 
@@ -72,44 +65,37 @@
 ### Где показывать кнопку "Завершить"
 
 Кнопку "Завершить" нужно показывать в модальном окне "Детали записи" когда:
-- Статус записи = `ARRIVED` (клиент пришел)
-- Статус записи = `BOOKED` (можно завершить без отметки "пришел")
+- Статус записи: `ARRIVED` (клиент пришел)
+- Статус записи: `BOOKED` (можно завершить даже если клиент не отмечен как пришедший)
 
 **НЕ показывать кнопку когда:**
-- Статус = `DONE` (уже завершена)
-- Статус = `CANCELLED` (отменена)
+- Статус: `DONE` (уже завершено)
+- Статус: `CANCELLED` (отменено)
 
 ### Расположение кнопки
 
+В модальном окне "Детали записи" кнопка "Завершить" должна быть:
+- Рядом с кнопкой "Отменить"
+- Или вместо кнопки "Отменить", если запись уже началась
+- Зеленого цвета (успешное действие)
+
+**Пример расположения:**
 ```
 ┌─────────────────────────────────┐
 │  Детали записи          [X]     │
 ├─────────────────────────────────┤
 │  ... информация о записи ...    │
-│                                 │
-│  [Клиент пришел]                │
-│                                 │
-│  ... детали ...                 │
-│                                 │
-├─────────────────────────────────┤
-│  [❌ Отменить]                  │
-│  [✅ Завершить]  ← НОВАЯ КНОПКА │
-│  [Закрыть]                      │
+│                                  │
+│  [✅ Завершить]  [❌ Отменить]   │
+│  [Закрыть]                       │
 └─────────────────────────────────┘
 ```
-
-### Визуальное оформление
-
-- **Цвет:** Зеленый (как успешное действие)
-- **Иконка:** ✅ (галочка в круге)
-- **Текст:** "Завершить" или "Выполнено"
-- **Размер:** Такой же, как кнопка "Отменить"
 
 ---
 
 ## 📝 Примеры кода
 
-### Обработка клика на кнопку "Завершить"
+### Обработка завершения записи
 
 ```typescript
 async function markAppointmentAsDone(appointmentId: string) {
@@ -128,118 +114,163 @@ async function markAppointmentAsDone(appointmentId: string) {
     }
 
     const updatedAppointment = await response.json();
-    
-    // Обновить данные в UI
-    updateAppointmentInList(updatedAppointment);
-    
-    // Закрыть модальное окно или обновить его содержимое
-    refreshAppointmentDetails();
-    
-    // Показать уведомление об успехе
-    showNotification('Запись успешно завершена', 'success');
-    
+    return updatedAppointment;
   } catch (error) {
     console.error('Error marking appointment as done:', error);
-    showNotification(error.message || 'Ошибка при завершении записи', 'error');
+    throw error;
   }
 }
 ```
 
-### Компонент кнопки "Завершить"
+### Компонент модального окна с кнопкой "Завершить"
 
 ```jsx
 function AppointmentDetailsModal({ appointment, onClose, onUpdate }) {
   const [loading, setLoading] = useState(false);
 
-  const canMarkAsDone = appointment.status === 'ARRIVED' || appointment.status === 'BOOKED';
+  const canMarkAsDone = appointment.status === 'BOOKED' || appointment.status === 'ARRIVED';
   const isDone = appointment.status === 'DONE';
+  const isCancelled = appointment.status === 'CANCELLED';
 
   async function handleMarkAsDone() {
-    if (!canMarkAsDone || isDone) return;
+    if (!confirm('Завершить запись?')) {
+      return;
+    }
 
     setLoading(true);
     try {
-      await markAppointmentAsDone(appointment.id);
-      onUpdate(); // Обновить данные
+      const updated = await markAppointmentAsDone(appointment.id);
+      onUpdate(updated);
+      // Можно показать уведомление об успехе
+      alert('Запись завершена');
     } catch (error) {
-      // Ошибка уже обработана в функции
+      alert('Ошибка: ' + error.message);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <Modal onClose={onClose}>
-      <div className="appointment-details">
-        {/* Заголовок */}
-        <div className="modal-header">
-          <h2>Детали записи</h2>
-          {appointment.status === 'ARRIVED' && (
-            <span className="status-badge arrived">Клиент пришел</span>
-          )}
-          {appointment.status === 'DONE' && (
-            <span className="status-badge done">Выполнено</span>
-          )}
-        </div>
-
-        {/* Информация о записи */}
-        <div className="appointment-info">
-          {/* ... существующая информация ... */}
-        </div>
-
-        {/* Кнопки действий */}
-        <div className="appointment-actions">
-          {appointment.status !== 'CANCELLED' && appointment.status !== 'DONE' && (
-            <button 
-              className="btn-cancel"
-              onClick={() => handleCancel(appointment.id)}
-            >
-              ❌ Отменить
-            </button>
-          )}
-
-          {/* НОВАЯ КНОПКА: Завершить */}
-          {canMarkAsDone && !isDone && (
-            <button 
-              className="btn-done"
-              onClick={handleMarkAsDone}
-              disabled={loading}
-            >
-              {loading ? 'Загрузка...' : '✅ Завершить'}
-            </button>
-          )}
-
-          <button className="btn-close" onClick={onClose}>
-            Закрыть
-          </button>
-        </div>
+    <div className="modal">
+      <div className="modal-header">
+        <h2>Детали записи</h2>
+        <button onClick={onClose}>×</button>
       </div>
-    </Modal>
+
+      <div className="modal-body">
+        {/* Информация о клиенте */}
+        <div className="info-section">
+          <Icon name="person" />
+          <div>
+            <div>{appointment.client.firstName} {appointment.client.lastName}</div>
+            <div>📞 {appointment.client.phone}</div>
+          </div>
+        </div>
+
+        {/* Информация об услуге */}
+        <div className="info-section">
+          <Icon name="service" />
+          <div>
+            <div>{appointment.service.name}</div>
+            <div>{appointment.service.defaultDurationMin} мин · {formatCurrency(appointment.service.defaultPrice)}</div>
+          </div>
+        </div>
+
+        {/* Дата и время */}
+        <div className="info-section">
+          <Icon name="clock" />
+          <div>
+            <div>{formatDate(appointment.startAt)}</div>
+            <div>{formatTime(appointment.startAt)} - {formatTime(appointment.endAt)}</div>
+          </div>
+        </div>
+
+        {/* Мастер */}
+        <div className="info-section">
+          <Icon name="person" />
+          <div>
+            <div>Мастер</div>
+            <div>{appointment.staff.staffProfile.firstName} {appointment.staff.staffProfile.lastName}</div>
+          </div>
+        </div>
+
+        {/* Время прибытия (если есть) */}
+        {appointment.arrivedAt && (
+          <div className="info-section">
+            <Icon name="check" color="green" />
+            <div>
+              <div>Время прибытия</div>
+              <div>{formatTime(appointment.arrivedAt)}</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="modal-footer">
+        {/* Кнопка "Завершить" - показываем только если можно */}
+        {canMarkAsDone && (
+          <button 
+            className="btn-success"
+            onClick={handleMarkAsDone}
+            disabled={loading}
+          >
+            {loading ? 'Загрузка...' : '✅ Завершить'}
+          </button>
+        )}
+
+        {/* Кнопка "Отменить" - показываем только если не завершено и не отменено */}
+        {!isDone && !isCancelled && (
+          <button 
+            className="btn-danger"
+            onClick={handleCancel}
+            disabled={loading}
+          >
+            ❌ Отменить
+          </button>
+        )}
+
+        <button className="btn-secondary" onClick={onClose}>
+          Закрыть
+        </button>
+      </div>
+    </div>
   );
 }
 ```
 
-### Обновление статуса после завершения
+### Обновление списка записей после завершения
 
 ```jsx
-// После успешного завершения записи
-function handleAppointmentDone(updatedAppointment) {
-  // Обновить запись в списке
-  setAppointments(prev => 
-    prev.map(apt => 
-      apt.id === updatedAppointment.id 
-        ? { ...apt, status: 'DONE' }
-        : apt
-    )
-  );
+function AppointmentList() {
+  const [appointments, setAppointments] = useState([]);
 
-  // Обновить статистику дэшборда (если открыт)
-  if (isDashboardOpen) {
-    refreshDashboard();
+  async function handleMarkAsDone(appointmentId) {
+    try {
+      const updated = await markAppointmentAsDone(appointmentId);
+      
+      // Обновляем запись в списке
+      setAppointments(prev => 
+        prev.map(apt => apt.id === appointmentId ? updated : apt)
+      );
+
+      // Обновляем статистику в дэшборде (если открыт)
+      refreshDashboard();
+    } catch (error) {
+      console.error('Failed to mark as done:', error);
+    }
   }
 
-  // Обновить модальное окно
-  setSelectedAppointment(updatedAppointment);
+  return (
+    <div>
+      {appointments.map(appointment => (
+        <AppointmentCard
+          key={appointment.id}
+          appointment={appointment}
+          onMarkAsDone={handleMarkAsDone}
+        />
+      ))}
+    </div>
+  );
 }
 ```
 
@@ -247,57 +278,51 @@ function handleAppointmentDone(updatedAppointment) {
 
 ## 🔄 Логика работы
 
-### Условия для завершения записи
+### Когда можно завершить запись
 
-1. **Запись должна существовать**
-2. **Пользователь должен иметь доступ** (OWNER или MANAGER салона)
-3. **Статус записи НЕ должен быть:**
-   - `CANCELLED` (отменена)
-   - `DONE` (уже завершена)
+1. **Статус `BOOKED`** - можно завершить (даже если клиент не отмечен как пришедший)
+2. **Статус `ARRIVED`** - можно завершить (клиент пришел, услуга оказана)
+
+### Когда нельзя завершить
+
+1. **Статус `DONE`** - уже завершено (показывать сообщение "Запись уже завершена")
+2. **Статус `CANCELLED`** - отменено (нельзя завершить отмененную запись)
 
 ### Что происходит при завершении
 
 1. Статус записи меняется на `DONE`
-2. Запись возвращается с обновленными данными
-3. В дэшборде автоматически обновляется процент "Выполнено"
-
-### Визуальная обратная связь
-
-После нажатия "Завершить":
-- Показать индикатор загрузки
-- После успеха: обновить статус в UI (показать "Выполнено")
-- Показать уведомление об успехе
-- Обновить статистику дэшборда (если открыт)
+2. Запись больше не учитывается в предстоящих визитах
+3. Статистика "Выполнено" в дэшборде обновляется
+4. Запись остается в истории для отчетов
 
 ---
 
 ## ✅ Чеклист для реализации
 
 - [ ] Добавить кнопку "Завершить" в модальное окно "Детали записи"
-- [ ] Показывать кнопку только когда статус = `ARRIVED` или `BOOKED`
-- [ ] Скрывать кнопку когда статус = `DONE` или `CANCELLED`
-- [ ] Реализовать обработчик `handleMarkAsDone`
-- [ ] Добавить индикатор загрузки при выполнении запроса
-- [ ] Обновить UI после успешного завершения
-- [ ] Показать уведомление об успехе/ошибке
-- [ ] Обновить статистику дэшборда (если нужно)
+- [ ] Показывать кнопку только когда статус `BOOKED` или `ARRIVED`
+- [ ] Скрывать кнопку когда статус `DONE` или `CANCELLED`
+- [ ] Обработать успешное завершение (обновить UI)
+- [ ] Обработать ошибки (показать сообщение)
+- [ ] Обновить список записей после завершения
+- [ ] Обновить статистику в дэшборде (если открыт)
+- [ ] Добавить подтверждение перед завершением (опционально)
 
 ---
 
 ## 🎯 Дополнительные возможности (опционально)
 
-1. **Подтверждение:**
-   - Показывать диалог подтверждения перед завершением
-   - "Вы уверены, что хотите завершить эту запись?"
+1. **Автоматическое завершение:**
+   - Автоматически завершать записи, которые закончились более N часов назад
 
-2. **Автоматическое закрытие:**
-   - После завершения автоматически закрывать модальное окно
-   - Или оставлять открытым с обновленным статусом
+2. **Уведомления:**
+   - Показывать уведомление после успешного завершения
+   - Отправлять уведомление клиенту (если есть интеграция)
 
-3. **История изменений:**
-   - Сохранять время завершения (можно добавить поле `completedAt` в будущем)
+3. **История:**
+   - Показывать время завершения в деталях записи
+   - Показывать, кто завершил запись (если нужно)
 
 ---
 
-**Готово!** Теперь у вас есть endpoint для завершения записи. Добавьте кнопку "Завершить" в модальное окно, и пользователи смогут отмечать записи как выполненные.
-
+**Готово!** Теперь у вас есть endpoint для завершения записей и полное понимание, как его использовать на фронтенде.
