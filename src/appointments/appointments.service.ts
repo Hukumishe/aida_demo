@@ -362,6 +362,52 @@ export class AppointmentsService {
       },
     });
   }
+
+  async markDone(id: string, userId: string, userRole?: string, userStudioId?: string) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException(`Appointment with ID ${id} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== appointment.studioId) {
+      throw new ForbiddenException('Access denied to this appointment');
+    }
+
+    if (appointment.status === AppointmentStatus.CANCELLED) {
+      throw new BadRequestException('Cannot mark cancelled appointment as done');
+    }
+
+    if (appointment.status === AppointmentStatus.DONE) {
+      throw new BadRequestException('Appointment is already marked as done');
+    }
+
+    return this.prisma.appointment.update({
+      where: { id },
+      data: {
+        status: AppointmentStatus.DONE,
+      },
+      include: {
+        staff: {
+          include: {
+            staffProfile: true,
+          },
+        },
+        client: true,
+        service: true,
+        arrivedByUser: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+    });
+  }
 }
 
 

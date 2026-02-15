@@ -106,5 +106,18 @@ export class AppointmentsController {
   ) {
     return this.appointmentsService.markArrived(id, user?.userId, user?.role, user?.studioId);
   }
+
+  @Post('appointments/:id/done')
+  @ApiOperation({ summary: 'Mark appointment as done (completed)' })
+  @ApiResponse({ status: 200, description: 'Appointment marked as done' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Appointment not found' })
+  @ApiResponse({ status: 400, description: 'Bad request - appointment is cancelled or already done' })
+  async markDone(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.appointmentsService.markDone(id, user?.userId, user?.role, user?.studioId);
+  }
 }
 
