@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TimezoneInterceptor } from './common/interceptors/timezone.interceptor';
+import { PrismaService } from './common/prisma/prisma.service';
 
 async function bootstrap() {
   // Create logs directory if it doesn't exist
@@ -50,8 +51,9 @@ async function bootstrap() {
   const httpExceptionFilter = app.get(HttpExceptionFilter);
   app.useGlobalFilters(httpExceptionFilter);
 
-  // Global timezone interceptor - все даты возвращаются в таймзоне Asia/Almaty (+06:00)
-  app.useGlobalInterceptors(new TimezoneInterceptor());
+  // Global timezone interceptor - все даты возвращаются в таймзоне студии (динамически)
+  const prismaService = app.get(PrismaService);
+  app.useGlobalInterceptors(new TimezoneInterceptor(prismaService));
 
   // Swagger
   const config = new DocumentBuilder()
