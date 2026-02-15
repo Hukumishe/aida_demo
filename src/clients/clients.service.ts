@@ -79,6 +79,9 @@ export class ClientsService {
           lastName: createClientDto.lastName,
           phone: createClientDto.phone,
           notes: createClientDto.notes,
+          bonuses: createClientDto.bonuses ?? 0,
+          discount: createClientDto.discount ?? 0,
+          balance: createClientDto.balance ?? 0,
         },
       });
     } catch (error: any) {
@@ -153,6 +156,107 @@ export class ClientsService {
     return this.prisma.client.update({
       where: { id },
       data: updateClientDto,
+    });
+  }
+
+  async getClientStatistics(id: string, userRole?: string, userStudioId?: string) {
+    const client = await this.prisma.client.findUnique({
+      where: { id },
+    });
+
+    if (!client) {
+      throw new NotFoundException(`Client with ID ${id} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== client.studioId) {
+      throw new ForbiddenException('Access denied to this client');
+    }
+
+    // Get all appointments for this client
+    const appointments = await this.prisma.appointment.findMany({
+      where: {
+        clientId: id,
+        status: {
+          not: 'CANCELLED', // Exclude cancelled appointments
+        },
+      },
+      include: {
+        service: true,
+      },
+    });
+
+    // Calculate statistics
+    const totalVisits = appointments.length;
+    
+    // Calculate average check (average of prepaymentAmount or service.defaultPrice)
+    const totalRevenue = appointments.reduce((sum, a) => {
+      const amount = a.prepaymentAmount || a.service.defaultPrice || 0;
+      return sum + amount;
+    }, 0);
+    
+    const averageCheck = totalVisits > 0 ? Math.round(totalRevenue / totalVisits) : 0;
+
+    return {
+      totalVisits,
+      averageCheck,
+      totalSpent: totalRevenue,
+    };
+  }
+
+  async getClientAppointments(
+    id: string,
+    upcomingOnly: boolean = false,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    const client = await this.prisma.client.findUnique({
+      where: { id },
+    });
+
+    if (!client) {
+      throw new NotFoundException(`Client with ID ${id} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== client.studioId) {
+      throw new ForbiddenException('Access denied to this client');
+    }
+
+    const where: any = {
+      clientId: id,
+    };
+
+    // If upcomingOnly, filter by future dates and specific statuses
+    if (upcomingOnly) {
+      where.startAt = {
+        gte: new Date(),
+      };
+      where.status = {
+        in: ['BOOKED', 'ARRIVED'],
+      };
+    }
+
+    return this.prisma.appointment.findMany({
+      where,
+      include: {
+        staff: {
+          include: {
+            staffProfile: true,
+          },
+        },
+        service: true,
+        arrivedByUser: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+      orderBy: {
+        startAt: upcomingOnly ? 'asc' : 'desc',
+      },
     });
   }
 }

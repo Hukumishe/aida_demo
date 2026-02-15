@@ -80,6 +80,54 @@ export class ClientsController {
   ) {
     return this.clientsService.update(id, updateClientDto, user?.role, user?.studioId);
   }
+
+  @Get('clients/:id/statistics')
+  @ApiOperation({ summary: 'Get client statistics (visits, average check)' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Client statistics',
+    schema: {
+      type: 'object',
+      properties: {
+        totalVisits: { type: 'number', example: 15 },
+        averageCheck: { type: 'number', example: 2500 },
+        totalSpent: { type: 'number', example: 37500 },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Client not found' })
+  async getStatistics(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.clientsService.getClientStatistics(id, user?.role, user?.studioId);
+  }
+
+  @Get('clients/:id/appointments')
+  @ApiOperation({ summary: 'Get client appointments' })
+  @ApiQuery({ 
+    name: 'upcoming', 
+    required: false, 
+    type: Boolean,
+    description: 'Get only upcoming appointments (default: false)' 
+  })
+  @ApiResponse({ status: 200, description: 'List of client appointments' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Client not found' })
+  async getAppointments(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('upcoming') upcoming?: string,
+    @CurrentUser() user?: any,
+  ) {
+    const upcomingOnly = upcoming === 'true' || upcoming === '1';
+    return this.clientsService.getClientAppointments(
+      id,
+      upcomingOnly,
+      user?.role,
+      user?.studioId,
+    );
+  }
 }
 
 

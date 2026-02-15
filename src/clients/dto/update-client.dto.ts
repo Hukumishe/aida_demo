@@ -1,4 +1,4 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateClientDto {
@@ -21,6 +21,25 @@ export class UpdateClientDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @ApiProperty({ example: 100, required: false, description: 'Бонусные баллы' })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  bonuses?: number;
+
+  @ApiProperty({ example: 10, required: false, description: 'Скидка в процентах (0-100)' })
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  discount?: number;
+
+  @ApiProperty({ example: 5000, required: false, description: 'Баланс в тенге' })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  balance?: number;
 }
 
 
