@@ -16,17 +16,18 @@ export class AvailabilityService {
 
   /**
    * Extract time in HH:MM format from a Date object in Asia/Almaty timezone.
-   * This ensures we get the correct local time regardless of server timezone.
+   * Date object is stored in UTC, so we add 6 hours (Almaty offset) to get local time.
+   * This is more reliable than using toLocaleTimeString which may have timezone data issues.
    */
   private extractTime(date: Date): string {
-    // Use toLocaleTimeString with Asia/Almaty timezone to get correct local time
-    const timeStr = date.toLocaleTimeString('en-US', {
-      timeZone: 'Asia/Almaty',
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    return timeStr;
+    // Date object is in UTC, add 6 hours for Asia/Almaty (UTC+6)
+    const almatyDate = new Date(date.getTime() + 6 * 60 * 60 * 1000);
+    
+    // Extract hours and minutes from UTC time (which now represents Almaty time)
+    const hours = String(almatyDate.getUTCHours()).padStart(2, '0');
+    const minutes = String(almatyDate.getUTCMinutes()).padStart(2, '0');
+    
+    return `${hours}:${minutes}`;
   }
 
   private isTimeInRange(time: string, startTime: string, endTime: string): boolean {
@@ -127,11 +128,26 @@ export class AvailabilityService {
     const startTime = this.extractTime(startAt); // HH:MM
     const endTime = this.extractTime(endAt);
 
+    // Debug logging
+    console.log('[AvailabilityService] Checking appointment time:', {
+      startAt: startAt.toISOString(),
+      endAt: endAt.toISOString(),
+      extractedStartTime: startTime,
+      extractedEndTime: endTime,
+      scheduleStartTime: schedule.startTime,
+      scheduleEndTime: schedule.endTime,
+      startInRange: this.isTimeInRange(startTime, schedule.startTime, schedule.endTime),
+      endInRange: this.isTimeInRange(endTime, schedule.startTime, schedule.endTime),
+    });
+
     if (
       !this.isTimeInRange(startTime, schedule.startTime, schedule.endTime) ||
       !this.isTimeInRange(endTime, schedule.startTime, schedule.endTime)
     ) {
-      throw new ConflictException('Appointment is outside work hours', 'APPOINTMENT_OUTSIDE_HOURS');
+      throw new ConflictException(
+        `Appointment is outside work hours. Start: ${startTime}, End: ${endTime}, Schedule: ${schedule.startTime}-${schedule.endTime}`,
+        'APPOINTMENT_OUTSIDE_HOURS'
+      );
     }
 
     // 3. Check if appointment overlaps with break
