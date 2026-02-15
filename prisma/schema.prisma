@@ -23,6 +23,24 @@ enum AppointmentStatus {
   DONE
 }
 
+enum LogLevel {
+  ERROR
+  WARN
+  INFO
+  DEBUG
+  VERBOSE
+}
+
+enum LogType {
+  HTTP_REQUEST
+  HTTP_RESPONSE
+  ERROR
+  AUTH
+  DATABASE
+  BUSINESS_LOGIC
+  SYSTEM
+}
+
 model Studio {
   id        String   @id @default(uuid())
   name      String
@@ -226,5 +244,30 @@ model Appointment {
   @@index([studioId, startAt])
   @@index([clientId])
   @@map("appointments")
+}
+
+model Log {
+  id          String   @id @default(uuid())
+  level       LogLevel
+  type        LogType
+  message     String
+  context     String?  // JSON string with additional context
+  userId      String?  // User who triggered the action
+  studioId    String?  // Studio context
+  ip          String?  // IP address
+  userAgent   String?  // User agent
+  method      String?  // HTTP method
+  url         String?  // Request URL
+  statusCode  Int?     // HTTP status code
+  error       String?  // Error stack trace or details
+  duration    Int?     // Request duration in ms
+  createdAt   DateTime @default(now())
+
+  @@index([level])
+  @@index([type])
+  @@index([createdAt])
+  @@index([userId])
+  @@index([studioId])
+  @@map("logs")
 }
 

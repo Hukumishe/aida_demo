@@ -20,6 +20,8 @@ import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { UpdateStaffProfileDto } from './dto/update-staff-profile.dto';
 import { AddStaffServiceDto } from './dto/add-staff-service.dto';
+import { CreateServiceOverrideDto } from './dto/create-service-override.dto';
+import { UpdateServiceOverrideDto } from './dto/update-service-override.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
@@ -148,6 +150,85 @@ export class UsersController {
     @CurrentUser() user: any,
   ) {
     return this.usersService.remove(userId, user.role, user.studioId);
+  }
+
+  @Get('staff/:staffUserId/services/:serviceId/override')
+  @ApiOperation({ summary: 'Get service override for a staff member' })
+  @ApiResponse({ status: 200, description: 'Service override details' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Override not found' })
+  async getServiceOverride(
+    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
+    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.getServiceOverride(staffUserId, serviceId, user.role, user.studioId);
+  }
+
+  @Get('staff/:staffUserId/overrides')
+  @ApiOperation({ summary: 'Get all service overrides for a staff member' })
+  @ApiResponse({ status: 200, description: 'List of service overrides' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Staff member not found' })
+  async getStaffServiceOverrides(
+    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.getStaffServiceOverrides(staffUserId, user.role, user.studioId);
+  }
+
+  @Post('staff/:staffUserId/services/:serviceId/override')
+  @ApiOperation({ summary: 'Create or set service override for a staff member' })
+  @ApiResponse({ status: 201, description: 'Service override created' })
+  @ApiResponse({ status: 400, description: 'Bad request (service not assigned or override already exists)' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Staff member or service not found' })
+  async createServiceOverride(
+    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
+    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @Body() createOverrideDto: CreateServiceOverrideDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.createServiceOverride(
+      staffUserId,
+      serviceId,
+      createOverrideDto,
+      user.role,
+      user.studioId,
+    );
+  }
+
+  @Patch('staff/:staffUserId/services/:serviceId/override')
+  @ApiOperation({ summary: 'Update service override for a staff member' })
+  @ApiResponse({ status: 200, description: 'Service override updated' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Override not found' })
+  async updateServiceOverride(
+    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
+    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @Body() updateOverrideDto: UpdateServiceOverrideDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.updateServiceOverride(
+      staffUserId,
+      serviceId,
+      updateOverrideDto,
+      user.role,
+      user.studioId,
+    );
+  }
+
+  @Delete('staff/:staffUserId/services/:serviceId/override')
+  @ApiOperation({ summary: 'Delete service override for a staff member' })
+  @ApiResponse({ status: 200, description: 'Service override deleted' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Override not found' })
+  async deleteServiceOverride(
+    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
+    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.deleteServiceOverride(staffUserId, serviceId, user.role, user.studioId);
   }
 }
 

@@ -4,10 +4,17 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import * as fs from 'fs';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
+  // Create logs directory if it doesn't exist
+  const logsDir = join(process.cwd(), 'logs');
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+  }
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Настройка статической раздачи файлов
@@ -38,8 +45,9 @@ async function bootstrap() {
     }),
   );
 
-  // Global exception filter
-  app.useGlobalFilters(new HttpExceptionFilter());
+  // Global exception filter (with logger injection)
+  const httpExceptionFilter = app.get(HttpExceptionFilter);
+  app.useGlobalFilters(httpExceptionFilter);
 
   // Swagger
   const config = new DocumentBuilder()

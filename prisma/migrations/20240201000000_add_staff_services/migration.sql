@@ -29,3 +29,5 @@ ALTER TABLE "staff_services" ADD CONSTRAINT "staff_services_staffUserId_fkey" FO
 ALTER TABLE "staff_services" ADD CONSTRAINT "staff_services_serviceId_fkey" FOREIGN KEY ("serviceId") REFERENCES "services"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 
+
+

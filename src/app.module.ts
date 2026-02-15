@@ -10,6 +10,7 @@ import { ScheduleModule } from './schedule/schedule.module';
 import { BusySlotsModule } from './busy-slots/busy-slots.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { UploadModule } from './upload/upload.module';
+import { LoggingModule } from './logging/logging.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -19,6 +20,7 @@ import { AppController } from './app.controller';
       envFilePath: '.env',
     }),
     CommonModule,
+    LoggingModule,
     AuthModule,
     StudiosModule,
     UsersModule,

@@ -9,6 +9,8 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { UpdateStaffProfileDto } from './dto/update-staff-profile.dto';
+import { CreateServiceOverrideDto } from './dto/create-service-override.dto';
+import { UpdateServiceOverrideDto } from './dto/update-service-override.dto';
 import { UserRole } from '../common/decorators/roles.decorator';
 
 @Injectable()
@@ -345,7 +347,7 @@ export class UsersService {
       throw new ForbiddenException('Access denied to this staff member');
     }
 
-    return this.prisma.staffService.findMany({
+    const staffServices = await this.prisma.staffService.findMany({
       where: {
         staffUserId,
       },
@@ -358,6 +360,24 @@ export class UsersService {
         },
       },
     });
+
+    // Get all overrides for this staff member
+    const overrides = await this.prisma.staffServiceOverride.findMany({
+      where: {
+        staffUserId,
+      },
+    });
+
+    // Map overrides by serviceId for quick lookup
+    const overrideMap = new Map(
+      overrides.map((o) => [o.serviceId, o]),
+    );
+
+    // Combine services with their overrides
+    return staffServices.map((ss) => ({
+      ...ss,
+      override: overrideMap.get(ss.serviceId) || null,
+    }));
   }
 
   async getStaffProfile(
@@ -386,6 +406,24 @@ export class UsersService {
       throw new ForbiddenException('Access denied to this user');
     }
 
+    // Get all overrides for this staff member
+    const overrides = await this.prisma.staffServiceOverride.findMany({
+      where: {
+        staffUserId: userId,
+      },
+    });
+
+    // Map overrides by serviceId for quick lookup
+    const overrideMap = new Map(
+      overrides.map((o) => [o.serviceId, o]),
+    );
+
+    // Combine services with their overrides
+    const servicesWithOverrides = user.staffServices.map((ss) => ({
+      ...ss.service,
+      override: overrideMap.get(ss.serviceId) || null,
+    }));
+
     // Return user with profile, services, and basic info
     return {
       id: user.id,
@@ -394,7 +432,7 @@ export class UsersService {
       role: user.role,
       isActive: user.isActive,
       staffProfile: user.staffProfile,
-      services: user.staffServices.map((ss) => ss.service),
+      services: servicesWithOverrides,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -497,6 +535,293 @@ export class UsersService {
     // Delete user (cascade will delete related records: staffProfile, workSchedules, busySlots, appointments, staffServices, etc.)
     return this.prisma.user.delete({
       where: { id: userId },
+    });
+  }
+
+  async createServiceOverride(
+    staffUserId: string,
+    serviceId: string,
+    createOverrideDto: CreateServiceOverrideDto,
+    userRole: string,
+    userStudioId?: string,
+  ) {
+    // Get staff user
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffUserId },
+      include: { studio: true },
+    });
+
+    if (!staff) {
+      throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+      throw new ForbiddenException('Access denied to this staff member');
+    }
+
+    // Verify service exists and belongs to same studio
+    const service = await this.prisma.service.findUnique({
+      where: { id: serviceId },
+    });
+
+    if (!service) {
+      throw new NotFoundException(`Service with ID ${serviceId} not found`);
+    }
+
+    if (service.studioId !== staff.studioId) {
+      throw new BadRequestException('Service does not belong to the same studio');
+    }
+
+    // Verify that staff service exists (staff must be assigned to this service first)
+    const staffService = await this.prisma.staffService.findUnique({
+      where: {
+        studioId_staffUserId_serviceId: {
+          studioId: staff.studioId!,
+          staffUserId,
+          serviceId,
+        },
+      },
+    });
+
+    if (!staffService) {
+      throw new BadRequestException('Service is not assigned to this staff member. Please assign the service first.');
+    }
+
+    // Check if override already exists
+    const existing = await this.prisma.staffServiceOverride.findUnique({
+      where: {
+        studioId_staffUserId_serviceId: {
+          studioId: staff.studioId!,
+          staffUserId,
+          serviceId,
+        },
+      },
+    });
+
+    if (existing) {
+      throw new BadRequestException('Override already exists for this staff member and service. Use update instead.');
+    }
+
+    // Create override
+    return this.prisma.staffServiceOverride.create({
+      data: {
+        studioId: staff.studioId!,
+        staffUserId,
+        serviceId,
+        durationMin: createOverrideDto.durationMin,
+        price: createOverrideDto.price,
+        isActive: createOverrideDto.isActive ?? true,
+      },
+      include: {
+        service: true,
+        staff: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            role: true,
+          },
+        },
+      },
+    });
+  }
+
+  async updateServiceOverride(
+    staffUserId: string,
+    serviceId: string,
+    updateOverrideDto: UpdateServiceOverrideDto,
+    userRole: string,
+    userStudioId?: string,
+  ) {
+    // Get staff user
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffUserId },
+    });
+
+    if (!staff) {
+      throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+      throw new ForbiddenException('Access denied to this staff member');
+    }
+
+    // Find existing override
+    const existing = await this.prisma.staffServiceOverride.findUnique({
+      where: {
+        studioId_staffUserId_serviceId: {
+          studioId: staff.studioId!,
+          staffUserId,
+          serviceId,
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Override not found for this staff member and service');
+    }
+
+    // Prepare update data
+    const updateData: any = {};
+    if (updateOverrideDto.durationMin !== undefined) {
+      updateData.durationMin = updateOverrideDto.durationMin;
+    }
+    if (updateOverrideDto.price !== undefined) {
+      updateData.price = updateOverrideDto.price;
+    }
+    if (updateOverrideDto.isActive !== undefined) {
+      updateData.isActive = updateOverrideDto.isActive;
+    }
+
+    // Update override
+    return this.prisma.staffServiceOverride.update({
+      where: { id: existing.id },
+      data: updateData,
+      include: {
+        service: true,
+        staff: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            role: true,
+          },
+        },
+      },
+    });
+  }
+
+  async getServiceOverride(
+    staffUserId: string,
+    serviceId: string,
+    userRole: string,
+    userStudioId?: string,
+  ) {
+    // Get staff user
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffUserId },
+    });
+
+    if (!staff) {
+      throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+      throw new ForbiddenException('Access denied to this staff member');
+    }
+
+    // Find override
+    const override = await this.prisma.staffServiceOverride.findUnique({
+      where: {
+        studioId_staffUserId_serviceId: {
+          studioId: staff.studioId!,
+          staffUserId,
+          serviceId,
+        },
+      },
+      include: {
+        service: true,
+        staff: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!override) {
+      throw new NotFoundException('Override not found for this staff member and service');
+    }
+
+    return override;
+  }
+
+  async getStaffServiceOverrides(
+    staffUserId: string,
+    userRole: string,
+    userStudioId?: string,
+  ) {
+    // Get staff user
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffUserId },
+    });
+
+    if (!staff) {
+      throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+      throw new ForbiddenException('Access denied to this staff member');
+    }
+
+    return this.prisma.staffServiceOverride.findMany({
+      where: {
+        staffUserId,
+      },
+      include: {
+        service: true,
+        staff: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            role: true,
+          },
+        },
+      },
+      orderBy: {
+        service: {
+          name: 'asc',
+        },
+      },
+    });
+  }
+
+  async deleteServiceOverride(
+    staffUserId: string,
+    serviceId: string,
+    userRole: string,
+    userStudioId?: string,
+  ) {
+    // Get staff user
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffUserId },
+    });
+
+    if (!staff) {
+      throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
+    }
+
+    // Check access
+    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+      throw new ForbiddenException('Access denied to this staff member');
+    }
+
+    // Find override
+    const override = await this.prisma.staffServiceOverride.findUnique({
+      where: {
+        studioId_staffUserId_serviceId: {
+          studioId: staff.studioId!,
+          staffUserId,
+          serviceId,
+        },
+      },
+    });
+
+    if (!override) {
+      throw new NotFoundException('Override not found for this staff member and service');
+    }
+
+    // Delete override
+    return this.prisma.staffServiceOverride.delete({
+      where: { id: override.id },
     });
   }
 }
