@@ -103,18 +103,22 @@ export class DashboardService {
     };
 
     // Calculate revenue
-    // Revenue = sum of prepaymentAmount for DONE appointments only
-    // Доход считается только после завершения записи (статус DONE)
-    const revenue = appointments
-      .filter(a => a.status === AppointmentStatus.DONE)
-      .reduce((sum, a) => {
+    // Revenue = sum of prepaymentAmount for DONE appointments + forfeitedPrepaymentAmount for CANCELLED appointments
+    // Доход считается от завершенных записей (DONE) и от сгоревших предоплат при поздней отмене (CANCELLED)
+    const revenue = appointments.reduce((sum, a) => {
+      if (a.status === AppointmentStatus.DONE) {
         // Use prepaymentAmount if available, otherwise use service defaultPrice
         const amount = a.prepaymentAmount || a.service.defaultPrice || 0;
         return sum + amount;
-      }, 0);
+      } else if (a.status === AppointmentStatus.CANCELLED && a.forfeitedPrepaymentAmount) {
+        // Add forfeited prepayment from late cancellations
+        return sum + a.forfeitedPrepaymentAmount;
+      }
+      return sum;
+    }, 0);
 
     // Popular services (top 10)
-    // Считаем только завершенные записи (DONE) для дохода
+    // Считаем завершенные записи (DONE) и сгоревшие предоплаты (CANCELLED) для дохода
     const serviceCounts = new Map<string, { name: string; count: number; revenue: number }>();
     appointments.forEach(a => {
       if (a.status === AppointmentStatus.DONE) {
@@ -123,6 +127,11 @@ export class DashboardService {
         current.count++;
         current.revenue += a.prepaymentAmount || a.service.defaultPrice || 0;
         serviceCounts.set(serviceId, current);
+      } else if (a.status === AppointmentStatus.CANCELLED && a.forfeitedPrepaymentAmount) {
+        const serviceId = a.serviceId;
+        const current = serviceCounts.get(serviceId) || { name: a.service.name, count: 0, revenue: 0 };
+        current.revenue += a.forfeitedPrepaymentAmount;
+        serviceCounts.set(serviceId, current);
       }
     });
     const popularServices = Array.from(serviceCounts.values())
@@ -130,7 +139,7 @@ export class DashboardService {
       .slice(0, 10);
 
     // Staff statistics (top 10)
-    // Считаем только завершенные записи (DONE) для дохода
+    // Считаем завершенные записи (DONE) и сгоревшие предоплаты (CANCELLED) для дохода
     const staffCounts = new Map<string, { 
       id: string; 
       name: string; 
@@ -149,6 +158,16 @@ export class DashboardService {
         current.count++;
         current.revenue += a.prepaymentAmount || a.service.defaultPrice || 0;
         staffCounts.set(staffId, current);
+      } else if (a.status === AppointmentStatus.CANCELLED && a.forfeitedPrepaymentAmount) {
+        const staffId = a.staffUserId;
+        const current = staffCounts.get(staffId) || { 
+          id: staffId,
+          name: `${a.staff.staffProfile?.firstName || ''} ${a.staff.staffProfile?.lastName || ''}`.trim() || 'Unknown',
+          count: 0, 
+          revenue: 0 
+        };
+        current.revenue += a.forfeitedPrepaymentAmount;
+        staffCounts.set(staffId, current);
       }
     });
     const topStaff = Array.from(staffCounts.values())
@@ -156,7 +175,7 @@ export class DashboardService {
       .slice(0, 10);
 
     // Daily statistics for charts
-    // Считаем только завершенные записи (DONE) для дохода
+    // Считаем завершенные записи (DONE) и сгоревшие предоплаты (CANCELLED) для дохода
     const dailyStats = new Map<string, { date: string; count: number; revenue: number }>();
     appointments.forEach(a => {
       if (a.status === AppointmentStatus.DONE) {
@@ -164,6 +183,11 @@ export class DashboardService {
         const current = dailyStats.get(dateKey) || { date: dateKey, count: 0, revenue: 0 };
         current.count++;
         current.revenue += a.prepaymentAmount || a.service.defaultPrice || 0;
+        dailyStats.set(dateKey, current);
+      } else if (a.status === AppointmentStatus.CANCELLED && a.forfeitedPrepaymentAmount) {
+        const dateKey = a.startAt.toISOString().split('T')[0];
+        const current = dailyStats.get(dateKey) || { date: dateKey, count: 0, revenue: 0 };
+        current.revenue += a.forfeitedPrepaymentAmount;
         dailyStats.set(dateKey, current);
       }
     });
@@ -245,13 +269,16 @@ export class DashboardService {
         [AppointmentStatus.DONE]: appointments.filter(a => a.status === AppointmentStatus.DONE).length,
       };
 
-      // Доход считается только для завершенных записей (DONE)
-      const revenue = appointments
-        .filter(a => a.status === AppointmentStatus.DONE)
-        .reduce((sum, a) => {
+      // Доход считается от завершенных записей (DONE) и от сгоревших предоплат при поздней отмене (CANCELLED)
+      const revenue = appointments.reduce((sum, a) => {
+        if (a.status === AppointmentStatus.DONE) {
           const amount = a.prepaymentAmount || a.service.defaultPrice || 0;
           return sum + amount;
-        }, 0);
+        } else if (a.status === AppointmentStatus.CANCELLED && a.forfeitedPrepaymentAmount) {
+          return sum + a.forfeitedPrepaymentAmount;
+        }
+        return sum;
+      }, 0);
 
       return {
         studioId: studio.id,

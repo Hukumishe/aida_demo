@@ -349,10 +349,22 @@ export class AppointmentsService {
       throw new BadRequestException('Appointment is already cancelled');
     }
 
+    // Check if cancellation is late (less than 4 hours before start)
+    const now = new Date();
+    const startAt = new Date(appointment.startAt);
+    const hoursUntilStart = (startAt.getTime() - now.getTime()) / (1000 * 60 * 60);
+    const isLateCancellation = hoursUntilStart < 4 && hoursUntilStart > 0;
+
+    // If late cancellation and prepayment exists, forfeit it
+    const forfeitedPrepaymentAmount = isLateCancellation && appointment.prepaymentAmount
+      ? appointment.prepaymentAmount
+      : null;
+
     return this.prisma.appointment.update({
       where: { id },
       data: {
         status: AppointmentStatus.CANCELLED,
+        forfeitedPrepaymentAmount,
       },
     });
   }

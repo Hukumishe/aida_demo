@@ -225,19 +225,20 @@ model StaffServiceOverride {
 }
 
 model Appointment {
-  id               String            @id @default(uuid())
-  studioId         String
-  staffUserId      String
-  clientId         String
-  serviceId        String
-  startAt          DateTime
-  endAt            DateTime
-  status           AppointmentStatus @default(BOOKED)
-  prepaymentAmount Int?
-  arrivedAt        DateTime?
-  arrivedByUserId  String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  id                        String            @id @default(uuid())
+  studioId                  String
+  staffUserId               String
+  clientId                  String
+  serviceId                 String
+  startAt                   DateTime
+  endAt                     DateTime
+  status                    AppointmentStatus @default(BOOKED)
+  prepaymentAmount          Int?
+  forfeitedPrepaymentAmount Int?  // Предоплата, сгоревшая при поздней отмене
+  arrivedAt                 DateTime?
+  arrivedByUserId           String?
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
 
   studio         Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
   staff          User   @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
