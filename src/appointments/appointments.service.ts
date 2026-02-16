@@ -358,11 +358,11 @@ export class AppointmentsService {
   }
 
   async markArrived(id: string, userId: string, userRole?: string, userStudioId?: string) {
-    const appointment = await this.prisma.appointment.findUnique({
+    const existingAppointment = await this.prisma.appointment.findUnique({
       where: { id },
     });
 
-    if (!appointment) {
+    if (!existingAppointment) {
       throw new NotFoundException(`Appointment with ID ${id} not found`);
     }
 
@@ -370,16 +370,16 @@ export class AppointmentsService {
     // OWNER and MANAGER have access to all studios
     if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
       // ADMIN and MASTER can only access their own studio
-      if (userStudioId !== appointment.studioId) {
+      if (userStudioId !== existingAppointment.studioId) {
         throw new ForbiddenException('Access denied to this appointment');
       }
     }
 
-    if (appointment.status === AppointmentStatus.CANCELLED) {
+    if (existingAppointment.status === AppointmentStatus.CANCELLED) {
       throw new BadRequestException('Cannot mark cancelled appointment as arrived');
     }
 
-    if (appointment.status === AppointmentStatus.ARRIVED) {
+    if (existingAppointment.status === AppointmentStatus.ARRIVED) {
       throw new BadRequestException('Appointment is already marked as arrived');
     }
 
@@ -423,11 +423,11 @@ export class AppointmentsService {
   }
 
   async markDone(id: string, userId: string, userRole?: string, userStudioId?: string) {
-    const appointment = await this.prisma.appointment.findUnique({
+    const existingAppointment = await this.prisma.appointment.findUnique({
       where: { id },
     });
 
-    if (!appointment) {
+    if (!existingAppointment) {
       throw new NotFoundException(`Appointment with ID ${id} not found`);
     }
 
@@ -435,16 +435,16 @@ export class AppointmentsService {
     // OWNER and MANAGER have access to all studios
     if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
       // ADMIN and MASTER can only access their own studio
-      if (userStudioId !== appointment.studioId) {
+      if (userStudioId !== existingAppointment.studioId) {
         throw new ForbiddenException('Access denied to this appointment');
       }
     }
 
-    if (appointment.status === AppointmentStatus.CANCELLED) {
+    if (existingAppointment.status === AppointmentStatus.CANCELLED) {
       throw new BadRequestException('Cannot mark cancelled appointment as done');
     }
 
-    if (appointment.status === AppointmentStatus.DONE) {
+    if (existingAppointment.status === AppointmentStatus.DONE) {
       throw new BadRequestException('Appointment is already marked as done');
     }
 
