@@ -15,8 +15,16 @@ export class ClientsService {
 
   async findAll(studioId: string, query?: string, userRole?: string, userStudioId?: string) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
-      throw new ForbiddenException('Access denied to this studio');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN can only access their own studio
+      if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
+      // MASTER should not access client list directly (only through appointments)
+      if (userRole === UserRole.MASTER) {
+        throw new ForbiddenException('Masters cannot access client list');
+      }
     }
 
     const where: any = { studioId };
@@ -45,8 +53,16 @@ export class ClientsService {
     userStudioId?: string,
   ) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
-      throw new ForbiddenException('Access denied to this studio');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN can only create clients in their own studio
+      if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
+      // MASTER cannot create clients
+      if (userRole === UserRole.MASTER) {
+        throw new ForbiddenException('Masters cannot create clients');
+      }
     }
 
     // Verify studio exists
@@ -111,8 +127,24 @@ export class ClientsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== client.studioId) {
-      throw new ForbiddenException('Access denied to this client');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN can only access clients from their own studio
+      if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
+        throw new ForbiddenException('Access denied to this client');
+      }
+      // MASTER cannot access client details (phone is hidden in appointments)
+      if (userRole === UserRole.MASTER) {
+        throw new ForbiddenException('Masters cannot access client details');
+      }
+    }
+
+    // Hide phone for MASTER (though they shouldn't access this endpoint)
+    if (userRole === UserRole.MASTER) {
+      return {
+        ...client,
+        phone: undefined,
+      };
     }
 
     return client;
@@ -133,8 +165,16 @@ export class ClientsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== client.studioId) {
-      throw new ForbiddenException('Access denied to this client');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN can only update clients from their own studio
+      if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
+        throw new ForbiddenException('Access denied to this client');
+      }
+      // MASTER cannot update clients
+      if (userRole === UserRole.MASTER) {
+        throw new ForbiddenException('Masters cannot update clients');
+      }
     }
 
     // Check phone uniqueness if phone is being updated
@@ -169,8 +209,16 @@ export class ClientsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== client.studioId) {
-      throw new ForbiddenException('Access denied to this client');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN can only update clients from their own studio
+      if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
+        throw new ForbiddenException('Access denied to this client');
+      }
+      // MASTER cannot update clients
+      if (userRole === UserRole.MASTER) {
+        throw new ForbiddenException('Masters cannot update clients');
+      }
     }
 
     // Get all appointments for this client
@@ -219,8 +267,16 @@ export class ClientsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== client.studioId) {
-      throw new ForbiddenException('Access denied to this client');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN can only update clients from their own studio
+      if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
+        throw new ForbiddenException('Access denied to this client');
+      }
+      // MASTER cannot update clients
+      if (userRole === UserRole.MASTER) {
+        throw new ForbiddenException('Masters cannot update clients');
+      }
     }
 
     const where: any = {

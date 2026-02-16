@@ -44,7 +44,7 @@ export class BusySlotsController {
     @Query('date') date?: string,
     @CurrentUser() user?: any,
   ) {
-    return this.busySlotsService.findAll(studioId, date, user?.role, user?.studioId);
+    return this.busySlotsService.findAll(studioId, date, user?.role, user?.studioId, user?.userId);
   }
 
   @Post('studios/:studioId/busy-slots')
@@ -57,7 +57,7 @@ export class BusySlotsController {
     @Body() createBusySlotDto: CreateBusySlotDto,
     @CurrentUser() user?: any,
   ) {
-    return this.busySlotsService.create(studioId, createBusySlotDto, user?.role, user?.studioId);
+    return this.busySlotsService.create(studioId, createBusySlotDto, user?.role, user?.studioId, user?.userId);
   }
 
   @Patch('busy-slots/:id')

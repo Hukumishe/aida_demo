@@ -22,10 +22,15 @@ export class BusySlotsService {
     date?: string,
     userRole?: string,
     userStudioId?: string,
+    userStaffId?: string,
   ) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
-      throw new ForbiddenException('Access denied to this studio');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN and MASTER can only access their own studio
+      if (userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
     }
 
     const where: any = { studioId };
@@ -61,10 +66,20 @@ export class BusySlotsService {
     createBusySlotDto: CreateBusySlotDto,
     userRole?: string,
     userStudioId?: string,
+    userStaffId?: string,
   ) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
-      throw new ForbiddenException('Access denied to this studio');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN and MASTER can only access their own studio
+      if (userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
+    }
+
+    // MASTER can only create busy slots for themselves
+    if (userRole === UserRole.MASTER && userStaffId && createBusySlotDto.staffUserId !== userStaffId) {
+      throw new ForbiddenException('Masters can only create busy slots for themselves');
     }
 
     // Verify studio exists
@@ -92,12 +107,19 @@ export class BusySlotsService {
     }
 
     // Check if busy slot is allowed (must be within work schedule)
-    await this.availabilityService.checkBusySlotAllowed(
-      studioId,
-      createBusySlotDto.staffUserId,
-      startAt,
-      endAt,
-    );
+    // For MASTER, allow booking gray time (outside work hours) if comment is provided
+    if (userRole === UserRole.MASTER && createBusySlotDto.comment) {
+      // MASTER can book gray time with explanation - skip strict validation
+      // Only verify that staff belongs to studio
+    } else {
+      // For other roles, enforce strict work schedule validation
+      await this.availabilityService.checkBusySlotAllowed(
+        studioId,
+        createBusySlotDto.staffUserId,
+        startAt,
+        endAt,
+      );
+    }
 
     return this.prisma.busySlot.create({
       data: {

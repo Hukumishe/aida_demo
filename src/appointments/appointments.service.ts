@@ -32,8 +32,12 @@ export class AppointmentsService {
     userStaffId?: string,
   ) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
-      throw new ForbiddenException('Access denied to this studio');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN and MASTER can only access their own studio
+      if (userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
     }
 
     const where: any = { studioId };
@@ -56,7 +60,7 @@ export class AppointmentsService {
       };
     }
 
-    return this.prisma.appointment.findMany({
+    const appointments = await this.prisma.appointment.findMany({
       where,
       include: {
         staff: {
@@ -78,6 +82,19 @@ export class AppointmentsService {
         startAt: 'asc',
       },
     });
+
+    // Hide client phone for MASTER role
+    if (userRole === UserRole.MASTER) {
+      return appointments.map((appointment) => ({
+        ...appointment,
+        client: {
+          ...appointment.client,
+          phone: undefined, // Hide phone number
+        },
+      }));
+    }
+
+    return appointments;
   }
 
   async create(
@@ -87,8 +104,12 @@ export class AppointmentsService {
     userStudioId?: string,
   ) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
-      throw new ForbiddenException('Access denied to this studio');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN and MASTER can only access their own studio
+      if (userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
     }
 
     // Verify studio exists
@@ -206,8 +227,12 @@ export class AppointmentsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== appointment.studioId) {
-      throw new ForbiddenException('Access denied to this appointment');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN and MASTER can only access their own studio
+      if (userStudioId !== appointment.studioId) {
+        throw new ForbiddenException('Access denied to this appointment');
+      }
     }
 
     // MASTER can only update their own appointments
@@ -263,7 +288,7 @@ export class AppointmentsService {
         );
       }
 
-      return tx.appointment.update({
+      const updated = await tx.appointment.update({
         where: { id },
         data: {
           startAt: updateAppointmentDto.startAt ? startAt : undefined,
@@ -281,6 +306,19 @@ export class AppointmentsService {
           service: true,
         },
       });
+
+      // Hide client phone for MASTER role
+      if (userRole === UserRole.MASTER) {
+        return {
+          ...updated,
+          client: {
+            ...updated.client,
+            phone: undefined,
+          },
+        };
+      }
+
+      return updated;
     });
   }
 
@@ -294,8 +332,12 @@ export class AppointmentsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== appointment.studioId) {
-      throw new ForbiddenException('Access denied to this appointment');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN and MASTER can only access their own studio
+      if (userStudioId !== appointment.studioId) {
+        throw new ForbiddenException('Access denied to this appointment');
+      }
     }
 
     // MASTER can only cancel their own appointments
@@ -325,8 +367,12 @@ export class AppointmentsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== appointment.studioId) {
-      throw new ForbiddenException('Access denied to this appointment');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN and MASTER can only access their own studio
+      if (userStudioId !== appointment.studioId) {
+        throw new ForbiddenException('Access denied to this appointment');
+      }
     }
 
     if (appointment.status === AppointmentStatus.CANCELLED) {
@@ -337,7 +383,7 @@ export class AppointmentsService {
       throw new BadRequestException('Appointment is already marked as arrived');
     }
 
-    return this.prisma.appointment.update({
+    const appointment = await this.prisma.appointment.update({
       where: { id },
       data: {
         status: AppointmentStatus.ARRIVED,
@@ -361,6 +407,19 @@ export class AppointmentsService {
         },
       },
     });
+
+    // Hide client phone for MASTER role
+    if (userRole === UserRole.MASTER) {
+      return {
+        ...appointment,
+        client: {
+          ...appointment.client,
+          phone: undefined,
+        },
+      };
+    }
+
+    return appointment;
   }
 
   async markDone(id: string, userId: string, userRole?: string, userStudioId?: string) {
@@ -373,8 +432,12 @@ export class AppointmentsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== appointment.studioId) {
-      throw new ForbiddenException('Access denied to this appointment');
+    // OWNER and MANAGER have access to all studios
+    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+      // ADMIN and MASTER can only access their own studio
+      if (userStudioId !== appointment.studioId) {
+        throw new ForbiddenException('Access denied to this appointment');
+      }
     }
 
     if (appointment.status === AppointmentStatus.CANCELLED) {
@@ -385,7 +448,7 @@ export class AppointmentsService {
       throw new BadRequestException('Appointment is already marked as done');
     }
 
-    return this.prisma.appointment.update({
+    const appointment = await this.prisma.appointment.update({
       where: { id },
       data: {
         status: AppointmentStatus.DONE,
@@ -407,6 +470,19 @@ export class AppointmentsService {
         },
       },
     });
+
+    // Hide client phone for MASTER role
+    if (userRole === UserRole.MASTER) {
+      return {
+        ...appointment,
+        client: {
+          ...appointment.client,
+          phone: undefined,
+        },
+      };
+    }
+
+    return appointment;
   }
 }
 

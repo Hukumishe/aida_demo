@@ -25,8 +25,8 @@ export class StudioAccessGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    // OWNER has access to all studios
-    if (user.role === UserRole.OWNER) {
+    // OWNER and MANAGER have access to all studios
+    if (user.role === UserRole.OWNER || user.role === UserRole.MANAGER) {
       // Verify studio exists
       const studio = await this.prisma.studio.findUnique({
         where: { id: studioId },
@@ -37,7 +37,7 @@ export class StudioAccessGuard implements CanActivate {
       return true;
     }
 
-    // MANAGER and MASTER can only access their own studio
+    // ADMIN and MASTER can only access their own studio
     if (user.studioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
     }
