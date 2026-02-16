@@ -63,15 +63,16 @@ model Studio {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String?  @unique
-  phone        String?  @unique
-  passwordHash String
-  role         UserRole
-  studioId     String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(uuid())
+  email           String?  @unique
+  phone           String?  @unique
+  passwordHash    String
+  role            UserRole
+  studioId        String?
+  isActive        Boolean  @default(true)
+  themePreference String?  // 'light' | 'dark' | 'system'
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   studio       Studio?        @relation(fields: [studioId], references: [id], onDelete: Cascade)
   staffProfile StaffProfile?

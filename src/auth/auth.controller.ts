@@ -3,6 +3,7 @@ import {
   Post,
   Body,
   Get,
+  Patch,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -11,6 +12,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
+import { UpdateThemeDto } from './dto/update-theme.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { JwtRefreshGuard } from '../common/guards/jwt-refresh.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -50,6 +52,22 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getMe(@CurrentUser() user: any) {
     return this.authService.getMe(user.userId);
+  }
+
+  @Patch('me/theme')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update theme preference' })
+  @ApiResponse({ status: 200, description: 'Theme preference updated' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async updateTheme(
+    @CurrentUser() user: any,
+    @Body() updateThemeDto: UpdateThemeDto,
+  ) {
+    return this.authService.updateThemePreference(
+      user.userId,
+      updateThemeDto.themePreference,
+    );
   }
 }
 

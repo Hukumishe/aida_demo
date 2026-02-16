@@ -131,6 +131,7 @@ export class AuthService {
         role: true,
         studioId: true,
         isActive: true,
+        themePreference: true,
         createdAt: true,
         updatedAt: true,
         studio: {
@@ -148,6 +149,21 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
+
+    return user;
+  }
+
+  async updateThemePreference(userId: string, themePreference: 'light' | 'dark' | 'system') {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        themePreference,
+      },
+      select: {
+        id: true,
+        themePreference: true,
+      },
+    });
 
     return user;
   }
