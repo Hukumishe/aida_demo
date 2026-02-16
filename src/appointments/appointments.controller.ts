@@ -83,16 +83,16 @@ export class AppointmentsController {
     );
   }
 
-  @Post('appointments/:id/cancel')
-  @ApiOperation({ summary: 'Cancel appointment' })
-  @ApiResponse({ status: 200, description: 'Appointment cancelled' })
+  @Post('appointments/:id/no-show')
+  @ApiOperation({ summary: 'Mark appointment as no-show (Не пришёл)' })
+  @ApiResponse({ status: 200, description: 'Appointment marked as no-show and deleted' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Appointment not found' })
-  async cancel(
+  async markNoShow(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user?: any,
   ) {
-    return this.appointmentsService.cancel(id, user?.role, user?.studioId, user?.userId);
+    return this.appointmentsService.markNoShow(id, user?.role, user?.studioId, user?.userId);
   }
 
   @Post('appointments/:id/arrived')

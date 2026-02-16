@@ -91,6 +91,25 @@ export class DashboardService {
       },
     });
 
+    // Get all no-show income records in date range (based on originalStartAt)
+    const noShowIncomes = await this.prisma.noShowIncome.findMany({
+      where: {
+        studioId,
+        originalStartAt: {
+          gte: start,
+          lte: end,
+        },
+      },
+      include: {
+        service: true,
+        staff: {
+          include: {
+            staffProfile: true,
+          },
+        },
+      },
+    });
+
     // Calculate statistics
     const totalAppointments = appointments.length;
     
@@ -103,9 +122,9 @@ export class DashboardService {
     };
 
     // Calculate revenue
-    // Revenue = sum of prepaymentAmount for DONE appointments + forfeitedPrepaymentAmount for CANCELLED appointments
-    // Доход считается от завершенных записей (DONE) и от сгоревших предоплат при поздней отмене (CANCELLED)
-    const revenue = appointments.reduce((sum, a) => {
+    // Revenue = sum of prepaymentAmount for DONE appointments + forfeitedPrepaymentAmount for CANCELLED appointments + no-show income
+    // Доход считается от завершенных записей (DONE), от сгоревших предоплат при поздней отмене (CANCELLED) и от неявок (NoShowIncome)
+    const revenueFromAppointments = appointments.reduce((sum, a) => {
       if (a.status === AppointmentStatus.DONE) {
         // Use prepaymentAmount if available, otherwise use service defaultPrice
         const amount = a.prepaymentAmount || a.service.defaultPrice || 0;
@@ -116,9 +135,12 @@ export class DashboardService {
       }
       return sum;
     }, 0);
+    
+    const revenueFromNoShows = noShowIncomes.reduce((sum: number, nsi: any) => sum + nsi.amount, 0);
+    const revenue = revenueFromAppointments + revenueFromNoShows;
 
     // Popular services (top 10)
-    // Считаем завершенные записи (DONE) и сгоревшие предоплаты (CANCELLED) для дохода
+    // Считаем завершенные записи (DONE), сгоревшие предоплаты (CANCELLED) и неявки (NoShowIncome) для дохода
     const serviceCounts = new Map<string, { name: string; count: number; revenue: number }>();
     appointments.forEach(a => {
       if (a.status === AppointmentStatus.DONE) {
@@ -134,12 +156,19 @@ export class DashboardService {
         serviceCounts.set(serviceId, current);
       }
     });
+    // Add no-show income to service statistics
+    noShowIncomes.forEach((nsi: any) => {
+      const serviceId = nsi.serviceId;
+      const current = serviceCounts.get(serviceId) || { name: nsi.service.name, count: 0, revenue: 0 };
+      current.revenue += nsi.amount;
+      serviceCounts.set(serviceId, current);
+    });
     const popularServices = Array.from(serviceCounts.values())
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
     // Staff statistics (top 10)
-    // Считаем завершенные записи (DONE) и сгоревшие предоплаты (CANCELLED) для дохода
+    // Считаем завершенные записи (DONE), сгоревшие предоплаты (CANCELLED) и неявки (NoShowIncome) для дохода
     const staffCounts = new Map<string, { 
       id: string; 
       name: string; 
@@ -170,12 +199,24 @@ export class DashboardService {
         staffCounts.set(staffId, current);
       }
     });
+    // Add no-show income to staff statistics
+    noShowIncomes.forEach((nsi: any) => {
+      const staffId = nsi.staffUserId;
+      const current = staffCounts.get(staffId) || { 
+        id: staffId,
+        name: `${nsi.staff.staffProfile?.firstName || ''} ${nsi.staff.staffProfile?.lastName || ''}`.trim() || 'Unknown',
+        count: 0, 
+        revenue: 0 
+      };
+      current.revenue += nsi.amount;
+      staffCounts.set(staffId, current);
+    });
     const topStaff = Array.from(staffCounts.values())
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
     // Daily statistics for charts
-    // Считаем завершенные записи (DONE) и сгоревшие предоплаты (CANCELLED) для дохода
+    // Считаем завершенные записи (DONE), сгоревшие предоплаты (CANCELLED) и неявки (NoShowIncome) для дохода
     const dailyStats = new Map<string, { date: string; count: number; revenue: number }>();
     appointments.forEach(a => {
       if (a.status === AppointmentStatus.DONE) {
@@ -190,6 +231,13 @@ export class DashboardService {
         current.revenue += a.forfeitedPrepaymentAmount;
         dailyStats.set(dateKey, current);
       }
+    });
+    // Add no-show income to daily statistics
+    noShowIncomes.forEach((nsi: any) => {
+      const dateKey = nsi.originalStartAt.toISOString().split('T')[0];
+      const current = dailyStats.get(dateKey) || { date: dateKey, count: 0, revenue: 0 };
+      current.revenue += nsi.amount;
+      dailyStats.set(dateKey, current);
     });
     const dailyChart = Array.from(dailyStats.values())
       .sort((a, b) => a.date.localeCompare(b.date));
@@ -254,23 +302,31 @@ export class DashboardService {
             },
           },
         },
+        noShowIncomes: {
+          where: {
+            originalStartAt: {
+              gte: start,
+              lte: end,
+            },
+          },
+        },
       },
     });
 
     // Calculate per-studio statistics
-    const studioStats = studios.map(studio => {
+    const studioStats = studios.map((studio: any) => {
       const appointments = studio.appointments;
       const totalAppointments = appointments.length;
       
       const statusCounts = {
-        [AppointmentStatus.BOOKED]: appointments.filter(a => a.status === AppointmentStatus.BOOKED).length,
-        [AppointmentStatus.CANCELLED]: appointments.filter(a => a.status === AppointmentStatus.CANCELLED).length,
-        [AppointmentStatus.ARRIVED]: appointments.filter(a => a.status === AppointmentStatus.ARRIVED).length,
-        [AppointmentStatus.DONE]: appointments.filter(a => a.status === AppointmentStatus.DONE).length,
+        [AppointmentStatus.BOOKED]: appointments.filter((a: any) => a.status === AppointmentStatus.BOOKED).length,
+        [AppointmentStatus.CANCELLED]: appointments.filter((a: any) => a.status === AppointmentStatus.CANCELLED).length,
+        [AppointmentStatus.ARRIVED]: appointments.filter((a: any) => a.status === AppointmentStatus.ARRIVED).length,
+        [AppointmentStatus.DONE]: appointments.filter((a: any) => a.status === AppointmentStatus.DONE).length,
       };
 
-      // Доход считается от завершенных записей (DONE) и от сгоревших предоплат при поздней отмене (CANCELLED)
-      const revenue = appointments.reduce((sum, a) => {
+      // Доход считается от завершенных записей (DONE), от сгоревших предоплат при поздней отмене (CANCELLED) и от неявок (NoShowIncome)
+      const revenueFromAppointments = appointments.reduce((sum: number, a: any) => {
         if (a.status === AppointmentStatus.DONE) {
           const amount = a.prepaymentAmount || a.service.defaultPrice || 0;
           return sum + amount;
@@ -279,6 +335,8 @@ export class DashboardService {
         }
         return sum;
       }, 0);
+      const revenueFromNoShows = studio.noShowIncomes.reduce((sum: number, nsi: any) => sum + nsi.amount, 0);
+      const revenue = revenueFromAppointments + revenueFromNoShows;
 
       return {
         studioId: studio.id,

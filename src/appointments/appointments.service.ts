@@ -322,9 +322,12 @@ export class AppointmentsService {
     });
   }
 
-  async cancel(id: string, userRole?: string, userStudioId?: string, userStaffId?: string) {
+  async markNoShow(id: string, userRole?: string, userStudioId?: string, userStaffId?: string) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
+      include: {
+        service: true,
+      },
     });
 
     if (!appointment) {
@@ -340,7 +343,7 @@ export class AppointmentsService {
       }
     }
 
-    // MASTER can only cancel their own appointments
+    // MASTER can only mark their own appointments as no-show
     if (userRole === UserRole.MASTER && userStaffId !== appointment.staffUserId) {
       throw new ForbiddenException('Access denied to this appointment');
     }
@@ -349,23 +352,40 @@ export class AppointmentsService {
       throw new BadRequestException('Appointment is already cancelled');
     }
 
+    if (appointment.status === AppointmentStatus.DONE) {
+      throw new BadRequestException('Cannot mark completed appointment as no-show');
+    }
+
     // Check if cancellation is late (less than 4 hours before start)
     const now = new Date();
     const startAt = new Date(appointment.startAt);
     const hoursUntilStart = (startAt.getTime() - now.getTime()) / (1000 * 60 * 60);
     const isLateCancellation = hoursUntilStart < 4 && hoursUntilStart > 0;
 
-    // If late cancellation and prepayment exists, forfeit it
-    const forfeitedPrepaymentAmount = isLateCancellation && appointment.prepaymentAmount
-      ? appointment.prepaymentAmount
-      : null;
+    // Use transaction to ensure data consistency
+    return this.prisma.$transaction(async (tx) => {
+      // If late cancellation (< 4 hours) and prepayment exists, add it to income
+      if (isLateCancellation && appointment.prepaymentAmount && appointment.prepaymentAmount > 0) {
+        // Create NoShowIncome record to track the forfeited prepayment
+        await tx.noShowIncome.create({
+          data: {
+            studioId: appointment.studioId,
+            staffUserId: appointment.staffUserId,
+            clientId: appointment.clientId,
+            serviceId: appointment.serviceId,
+            amount: appointment.prepaymentAmount,
+            originalStartAt: appointment.startAt,
+            originalEndAt: appointment.endAt,
+          },
+        });
+      }
 
-    return this.prisma.appointment.update({
-      where: { id },
-      data: {
-        status: AppointmentStatus.CANCELLED,
-        forfeitedPrepaymentAmount,
-      },
+      // Delete the appointment
+      await tx.appointment.delete({
+        where: { id },
+      });
+
+      return { success: true, message: 'Appointment marked as no-show and deleted' };
     });
   }
 
