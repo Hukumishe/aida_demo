@@ -27,7 +27,7 @@ export class UsersService {
       where: {
         studioId,
         role: {
-          in: [UserRole.MANAGER, UserRole.MASTER],
+          in: [UserRole.ADMIN, UserRole.MANAGER, UserRole.MASTER],
         },
       },
       include: {

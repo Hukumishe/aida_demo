@@ -54,6 +54,29 @@ async function main() {
 
   console.log('Created manager:', manager.id);
 
+  // Create admin
+  const adminPasswordHash = await bcrypt.hash('admin123', 10);
+  const admin = await prisma.user.create({
+    data: {
+      email: 'admin@example.com',
+      phone: '+79991234570',
+      passwordHash: adminPasswordHash,
+      role: 'ADMIN',
+      studioId: studio.id,
+      isActive: true,
+      staffProfile: {
+        create: {
+          firstName: 'Admin',
+          lastName: 'User',
+          title: 'Studio Administrator',
+          providesServices: false,
+        },
+      },
+    },
+  });
+
+  console.log('Created admin:', admin.id);
+
   // Create master
   const masterPasswordHash = await bcrypt.hash('master123', 10);
   const master = await prisma.user.create({
@@ -136,6 +159,7 @@ async function main() {
   console.log('Seeding completed!');
   console.log('\nTest accounts:');
   console.log('Owner: owner@example.com / owner123');
+  console.log('Admin: admin@example.com / admin123');
   console.log('Manager: manager@example.com / manager123');
   console.log('Master: master@example.com / master123');
 }
