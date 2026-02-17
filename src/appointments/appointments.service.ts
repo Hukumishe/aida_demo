@@ -357,10 +357,12 @@ export class AppointmentsService {
     }
 
     // Check if cancellation is late (less than 4 hours before start)
+    // Если отмена происходит за менее чем 4 часа до начала (или запись уже началась/прошла),
+    // то предоплата добавляется в доход
     const now = new Date();
     const startAt = new Date(appointment.startAt);
     const hoursUntilStart = (startAt.getTime() - now.getTime()) / (1000 * 60 * 60);
-    const isLateCancellation = hoursUntilStart < 4 && hoursUntilStart > 0;
+    const isLateCancellation = hoursUntilStart < 4;
 
     // Use transaction to ensure data consistency
     return this.prisma.$transaction(async (tx) => {
