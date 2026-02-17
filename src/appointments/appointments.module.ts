@@ -4,9 +4,10 @@ import { AppointmentsController } from './appointments.controller';
 import { UpsellsService } from './upsells.service';
 import { UpsellsController } from './upsells.controller';
 import { AvailabilityModule } from '../availability/availability.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [AvailabilityModule],
+  imports: [AvailabilityModule, NotificationsModule],
   controllers: [AppointmentsController, UpsellsController],
   providers: [AppointmentsService, UpsellsService],
   exports: [AppointmentsService],

@@ -12,6 +12,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { UploadModule } from './upload/upload.module';
 import { LoggingModule } from './logging/logging.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -32,6 +33,7 @@ import { AppController } from './app.controller';
     AppointmentsModule,
     UploadModule,
     DashboardModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
 })

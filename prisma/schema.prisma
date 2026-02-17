@@ -42,6 +42,11 @@ enum LogType {
   SYSTEM
 }
 
+enum NotificationType {
+  NEW_APPOINTMENT // Новая запись для мастера
+  APPOINTMENT_CANCELLED // Отмена записи для менеджера
+}
+
 model Studio {
   id        String   @id @default(uuid())
   name      String
@@ -50,15 +55,16 @@ model Studio {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users              User[]
-  clients            Client[]
-  workSchedules      WorkScheduleDay[]
-  busySlots          BusySlot[]
-  services           Service[]
-  appointments       Appointment[]
-  staffServices        StaffService[]
+  users                 User[]
+  clients               Client[]
+  workSchedules         WorkScheduleDay[]
+  busySlots             BusySlot[]
+  services              Service[]
+  appointments          Appointment[]
+  staffServices         StaffService[]
   staffServiceOverrides StaffServiceOverride[]
-  noShowIncomes        NoShowIncome[]
+  noShowIncomes         NoShowIncome[]
+  Notification          Notification[]
 
   @@map("studios")
 }
@@ -71,19 +77,20 @@ model User {
   role            UserRole
   studioId        String?
   isActive        Boolean  @default(true)
-  themePreference String?  // 'light' | 'dark' | 'system'
+  themePreference String? // 'light' | 'dark' | 'system'
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  studio       Studio?        @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  staffProfile StaffProfile?
-  workSchedules WorkScheduleDay[]
-  busySlots    BusySlot[]
-  appointments Appointment[]
-  staffServices StaffService[]
-  serviceOverrides StaffServiceOverride[]
-  arrivedAppointments Appointment[] @relation("ArrivedByUser")
-  noShowIncomes NoShowIncome[]
+  studio              Studio?                @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  staffProfile        StaffProfile?
+  workSchedules       WorkScheduleDay[]
+  busySlots           BusySlot[]
+  appointments        Appointment[]
+  staffServices       StaffService[]
+  serviceOverrides    StaffServiceOverride[]
+  arrivedAppointments Appointment[]          @relation("ArrivedByUser")
+  noShowIncomes       NoShowIncome[]
+  notifications       Notification[]
 
   @@index([studioId])
   @@index([email])
@@ -92,16 +99,16 @@ model User {
 }
 
 model StaffProfile {
-  userId          String   @id
-  firstName       String
-  lastName        String?
-  title           String?
-  category        String?
-  providesServices Boolean @default(true)
-  avatar          String?
-  bio             String?
-  portfolioPhotos String[]
-  rank            String?
+  userId           String   @id
+  firstName        String
+  lastName         String?
+  title            String?
+  category         String?
+  providesServices Boolean  @default(true)
+  avatar           String?
+  bio              String?
+  portfolioPhotos  String[]
+  rank             String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -115,14 +122,14 @@ model Client {
   lastName  String?
   phone     String
   notes     String?
-  bonuses   Int      @default(0)  // Бонусные баллы
-  discount  Int      @default(0)  // Скидка в процентах (0-100)
-  balance   Int      @default(0)  // Баланс в тенге
+  bonuses   Int      @default(0) // Бонусные баллы
+  discount  Int      @default(0) // Скидка в процентах (0-100)
+  balance   Int      @default(0) // Баланс в тенге
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  studio       Studio        @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  appointments Appointment[]
+  studio        Studio         @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  appointments  Appointment[]
   noShowIncomes NoShowIncome[]
 
   @@unique([studioId, phone])
@@ -131,20 +138,20 @@ model Client {
 }
 
 model WorkScheduleDay {
-  id         String   @id @default(uuid())
-  studioId   String
+  id          String   @id @default(uuid())
+  studioId    String
   staffUserId String
-  date       DateTime @db.Date
-  startTime  String   // HH:MM format
-  endTime    String   // HH:MM format
-  breakStart String?  // HH:MM format
-  breakEnd   String?  // HH:MM format
-  isDayOff   Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  date        DateTime @db.Date
+  startTime   String // HH:MM format
+  endTime     String // HH:MM format
+  breakStart  String? // HH:MM format
+  breakEnd    String? // HH:MM format
+  isDayOff    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  studio     Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  staff      User   @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  staff  User   @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
 
   @@unique([studioId, staffUserId, date])
   @@index([studioId, staffUserId, date])
@@ -152,15 +159,15 @@ model WorkScheduleDay {
 }
 
 model BusySlot {
-  id                        String    @id @default(uuid())
+  id                        String   @id @default(uuid())
   studioId                  String
   staffUserId               String
   startAt                   DateTime
   endAt                     DateTime
   comment                   String?
   forfeitedPrepaymentAmount Int?
-  createdAt                 DateTime  @default(now())
-  updatedAt                 DateTime  @updatedAt
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
   studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
   staff  User   @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
@@ -170,21 +177,21 @@ model BusySlot {
 }
 
 model Service {
-  id               String   @id @default(uuid())
-  studioId         String
-  name             String
+  id                 String   @id @default(uuid())
+  studioId           String
+  name               String
   defaultDurationMin Int
-  defaultPrice     Int?
-  requiredStaffCount Int   @default(1)
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  defaultPrice       Int?
+  requiredStaffCount Int      @default(1)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  studio           Studio                @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  staffServices    StaffService[]
-  staffOverrides   StaffServiceOverride[]
-  appointments     Appointment[]
-  noShowIncomes    NoShowIncome[]
+  studio             Studio                 @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  staffServices      StaffService[]
+  staffOverrides     StaffServiceOverride[]
+  appointments       Appointment[]
+  noShowIncomes      NoShowIncome[]
   appointmentUpsells AppointmentUpsell[]
 
   @@index([studioId])
@@ -239,18 +246,18 @@ model Appointment {
   endAt                     DateTime
   status                    AppointmentStatus @default(BOOKED)
   prepaymentAmount          Int?
-  forfeitedPrepaymentAmount Int?  // Предоплата, сгоревшая при поздней отмене
+  forfeitedPrepaymentAmount Int? // Предоплата, сгоревшая при поздней отмене
   arrivedAt                 DateTime?
   arrivedByUserId           String?
   createdAt                 DateTime          @default(now())
   updatedAt                 DateTime          @updatedAt
 
-  studio         Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  staff          User   @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
-  client         Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  service        Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  arrivedByUser  User?   @relation("ArrivedByUser", fields: [arrivedByUserId], references: [id])
-  upsells        AppointmentUpsell[]
+  studio        Studio              @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  staff         User                @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  client        Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  service       Service             @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  arrivedByUser User?               @relation("ArrivedByUser", fields: [arrivedByUserId], references: [id])
+  upsells       AppointmentUpsell[]
 
   @@index([studioId, staffUserId, startAt])
   @@index([studioId, startAt])
@@ -279,21 +286,21 @@ model AppointmentUpsell {
 }
 
 model Log {
-  id          String   @id @default(uuid())
-  level       LogLevel
-  type        LogType
-  message     String
-  context     String?  // JSON string with additional context
-  userId      String?  // User who triggered the action
-  studioId    String?  // Studio context
-  ip          String?  // IP address
-  userAgent   String?  // User agent
-  method      String?  // HTTP method
-  url         String?  // Request URL
-  statusCode  Int?     // HTTP status code
-  error       String?  // Error stack trace or details
-  duration    Int?     // Request duration in ms
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  level      LogLevel
+  type       LogType
+  message    String
+  context    String? // JSON string with additional context
+  userId     String? // User who triggered the action
+  studioId   String? // Studio context
+  ip         String? // IP address
+  userAgent  String? // User agent
+  method     String? // HTTP method
+  url        String? // Request URL
+  statusCode Int? // HTTP status code
+  error      String? // Error stack trace or details
+  duration   Int? // Request duration in ms
+  createdAt  DateTime @default(now())
 
   @@index([level])
   @@index([type])
@@ -304,19 +311,19 @@ model Log {
 }
 
 model NoShowIncome {
-  id                String   @id @default(uuid())
-  studioId          String
-  staffUserId       String
-  clientId          String
-  serviceId         String
-  amount            Int       // Сумма предоплаты, добавленная в доход
-  originalStartAt   DateTime  // Оригинальное время начала записи
-  originalEndAt     DateTime  // Оригинальное время окончания записи
-  createdAt         DateTime  @default(now())
+  id              String   @id @default(uuid())
+  studioId        String
+  staffUserId     String
+  clientId        String
+  serviceId       String
+  amount          Int // Сумма предоплаты, добавленная в доход
+  originalStartAt DateTime // Оригинальное время начала записи
+  originalEndAt   DateTime // Оригинальное время окончания записи
+  createdAt       DateTime @default(now())
 
-  studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  staff  User   @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  studio  Studio  @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  staff   User    @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   @@index([studioId, createdAt])
@@ -324,3 +331,23 @@ model NoShowIncome {
   @@map("no_show_incomes")
 }
 
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String // Пользователь, которому адресовано уведомление
+  studioId  String
+  type      NotificationType
+  title     String
+  message   String
+  data      String? // JSON с дополнительными данными (appointmentId, clientId и т.д.)
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@index([studioId, createdAt])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}

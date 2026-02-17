@@ -9,6 +9,7 @@ import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { UserRole } from '../common/decorators/roles.decorator';
 import { AvailabilityService } from '../availability/availability.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AppointmentStatus } from '@prisma/client';
 
 @Injectable()
@@ -16,6 +17,7 @@ export class AppointmentsService {
   constructor(
     private prisma: PrismaService,
     private availabilityService: AvailabilityService,
+    private notificationsService: NotificationsService,
   ) {}
 
   private calculateEndAt(startAt: Date, durationMinutes: number): Date {
@@ -184,7 +186,7 @@ export class AppointmentsService {
         endAt,
       );
 
-      return tx.appointment.create({
+      const appointment = await tx.appointment.create({
         data: {
           studioId,
           staffUserId: createAppointmentDto.staffUserId,
@@ -205,6 +207,28 @@ export class AppointmentsService {
           service: true,
         },
       });
+
+      // Создать уведомление для мастера о новой записи
+      try {
+        const clientName = `${appointment.client.firstName} ${appointment.client.lastName || ''}`.trim();
+        const staffName = appointment.staff.staffProfile
+          ? `${appointment.staff.staffProfile.firstName} ${appointment.staff.staffProfile.lastName || ''}`.trim()
+          : 'Мастер';
+        
+        await this.notificationsService.createNewAppointmentNotification(
+          studioId,
+          createAppointmentDto.staffUserId,
+          appointment.id,
+          clientName,
+          appointment.service.name,
+          startAt,
+        );
+      } catch (error) {
+        // Логируем ошибку, но не прерываем создание записи
+        console.error('Failed to create notification:', error);
+      }
+
+      return appointment;
     });
   }
 
@@ -327,6 +351,12 @@ export class AppointmentsService {
       where: { id },
       include: {
         service: true,
+        client: true,
+        staff: {
+          include: {
+            staffProfile: true,
+          },
+        },
       },
     });
 
@@ -391,6 +421,26 @@ export class AppointmentsService {
       await tx.appointment.delete({
         where: { id },
       });
+
+      // Создать уведомление для менеджеров об отмене записи
+      try {
+        const clientName = `${appointment.client.firstName} ${appointment.client.lastName || ''}`.trim();
+        const staffName = appointment.staff.staffProfile
+          ? `${appointment.staff.staffProfile.firstName} ${appointment.staff.staffProfile.lastName || ''}`.trim()
+          : 'Мастер';
+        
+        await this.notificationsService.createCancellationNotification(
+          appointment.studioId,
+          id,
+          clientName,
+          appointment.service.name,
+          staffName,
+          appointment.startAt,
+        );
+      } catch (error) {
+        // Логируем ошибку, но не прерываем процесс отмены
+        console.error('Failed to create cancellation notification:', error);
+      }
 
       return { success: true, message: 'Appointment marked as no-show and deleted' };
     });
