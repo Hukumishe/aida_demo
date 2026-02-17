@@ -593,3 +593,4 @@ function AppointmentDetailsModal({ appointment, onClose, onUpdate }) {
 
 **Готово!** Используйте этот промпт в Lovable для реализации функционала дополнительных продаж.
 
+

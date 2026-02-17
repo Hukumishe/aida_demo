@@ -28,3 +28,4 @@ ALTER TABLE "appointment_upsells" ADD CONSTRAINT "appointment_upsells_appointmen
 -- AddForeignKey
 ALTER TABLE "appointment_upsells" ADD CONSTRAINT "appointment_upsells_serviceId_fkey" FOREIGN KEY ("serviceId") REFERENCES "services"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
+

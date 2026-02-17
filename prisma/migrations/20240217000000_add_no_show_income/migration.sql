@@ -31,3 +31,4 @@ ALTER TABLE "no_show_incomes" ADD CONSTRAINT "no_show_incomes_clientId_fkey" FOR
 -- AddForeignKey
 ALTER TABLE "no_show_incomes" ADD CONSTRAINT "no_show_incomes_serviceId_fkey" FOREIGN KEY ("serviceId") REFERENCES "services"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+

@@ -364,20 +364,25 @@ export class AppointmentsService {
 
     // Use transaction to ensure data consistency
     return this.prisma.$transaction(async (tx) => {
-      // If late cancellation (< 4 hours) and prepayment exists, add it to income
-      if (isLateCancellation && appointment.prepaymentAmount && appointment.prepaymentAmount > 0) {
-        // Create NoShowIncome record to track the forfeited prepayment
-        await tx.noShowIncome.create({
-          data: {
-            studioId: appointment.studioId,
-            staffUserId: appointment.staffUserId,
-            clientId: appointment.clientId,
-            serviceId: appointment.serviceId,
-            amount: appointment.prepaymentAmount,
-            originalStartAt: appointment.startAt,
-            originalEndAt: appointment.endAt,
-          },
-        });
+      // If late cancellation (< 4 hours), add prepayment or default price to income
+      if (isLateCancellation) {
+        // Use prepaymentAmount if available, otherwise use service defaultPrice
+        const amountToAdd = appointment.prepaymentAmount || appointment.service.defaultPrice || 0;
+        
+        if (amountToAdd > 0) {
+          // Create NoShowIncome record to track the forfeited prepayment
+          await tx.noShowIncome.create({
+            data: {
+              studioId: appointment.studioId,
+              staffUserId: appointment.staffUserId,
+              clientId: appointment.clientId,
+              serviceId: appointment.serviceId,
+              amount: amountToAdd,
+              originalStartAt: appointment.startAt,
+              originalEndAt: appointment.endAt,
+            },
+          });
+        }
       }
 
       // Delete the appointment

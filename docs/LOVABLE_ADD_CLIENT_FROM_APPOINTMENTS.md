@@ -589,3 +589,4 @@ export function CreateAppointmentForm({ studioId }: { studioId: string }) {
 - [Карточка клиента](./LOVABLE_CLIENT_CARD.md) - для понимания структуры данных клиента
 - [Создание записи](./LOVABLE_APPOINTMENT_TIMEZONE_FIX.md) - для интеграции с формой записи
 
+

@@ -125,3 +125,4 @@ ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'ADMIN';
 - [Система ролей и прав доступа](./LOVABLE_USER_ROLES.md)
 - [Общие инструкции по миграциям](./APPLY_MIGRATIONS.md)
 
+

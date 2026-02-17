@@ -53,3 +53,4 @@ ADD COLUMN IF NOT EXISTS "balance" INTEGER NOT NULL DEFAULT 0;
 `prisma/migrations/20260215185605_add_client_bonuses_discount_balance/migration.sql`
 
 
+

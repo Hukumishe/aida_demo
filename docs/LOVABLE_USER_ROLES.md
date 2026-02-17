@@ -407,3 +407,4 @@ npx prisma migrate dev
 - [Карточка клиента](./LOVABLE_CLIENT_CARD.md)
 - [Создание записей](./LOVABLE_APPOINTMENT_TIMEZONE_FIX.md)
 
+
