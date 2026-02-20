@@ -19,6 +19,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '../common/decorators/roles.decorator';
 
 @ApiTags('dashboard')
 @Controller()
@@ -28,8 +30,9 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('studios/:studioId/dashboard')
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
   @ApiOperation({ 
-    summary: 'Get dashboard statistics for a studio',
+    summary: 'Get dashboard statistics for a studio (OWNER and DEPUTY_OWNER only)',
     description: 'Filter by date range (startDate/endDate) or by period. If both startDate and endDate are provided, period is ignored. If only startDate is provided, endDate defaults to today. If only endDate is provided, startDate defaults to 30 days before endDate.'
   })
   @ApiQuery({ 
@@ -118,7 +121,7 @@ export class DashboardController {
       },
     },
   })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Only OWNER and DEPUTY_OWNER can access dashboard' })
   async getStudioDashboard(
     @Param('studioId', ParseUUIDPipe) studioId: string,
     @Query() query: DashboardQueryDto,
@@ -133,8 +136,9 @@ export class DashboardController {
   }
 
   @Get('dashboard/all')
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
   @ApiOperation({ 
-    summary: 'Get aggregated dashboard statistics for all studios (OWNER only)',
+    summary: 'Get aggregated dashboard statistics for all studios (OWNER and DEPUTY_OWNER only)',
     description: 'Filter by date range (startDate/endDate) or by period. If both startDate and endDate are provided, period is ignored. If only startDate is provided, endDate defaults to today. If only endDate is provided, startDate defaults to 30 days before endDate.'
   })
   @ApiQuery({ 

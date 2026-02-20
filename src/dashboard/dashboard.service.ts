@@ -94,9 +94,9 @@ export class DashboardService {
     userRole?: string,
     userStudioId?: string,
   ) {
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
-      throw new ForbiddenException('Access denied to this studio');
+    // Check access - only OWNER and DEPUTY_OWNER can access dashboard
+    if (!isOwnerLevelRole(userRole)) {
+      throw new ForbiddenException('Only owners and deputy owners can access dashboard');
     }
 
     const { start, end } = this.getDateRange(query.period, query.startDate, query.endDate);
@@ -342,7 +342,7 @@ export class DashboardService {
   ) {
     // Only OWNER and DEPUTY_OWNER can access this
     if (!isOwnerLevelRole(userRole)) {
-      throw new ForbiddenException('Only owners can view all studios dashboard');
+      throw new ForbiddenException('Only owners and deputy owners can view all studios dashboard');
     }
 
     const { start, end } = this.getDateRange(query.period, query.startDate, query.endDate);
