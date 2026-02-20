@@ -17,12 +17,41 @@ export class DashboardService {
     let start: Date;
     let end: Date = new Date(now);
 
+    // If both startDate and endDate are provided, use them (ignore period)
     if (startDate && endDate) {
-      // Use provided dates
       start = new Date(startDate + 'T00:00:00+06:00');
       end = new Date(endDate + 'T23:59:59.999+06:00');
-    } else if (period) {
-      // Calculate based on period
+      
+      // Validate that startDate is before endDate
+      if (start > end) {
+        throw new BadRequestException('startDate must be before or equal to endDate');
+      }
+    } 
+    // If only startDate is provided, use it as start and today as end
+    else if (startDate) {
+      start = new Date(startDate + 'T00:00:00+06:00');
+      end = new Date(now);
+      end.setHours(23, 59, 59, 999);
+      
+      // Validate that startDate is not in the future
+      if (start > end) {
+        throw new BadRequestException('startDate cannot be in the future');
+      }
+    }
+    // If only endDate is provided, use 30 days before endDate as start
+    else if (endDate) {
+      end = new Date(endDate + 'T23:59:59.999+06:00');
+      start = new Date(end);
+      start.setDate(start.getDate() - 30);
+      start.setHours(0, 0, 0, 0);
+      
+      // Validate that endDate is not in the future
+      if (end > now) {
+        throw new BadRequestException('endDate cannot be in the future');
+      }
+    }
+    // If period is provided (and no dates), calculate based on period
+    else if (period) {
       start = new Date(now);
       switch (period) {
         case DashboardPeriod.DAY:
@@ -46,10 +75,11 @@ export class DashboardService {
       }
       end = new Date(now);
       end.setHours(23, 59, 59, 999);
-    } else {
-      // Default: current month
+    } 
+    // Default: current month (last 30 days)
+    else {
       start = new Date(now);
-      start.setMonth(now.getMonth() - 1);
+      start.setDate(now.getDate() - 30);
       start.setHours(0, 0, 0, 0);
       end = new Date(now);
       end.setHours(23, 59, 59, 999);

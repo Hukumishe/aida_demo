@@ -28,14 +28,27 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('studios/:studioId/dashboard')
-  @ApiOperation({ summary: 'Get dashboard statistics for a studio' })
-  @ApiQuery({ name: 'startDate', required: false, description: 'Start date (YYYY-MM-DD)' })
-  @ApiQuery({ name: 'endDate', required: false, description: 'End date (YYYY-MM-DD)' })
+  @ApiOperation({ 
+    summary: 'Get dashboard statistics for a studio',
+    description: 'Filter by date range (startDate/endDate) or by period. If both startDate and endDate are provided, period is ignored. If only startDate is provided, endDate defaults to today. If only endDate is provided, startDate defaults to 30 days before endDate.'
+  })
+  @ApiQuery({ 
+    name: 'startDate', 
+    required: false, 
+    description: 'Start date (YYYY-MM-DD). Filter "from" date. If both startDate and endDate are provided, period is ignored.',
+    example: '2024-01-15'
+  })
+  @ApiQuery({ 
+    name: 'endDate', 
+    required: false, 
+    description: 'End date (YYYY-MM-DD). Filter "to" date. If both startDate and endDate are provided, period is ignored.',
+    example: '2024-01-31'
+  })
   @ApiQuery({ 
     name: 'period', 
     required: false, 
     enum: ['day', 'week', 'month', 'year', 'all'],
-    description: 'Period type (overrides dates if provided)' 
+    description: 'Period type. Used only if startDate and endDate are not provided. Calculates period from today backwards.' 
   })
   @ApiResponse({ 
     status: 200, 
@@ -120,14 +133,27 @@ export class DashboardController {
   }
 
   @Get('dashboard/all')
-  @ApiOperation({ summary: 'Get aggregated dashboard statistics for all studios (OWNER only)' })
-  @ApiQuery({ name: 'startDate', required: false, description: 'Start date (YYYY-MM-DD)' })
-  @ApiQuery({ name: 'endDate', required: false, description: 'End date (YYYY-MM-DD)' })
+  @ApiOperation({ 
+    summary: 'Get aggregated dashboard statistics for all studios (OWNER only)',
+    description: 'Filter by date range (startDate/endDate) or by period. If both startDate and endDate are provided, period is ignored. If only startDate is provided, endDate defaults to today. If only endDate is provided, startDate defaults to 30 days before endDate.'
+  })
+  @ApiQuery({ 
+    name: 'startDate', 
+    required: false, 
+    description: 'Start date (YYYY-MM-DD). Filter "from" date. If both startDate and endDate are provided, period is ignored.',
+    example: '2024-01-15'
+  })
+  @ApiQuery({ 
+    name: 'endDate', 
+    required: false, 
+    description: 'End date (YYYY-MM-DD). Filter "to" date. If both startDate and endDate are provided, period is ignored.',
+    example: '2024-01-31'
+  })
   @ApiQuery({ 
     name: 'period', 
     required: false, 
     enum: ['day', 'week', 'month', 'year', 'all'],
-    description: 'Period type (overrides dates if provided)' 
+    description: 'Period type. Used only if startDate and endDate are not provided. Calculates period from today backwards.' 
   })
   @ApiResponse({ 
     status: 200, 
@@ -193,6 +219,9 @@ export class DashboardController {
     return this.dashboardService.getAllStudiosDashboard(query, user?.role);
   }
 }
+
+
+
 
 
 
