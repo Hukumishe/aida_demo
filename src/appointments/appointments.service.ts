@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
-import { UserRole } from '../common/decorators/roles.decorator';
+import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AppointmentStatus } from '@prisma/client';
@@ -34,8 +34,8 @@ export class AppointmentsService {
     userStaffId?: string,
   ) {
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN and MASTER can only access their own studio
       if (userStudioId !== studioId) {
         throw new ForbiddenException('Access denied to this studio');
@@ -106,8 +106,8 @@ export class AppointmentsService {
     userStudioId?: string,
   ) {
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN and MASTER can only access their own studio
       if (userStudioId !== studioId) {
         throw new ForbiddenException('Access denied to this studio');
@@ -251,8 +251,8 @@ export class AppointmentsService {
     }
 
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN and MASTER can only access their own studio
       if (userStudioId !== appointment.studioId) {
         throw new ForbiddenException('Access denied to this appointment');
@@ -365,8 +365,8 @@ export class AppointmentsService {
     }
 
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN and MASTER can only access their own studio
       if (userStudioId !== appointment.studioId) {
         throw new ForbiddenException('Access denied to this appointment');
@@ -456,8 +456,8 @@ export class AppointmentsService {
     }
 
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN and MASTER can only access their own studio
       if (userStudioId !== existingAppointment.studioId) {
         throw new ForbiddenException('Access denied to this appointment');
@@ -521,8 +521,8 @@ export class AppointmentsService {
     }
 
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN and MASTER can only access their own studio
       if (userStudioId !== existingAppointment.studioId) {
         throw new ForbiddenException('Access denied to this appointment');

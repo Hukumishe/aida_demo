@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole } from '../decorators/roles.decorator';
+import { UserRole, isOwnerLevelRole } from '../decorators/roles.decorator';
 
 @Injectable()
 export class StudioAccessGuard implements CanActivate {
@@ -25,8 +25,8 @@ export class StudioAccessGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    // OWNER and MANAGER have access to all studios
-    if (user.role === UserRole.OWNER || user.role === UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (isOwnerLevelRole(user.role) || user.role === UserRole.MANAGER) {
       // Verify studio exists
       const studio = await this.prisma.studio.findUnique({
         where: { id: studioId },

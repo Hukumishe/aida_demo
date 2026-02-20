@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { UserRole } from '../common/decorators/roles.decorator';
+import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { DashboardQueryDto, DashboardPeriod } from './dto/dashboard-query.dto';
 import { AppointmentStatus } from '@prisma/client';
 
@@ -65,7 +65,7 @@ export class DashboardService {
     userStudioId?: string,
   ) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
     }
 
@@ -310,8 +310,8 @@ export class DashboardService {
     query: DashboardQueryDto,
     userRole?: string,
   ) {
-    // Only OWNER can access this
-    if (userRole !== UserRole.OWNER) {
+    // Only OWNER and DEPUTY_OWNER can access this
+    if (!isOwnerLevelRole(userRole)) {
       throw new ForbiddenException('Only owners can view all studios dashboard');
     }
 

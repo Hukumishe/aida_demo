@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { UserRole } from '../common/decorators/roles.decorator';
+import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 
 @Injectable()
 export class ClientsService {
@@ -15,8 +15,8 @@ export class ClientsService {
 
   async findAll(studioId: string, query?: string, userRole?: string, userStudioId?: string) {
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN can only access their own studio
       if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
         throw new ForbiddenException('Access denied to this studio');
@@ -53,8 +53,8 @@ export class ClientsService {
     userStudioId?: string,
   ) {
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN can only create clients in their own studio
       if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
         throw new ForbiddenException('Access denied to this studio');
@@ -127,8 +127,8 @@ export class ClientsService {
     }
 
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN can only access clients from their own studio
       if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
         throw new ForbiddenException('Access denied to this client');
@@ -165,8 +165,8 @@ export class ClientsService {
     }
 
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN can only update clients from their own studio
       if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
         throw new ForbiddenException('Access denied to this client');
@@ -209,8 +209,8 @@ export class ClientsService {
     }
 
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN can only update clients from their own studio
       if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
         throw new ForbiddenException('Access denied to this client');
@@ -267,8 +267,8 @@ export class ClientsService {
     }
 
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN can only update clients from their own studio
       if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
         throw new ForbiddenException('Access denied to this client');

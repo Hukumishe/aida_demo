@@ -11,7 +11,7 @@ import { UpdateStaffDto } from './dto/update-staff.dto';
 import { UpdateStaffProfileDto } from './dto/update-staff-profile.dto';
 import { CreateServiceOverrideDto } from './dto/create-service-override.dto';
 import { UpdateServiceOverrideDto } from './dto/update-service-override.dto';
-import { UserRole } from '../common/decorators/roles.decorator';
+import { UserRole, isOwnerLevelRole, canManageOwners, canManageDeputies } from '../common/decorators/roles.decorator';
 
 @Injectable()
 export class UsersService {
@@ -19,7 +19,7 @@ export class UsersService {
 
   async findAll(studioId: string, userRole: string, userStudioId?: string) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
     }
 
@@ -70,7 +70,7 @@ export class UsersService {
     userStudioId?: string,
   ) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
     }
 
@@ -82,9 +82,12 @@ export class UsersService {
       throw new NotFoundException(`Studio with ID ${studioId} not found`);
     }
 
-    // Validate role
-    if (createStaffDto.role === UserRole.OWNER) {
+    // Validate role - only OWNER can create OWNER or DEPUTY_OWNER
+    if (createStaffDto.role === UserRole.OWNER && !canManageOwners(userRole)) {
       throw new BadRequestException('Cannot create OWNER role via this endpoint');
+    }
+    if (createStaffDto.role === UserRole.DEPUTY_OWNER && !canManageDeputies(userRole)) {
+      throw new BadRequestException('Cannot create DEPUTY_OWNER role via this endpoint');
     }
 
     // Check email/phone uniqueness
@@ -150,13 +153,17 @@ export class UsersService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== user.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== user.studioId) {
       throw new ForbiddenException('Access denied to this user');
     }
 
-    // Cannot change OWNER role
-    if (updateStaffDto.role === UserRole.OWNER && user.role !== UserRole.OWNER) {
+    // Cannot change to OWNER role (only OWNER can do this, and only via special endpoint)
+    if (updateStaffDto.role === UserRole.OWNER && !canManageOwners(userRole)) {
       throw new BadRequestException('Cannot change role to OWNER');
+    }
+    // Cannot change to DEPUTY_OWNER role (only OWNER can do this)
+    if (updateStaffDto.role === UserRole.DEPUTY_OWNER && !canManageDeputies(userRole)) {
+      throw new BadRequestException('Cannot change role to DEPUTY_OWNER');
     }
 
     // Check email/phone uniqueness
@@ -243,7 +250,7 @@ export class UsersService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
       throw new ForbiddenException('Access denied to this staff member');
     }
 
@@ -304,7 +311,7 @@ export class UsersService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
       throw new ForbiddenException('Access denied to this staff member');
     }
 
@@ -343,7 +350,7 @@ export class UsersService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
       throw new ForbiddenException('Access denied to this staff member');
     }
 
@@ -402,7 +409,7 @@ export class UsersService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== user.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== user.studioId) {
       throw new ForbiddenException('Access denied to this user');
     }
 
@@ -454,7 +461,7 @@ export class UsersService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== user.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== user.studioId) {
       throw new ForbiddenException('Access denied to this user');
     }
 
@@ -523,13 +530,17 @@ export class UsersService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== user.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== user.studioId) {
       throw new ForbiddenException('Access denied to this user');
     }
 
-    // Cannot delete OWNER
-    if (user.role === UserRole.OWNER) {
+    // Cannot delete OWNER (only OWNER can do this, and only via special endpoint)
+    if (user.role === UserRole.OWNER && !canManageOwners(userRole)) {
       throw new BadRequestException('Cannot delete OWNER role');
+    }
+    // Cannot delete DEPUTY_OWNER (only OWNER can do this)
+    if (user.role === UserRole.DEPUTY_OWNER && !canManageDeputies(userRole)) {
+      throw new BadRequestException('Cannot delete DEPUTY_OWNER role');
     }
 
     // Delete user (cascade will delete related records: staffProfile, workSchedules, busySlots, appointments, staffServices, etc.)
@@ -556,7 +567,7 @@ export class UsersService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
       throw new ForbiddenException('Access denied to this staff member');
     }
 
@@ -644,7 +655,7 @@ export class UsersService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
       throw new ForbiddenException('Access denied to this staff member');
     }
 
@@ -709,7 +720,7 @@ export class UsersService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
       throw new ForbiddenException('Access denied to this staff member');
     }
 
@@ -757,7 +768,7 @@ export class UsersService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
       throw new ForbiddenException('Access denied to this staff member');
     }
 
@@ -800,7 +811,7 @@ export class UsersService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== staff.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
       throw new ForbiddenException('Access denied to this staff member');
     }
 

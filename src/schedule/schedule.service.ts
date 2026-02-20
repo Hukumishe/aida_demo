@@ -8,7 +8,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateScheduleDayDto } from './dto/create-schedule-day.dto';
 import { UpdateScheduleDayDto } from './dto/update-schedule-day.dto';
 import { GenerateScheduleDto, SchedulePattern } from './dto/generate-schedule.dto';
-import { UserRole } from '../common/decorators/roles.decorator';
+import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 
 @Injectable()
 export class ScheduleService {
@@ -61,7 +61,7 @@ export class ScheduleService {
     userStudioId?: string,
   ) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
     }
 
@@ -97,7 +97,7 @@ export class ScheduleService {
     userStudioId?: string,
   ) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
     }
 
@@ -171,7 +171,7 @@ export class ScheduleService {
     userStudioId?: string,
   ) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
     }
 

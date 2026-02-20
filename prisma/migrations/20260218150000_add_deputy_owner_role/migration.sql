@@ -1,0 +1,4 @@
+-- AlterEnum
+-- Add DEPUTY_OWNER to UserRole enum
+ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'DEPUTY_OWNER';
+

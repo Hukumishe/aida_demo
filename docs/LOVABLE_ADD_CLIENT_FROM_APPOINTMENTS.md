@@ -590,3 +590,5 @@ export function CreateAppointmentForm({ studioId }: { studioId: string }) {
 - [Создание записи](./LOVABLE_APPOINTMENT_TIMEZONE_FIX.md) - для интеграции с формой записи
 
 
+
+

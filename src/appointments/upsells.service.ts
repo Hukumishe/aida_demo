@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateUpsellDto } from './dto/create-upsell.dto';
 import { UpdateUpsellDto } from './dto/update-upsell.dto';
-import { UserRole } from '../common/decorators/roles.decorator';
+import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 
 @Injectable()
 export class UpsellsService {
@@ -32,7 +32,7 @@ export class UpsellsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       if (userStudioId !== appointment.studioId) {
         throw new ForbiddenException('Access denied to this appointment');
       }
@@ -84,7 +84,7 @@ export class UpsellsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       if (userStudioId !== appointment.studioId) {
         throw new ForbiddenException('Access denied to this appointment');
       }
@@ -119,7 +119,7 @@ export class UpsellsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       if (userStudioId !== upsell.appointment.studioId) {
         throw new ForbiddenException('Access denied to this upsell');
       }
@@ -156,7 +156,7 @@ export class UpsellsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       if (userStudioId !== upsell.appointment.studioId) {
         throw new ForbiddenException('Access denied to this upsell');
       }

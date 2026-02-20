@@ -6,7 +6,7 @@ import {
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
-import { UserRole } from '../common/decorators/roles.decorator';
+import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 
 @Injectable()
 export class ServicesService {
@@ -15,7 +15,7 @@ export class ServicesService {
   async findAll(studioId: string, userRole?: string, userStudioId?: string) {
     try {
       // Check access
-      if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
+      if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
         throw new ForbiddenException('Access denied to this studio');
       }
 
@@ -49,7 +49,7 @@ export class ServicesService {
     userStudioId?: string,
   ) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
     }
 
@@ -80,7 +80,7 @@ export class ServicesService {
     userStudioId?: string,
   ) {
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
     }
 

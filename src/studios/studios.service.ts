@@ -1,14 +1,14 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateStudioDto } from './dto/create-studio.dto';
-import { UserRole } from '../common/decorators/roles.decorator';
+import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 
 @Injectable()
 export class StudiosService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(userRole: string, userStudioId?: string) {
-    if (userRole === UserRole.OWNER) {
+    if (isOwnerLevelRole(userRole)) {
       return this.prisma.studio.findMany({
         orderBy: { createdAt: 'desc' },
       });
@@ -43,8 +43,8 @@ export class StudiosService {
       return null;
     }
 
-    // OWNER can access any studio
-    if (userRole === UserRole.OWNER) {
+    // OWNER and DEPUTY_OWNER can access any studio
+    if (isOwnerLevelRole(userRole)) {
       return studio;
     }
 

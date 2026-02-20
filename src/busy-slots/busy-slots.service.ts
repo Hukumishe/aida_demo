@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateBusySlotDto } from './dto/create-busy-slot.dto';
 import { UpdateBusySlotDto } from './dto/update-busy-slot.dto';
-import { UserRole } from '../common/decorators/roles.decorator';
+import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { AvailabilityService } from '../availability/availability.service';
 
 @Injectable()
@@ -25,8 +25,8 @@ export class BusySlotsService {
     userStaffId?: string,
   ) {
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN and MASTER can only access their own studio
       if (userStudioId !== studioId) {
         throw new ForbiddenException('Access denied to this studio');
@@ -69,8 +69,8 @@ export class BusySlotsService {
     userStaffId?: string,
   ) {
     // Check access
-    // OWNER and MANAGER have access to all studios
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.MANAGER) {
+    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       // ADMIN and MASTER can only access their own studio
       if (userStudioId !== studioId) {
         throw new ForbiddenException('Access denied to this studio');
@@ -148,7 +148,7 @@ export class BusySlotsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== busySlot.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== busySlot.studioId) {
       throw new ForbiddenException('Access denied to this busy slot');
     }
 
@@ -194,7 +194,7 @@ export class BusySlotsService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== busySlot.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== busySlot.studioId) {
       throw new ForbiddenException('Access denied to this busy slot');
     }
 

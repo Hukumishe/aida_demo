@@ -126,3 +126,5 @@ ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'ADMIN';
 - [Общие инструкции по миграциям](./APPLY_MIGRATIONS.md)
 
 
+
+

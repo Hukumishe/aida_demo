@@ -9,3 +9,5 @@ ADD COLUMN IF NOT EXISTS "rank" TEXT;
 
 
 
+
+

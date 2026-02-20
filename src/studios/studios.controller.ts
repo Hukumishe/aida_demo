@@ -18,7 +18,7 @@ import { CreateStudioDto } from './dto/create-studio.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
-import { Roles, UserRole } from '../common/decorators/roles.decorator';
+import { Roles, UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('studios')
@@ -36,8 +36,8 @@ export class StudiosController {
   }
 
   @Post()
-  @Roles(UserRole.OWNER)
-  @ApiOperation({ summary: 'Create a new studio (OWNER only)' })
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @ApiOperation({ summary: 'Create a new studio (OWNER and DEPUTY_OWNER only)' })
   @ApiResponse({ status: 201, description: 'Studio created' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async create(@Body() createStudioDto: CreateStudioDto) {
