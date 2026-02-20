@@ -20,14 +20,11 @@ export class AuthService {
   ) {}
 
   async login(loginDto: LoginDto) {
-    const { emailOrPhone, password } = loginDto;
+    const { phone, password } = loginDto;
 
-    const user = await this.prisma.user.findFirst({
+    const user = await this.prisma.user.findUnique({
       where: {
-        OR: [
-          { email: emailOrPhone },
-          { phone: emailOrPhone },
-        ],
+        phone: phone,
       },
       include: {
         staffProfile: true,

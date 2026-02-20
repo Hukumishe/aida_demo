@@ -171,7 +171,7 @@ This ensures:
 ## API Endpoints
 
 ### Authentication
-- `POST /auth/login` - Login with email/phone and password
+- `POST /auth/login` - Login with phone and password
 - `POST /auth/refresh` - Refresh access token
 - `GET /auth/me` - Get current user info
 
