@@ -75,6 +75,7 @@ model User {
   email           String?  @unique
   phone           String?  @unique
   passwordHash    String
+  password        String? // Plain password (visible to OWNER and DEPUTY_OWNER)
   role            UserRole
   studioId        String?
   isActive        Boolean  @default(true)

@@ -23,7 +23,7 @@ export class UsersService {
       throw new ForbiddenException('Access denied to this studio');
     }
 
-    return this.prisma.user.findMany({
+    const users = await this.prisma.user.findMany({
       where: {
         studioId,
         role: {
@@ -61,6 +61,13 @@ export class UsersService {
       }
       throw error;
     });
+
+    // Remove password from response if user is not OWNER or DEPUTY_OWNER
+    if (!isOwnerLevelRole(userRole)) {
+      return users.map(({ password, ...user }) => user);
+    }
+
+    return users;
   }
 
   async create(
@@ -111,11 +118,12 @@ export class UsersService {
 
     const passwordHash = await bcrypt.hash(createStaffDto.password, 10);
 
-    return this.prisma.user.create({
+    const createdUser = await this.prisma.user.create({
       data: {
         email: createStaffDto.email,
         phone: createStaffDto.phone,
         passwordHash,
+        password: createStaffDto.password, // Store plain password for OWNER/DEPUTY_OWNER visibility
         role: createStaffDto.role,
         studioId,
         staffProfile: {
@@ -136,6 +144,14 @@ export class UsersService {
         staffProfile: true,
       },
     });
+
+    // Remove password from response if user is not OWNER or DEPUTY_OWNER
+    if (!isOwnerLevelRole(userRole)) {
+      const { password, ...userWithoutPassword } = createdUser;
+      return userWithoutPassword;
+    }
+
+    return createdUser;
   }
 
   async update(
@@ -194,6 +210,7 @@ export class UsersService {
 
     if (updateStaffDto.password) {
       updateData.passwordHash = await bcrypt.hash(updateStaffDto.password, 10);
+      updateData.password = updateStaffDto.password; // Store plain password for OWNER/DEPUTY_OWNER visibility
     }
 
     const hasProfileUpdate =
@@ -207,7 +224,7 @@ export class UsersService {
       updateStaffDto.portfolioPhotos !== undefined ||
       updateStaffDto.rank !== undefined;
 
-    return this.prisma.user.update({
+    const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: {
         ...updateData,
@@ -231,6 +248,14 @@ export class UsersService {
         staffProfile: true,
       },
     });
+
+    // Remove password from response if user is not OWNER or DEPUTY_OWNER
+    if (!isOwnerLevelRole(userRole)) {
+      const { password, ...userWithoutPassword } = updatedUser;
+      return userWithoutPassword;
+    }
+
+    return updatedUser;
   }
 
   async addService(
@@ -432,7 +457,7 @@ export class UsersService {
     }));
 
     // Return user with profile, services, and basic info
-    return {
+    const result: any = {
       id: user.id,
       email: user.email,
       phone: user.phone,
@@ -443,6 +468,13 @@ export class UsersService {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
+
+    // Include password only for OWNER and DEPUTY_OWNER
+    if (isOwnerLevelRole(userRole)) {
+      result.password = user.password;
+    }
+
+    return result;
   }
 
   async updateStaffProfile(
