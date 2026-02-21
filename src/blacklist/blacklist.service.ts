@@ -30,8 +30,13 @@ export class BlacklistService {
     userStudioId?: string,
   ) {
     // Проверка прав доступа
-    if (userRole !== UserRole.MANAGER && userRole !== UserRole.ADMIN) {
-      throw new ForbiddenException('Only managers and admins can create blacklist requests');
+    // OWNER и DEPUTY_OWNER могут создавать запросы, которые автоматически одобряются
+    if (
+      userRole !== UserRole.MANAGER &&
+      userRole !== UserRole.ADMIN &&
+      !isOwnerLevelRole(userRole)
+    ) {
+      throw new ForbiddenException('Only managers, admins, owners and deputy owners can create blacklist requests');
     }
 
     // Найти клиента
@@ -110,7 +115,41 @@ export class BlacklistService {
       },
     });
 
-    // Создать уведомления для владельцев
+    // Если запрос создан OWNER или DEPUTY_OWNER, автоматически одобрить его
+    if (isOwnerLevelRole(userRole)) {
+      // Найти всех клиентов с таким же телефоном во всех студиях
+      const clientsWithSamePhone = await this.prisma.client.findMany({
+        where: {
+          phone: client.phone,
+        },
+      });
+
+      // Обновить запрос и всех клиентов с таким же телефоном
+      const [updatedRequest] = await this.prisma.$transaction([
+        this.prisma.blacklistRequest.update({
+          where: { id: request.id },
+          data: {
+            status: 'APPROVED',
+            approvedByUserId: userId,
+            approvedAt: new Date(),
+          },
+        }),
+        // Обновить всех клиентов с таким же телефоном во всех студиях
+        this.prisma.client.updateMany({
+          where: {
+            phone: client.phone,
+          },
+          data: {
+            isBlacklisted: true,
+            blacklistReason: createDto.reason,
+          },
+        }),
+      ]);
+
+      return updatedRequest;
+    }
+
+    // Для MANAGER и ADMIN - создать уведомления для владельцев
     const clientName = `${client.firstName} ${client.lastName || ''}`.trim();
     await this.notificationsService.createBlacklistRequestNotification(
       client.studioId,
@@ -121,6 +160,79 @@ export class BlacklistService {
     );
 
     return request;
+  }
+
+  /**
+   * Добавить клиента в черный список напрямую (для OWNER и DEPUTY_OWNER)
+   * Без создания запроса - сразу добавляет в ЧС
+   */
+  async addToBlacklistDirectly(
+    clientId: string,
+    createDto: CreateBlacklistRequestDto,
+    userRole: string,
+    userId: string,
+  ) {
+    // Проверка прав доступа
+    if (!isOwnerLevelRole(userRole)) {
+      throw new ForbiddenException('Only owners and deputy owners can add clients to blacklist directly');
+    }
+
+    // Найти клиента
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      include: {
+        studio: true,
+      },
+    });
+
+    if (!client) {
+      throw new NotFoundException('Client not found');
+    }
+
+    // Проверить, не находится ли клиент уже в черном списке
+    if (client.isBlacklisted) {
+      throw new BadRequestException('Client is already blacklisted');
+    }
+
+    // Проверить, что клиент не является пользователем системы
+    const userWithSamePhone = await this.prisma.user.findUnique({
+      where: { phone: client.phone },
+    });
+
+    if (userWithSamePhone) {
+      throw new BadRequestException('System users (owners, admins, managers, masters) cannot be added to blacklist');
+    }
+
+    // Найти всех клиентов с таким же телефоном во всех студиях
+    const clientsWithSamePhone = await this.prisma.client.findMany({
+      where: {
+        phone: client.phone,
+      },
+    });
+
+    // Добавить всех клиентов с таким же телефоном в черный список
+    await this.prisma.client.updateMany({
+      where: {
+        phone: client.phone,
+      },
+      data: {
+        isBlacklisted: true,
+        blacklistReason: createDto.reason,
+      },
+    });
+
+    return {
+      message: 'Client added to blacklist',
+      clientsUpdated: clientsWithSamePhone.length,
+      client: {
+        id: client.id,
+        firstName: client.firstName,
+        lastName: client.lastName,
+        phone: client.phone,
+        isBlacklisted: true,
+        blacklistReason: createDto.reason,
+      },
+    };
   }
 
   /**

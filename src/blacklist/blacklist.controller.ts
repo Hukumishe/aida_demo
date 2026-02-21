@@ -35,8 +35,8 @@ export class BlacklistController {
   constructor(private readonly blacklistService: BlacklistService) {}
 
   @Post('clients/:clientId/blacklist/request')
-  @Roles(UserRole.MANAGER, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Create blacklist request (MANAGER and ADMIN only)' })
+  @Roles(UserRole.MANAGER, UserRole.ADMIN, UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @ApiOperation({ summary: 'Create blacklist request (MANAGER, ADMIN, OWNER, DEPUTY_OWNER). OWNER/DEPUTY_OWNER requests are auto-approved.' })
   @ApiResponse({ status: 201, description: 'Blacklist request created' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
@@ -51,6 +51,25 @@ export class BlacklistController {
       user.role,
       user.userId,
       user.studioId,
+    );
+  }
+
+  @Post('clients/:clientId/blacklist/add')
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @ApiOperation({ summary: 'Add client to blacklist directly (OWNER and DEPUTY_OWNER only)' })
+  @ApiResponse({ status: 200, description: 'Client added to blacklist' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Client not found' })
+  async addToBlacklist(
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Body() createDto: CreateBlacklistRequestDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.blacklistService.addToBlacklistDirectly(
+      clientId,
+      createDto,
+      user.role,
+      user.userId,
     );
   }
 
