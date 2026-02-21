@@ -181,5 +181,52 @@ export class NotificationsService {
       where: { id: notificationId },
     });
   }
+
+  /**
+   * Создать уведомление для владельцев о запросе на добавление в черный список
+   */
+  async createBlacklistRequestNotification(
+    studioId: string,
+    blacklistRequestId: string,
+    clientName: string,
+    requestedByName: string,
+    reason?: string,
+  ) {
+    // Найти всех владельцев и заместителей владельцев в студии
+    const owners = await this.prisma.user.findMany({
+      where: {
+        studioId,
+        role: {
+          in: ['OWNER', 'DEPUTY_OWNER'],
+        },
+        isActive: true,
+      },
+    });
+
+    const reasonText = reason ? ` Причина: ${reason}` : '';
+
+    // Создать уведомления для всех владельцев
+    const notifications = await Promise.all(
+      owners.map((owner) =>
+        this.prisma.notification.create({
+          data: {
+            userId: owner.id,
+            studioId,
+            type: NotificationType.BLACKLIST_REQUEST,
+            title: 'Запрос на добавление в черный список',
+            message: `${requestedByName} запросил(а) добавление клиента "${clientName}" в черный список.${reasonText}`,
+            data: JSON.stringify({
+              blacklistRequestId,
+              clientName,
+              requestedByName,
+              reason,
+            }),
+          },
+        }),
+      ),
+    );
+
+    return notifications;
+  }
 }
 

@@ -13,6 +13,7 @@ import { UploadModule } from './upload/upload.module';
 import { LoggingModule } from './logging/logging.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { BlacklistModule } from './blacklist/blacklist.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -34,6 +35,7 @@ import { AppController } from './app.controller';
     UploadModule,
     DashboardModule,
     NotificationsModule,
+    BlacklistModule,
   ],
   controllers: [AppController],
 })

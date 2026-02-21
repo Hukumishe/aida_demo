@@ -46,6 +46,7 @@ enum LogType {
 enum NotificationType {
   NEW_APPOINTMENT // Новая запись для мастера
   APPOINTMENT_CANCELLED // Отмена записи для менеджера
+  BLACKLIST_REQUEST // Запрос на добавление в черный список для владельца
 }
 
 model Studio {
@@ -66,6 +67,7 @@ model Studio {
   staffServiceOverrides StaffServiceOverride[]
   noShowIncomes         NoShowIncome[]
   Notification          Notification[]
+  blacklistRequests     BlacklistRequest[]
 
   @@map("studios")
 }
@@ -83,16 +85,18 @@ model User {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  studio              Studio?                @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  staffProfile        StaffProfile?
-  workSchedules       WorkScheduleDay[]
-  busySlots           BusySlot[]
-  appointments        Appointment[]
-  staffServices       StaffService[]
-  serviceOverrides    StaffServiceOverride[]
-  arrivedAppointments Appointment[]          @relation("ArrivedByUser")
-  noShowIncomes       NoShowIncome[]
-  notifications       Notification[]
+  studio                    Studio?                @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  staffProfile              StaffProfile?
+  workSchedules             WorkScheduleDay[]
+  busySlots                 BusySlot[]
+  appointments              Appointment[]
+  staffServices             StaffService[]
+  serviceOverrides          StaffServiceOverride[]
+  arrivedAppointments       Appointment[]          @relation("ArrivedByUser")
+  noShowIncomes             NoShowIncome[]
+  notifications             Notification[]
+  blacklistRequests         BlacklistRequest[] // Запросы, созданные пользователем
+  approvedBlacklistRequests BlacklistRequest[]     @relation("ApprovedByUser") // Запросы, одобренные пользователем
 
   @@index([studioId])
   @@index([email])
@@ -118,24 +122,28 @@ model StaffProfile {
 }
 
 model Client {
-  id        String   @id @default(uuid())
-  studioId  String
-  firstName String
-  lastName  String?
-  phone     String
-  notes     String?
-  bonuses   Int      @default(0) // Бонусные баллы
-  discount  Int      @default(0) // Скидка в процентах (0-100)
-  balance   Int      @default(0) // Баланс в тенге
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(uuid())
+  studioId       String
+  firstName      String
+  lastName       String?
+  phone          String
+  notes          String?
+  bonuses        Int      @default(0) // Бонусные баллы
+  discount       Int      @default(0) // Скидка в процентах (0-100)
+  balance        Int      @default(0) // Баланс в тенге
+  isBlacklisted  Boolean  @default(false) // Флаг черного списка
+  blacklistReason String? // Причина добавления в черный список
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  studio        Studio         @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  appointments  Appointment[]
-  noShowIncomes NoShowIncome[]
+  studio            Studio             @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  appointments      Appointment[]
+  noShowIncomes     NoShowIncome[]
+  blacklistRequests BlacklistRequest[]
 
   @@unique([studioId, phone])
   @@index([studioId])
+  @@index([studioId, isBlacklisted])
   @@map("clients")
 }
 
@@ -352,4 +360,31 @@ model Notification {
   @@index([studioId, createdAt])
   @@index([userId, createdAt])
   @@map("notifications")
+}
+
+model BlacklistRequest {
+  id                String    @id @default(uuid())
+  studioId          String
+  clientId          String
+  requestedByUserId String // Кто создал запрос (MANAGER или ADMIN)
+  approvedByUserId  String? // Кто одобрил (OWNER или DEPUTY_OWNER)
+  status            String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  reason            String? // Причина добавления в ЧС
+  rejectedReason    String? // Причина отклонения
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  approvedAt        DateTime?
+  rejectedAt        DateTime?
+
+  studio      Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  client      Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  requestedBy User   @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  approvedBy  User?  @relation("ApprovedByUser", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([studioId])
+  @@index([clientId])
+  @@index([status])
+  @@index([requestedByUserId])
+  @@index([studioId, status])
+  @@map("blacklist_requests")
 }
