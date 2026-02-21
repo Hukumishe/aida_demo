@@ -221,28 +221,49 @@ export class ClientsService {
       }
     }
 
-    // Get all appointments for this client
+    // Get all appointments for this client (with service, upsells; exclude cancelled)
     const appointments = await this.prisma.appointment.findMany({
       where: {
         clientId: id,
-        status: {
-          not: 'CANCELLED', // Exclude cancelled appointments
-        },
+        status: { not: 'CANCELLED' },
       },
       include: {
         service: true,
+        upsells: true,
       },
     });
 
-    // Calculate statistics
+    // Resolve main-service price per appointment (staff override or service default)
+    const staffServiceKeys = [
+      ...new Set(
+        appointments.map((a) => ({ studioId: a.studioId, staffUserId: a.staffUserId, serviceId: a.serviceId })),
+      ),
+    ];
+    const overrides = staffServiceKeys.length
+      ? await this.prisma.staffServiceOverride.findMany({
+          where: {
+            isActive: true,
+            OR: staffServiceKeys.map((k) => ({
+              studioId: k.studioId,
+              staffUserId: k.staffUserId,
+              serviceId: k.serviceId,
+            })),
+          },
+        })
+      : [];
+    const overridePriceByKey = new Map(
+      overrides.map((o) => [`${o.studioId}:${o.staffUserId}:${o.serviceId}`, o.price]),
+    );
+
+    // Calculate statistics: only service price + additional services (upsells); prepayment is excluded
     const totalVisits = appointments.length;
-    
-    // Calculate average check (average of prepaymentAmount or service.defaultPrice)
     const totalRevenue = appointments.reduce((sum, a) => {
-      const amount = a.prepaymentAmount || a.service.defaultPrice || 0;
-      return sum + amount;
+      const key = `${a.studioId}:${a.staffUserId}:${a.serviceId}`;
+      const servicePrice = overridePriceByKey.get(key) ?? a.service.defaultPrice ?? 0;
+      const upsellsTotal = a.upsells.reduce((acc, u) => acc + u.totalAmount, 0);
+      return sum + servicePrice + upsellsTotal;
     }, 0);
-    
+
     const averageCheck = totalVisits > 0 ? Math.round(totalRevenue / totalVisits) : 0;
 
     return {
