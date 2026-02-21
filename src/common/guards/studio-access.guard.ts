@@ -17,8 +17,10 @@ export class StudioAccessGuard implements CanActivate {
     const user = request.user;
     const studioId = request.params.studioId;
 
+    // If no studioId in route params, skip studio access check
+    // The service layer will handle access control based on the resource (client, appointment, etc.)
     if (!studioId) {
-      return true; // No studioId in route, skip check
+      return true;
     }
 
     if (!user) {

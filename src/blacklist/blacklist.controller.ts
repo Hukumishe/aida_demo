@@ -29,7 +29,7 @@ import { UserRole } from '../common/decorators/roles.decorator';
 
 @ApiTags('blacklist')
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class BlacklistController {
   constructor(private readonly blacklistService: BlacklistService) {}
@@ -55,6 +55,7 @@ export class BlacklistController {
   }
 
   @Get('studios/:studioId/blacklist/requests')
+  @UseGuards(StudioAccessGuard)
   @ApiOperation({ summary: 'Get all blacklist requests for a studio' })
   @ApiQuery({ name: 'status', required: false, enum: ['PENDING', 'APPROVED', 'REJECTED'] })
   @ApiResponse({ status: 200, description: 'List of blacklist requests' })
@@ -111,6 +112,7 @@ export class BlacklistController {
   }
 
   @Get('studios/:studioId/blacklist')
+  @UseGuards(StudioAccessGuard)
   @ApiOperation({ summary: 'Get all blacklisted clients for a studio' })
   @ApiResponse({ status: 200, description: 'List of blacklisted clients' })
   @ApiResponse({ status: 403, description: 'Forbidden' })

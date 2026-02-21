@@ -197,7 +197,14 @@ export class BlacklistService {
       throw new BadRequestException(`Request is already ${request.status.toLowerCase()}`);
     }
 
-    // Обновить запрос и клиента (сохранить причину в карточке клиента)
+    // Найти всех клиентов с таким же телефоном во всех студиях
+    const clientsWithSamePhone = await this.prisma.client.findMany({
+      where: {
+        phone: request.client.phone,
+      },
+    });
+
+    // Обновить запрос и всех клиентов с таким же телефоном (сохранить причину в карточке клиента)
     const [updatedRequest] = await this.prisma.$transaction([
       this.prisma.blacklistRequest.update({
         where: { id: requestId },
@@ -207,8 +214,11 @@ export class BlacklistService {
           approvedAt: new Date(),
         },
       }),
-      this.prisma.client.update({
-        where: { id: request.clientId },
+      // Обновить всех клиентов с таким же телефоном во всех студиях
+      this.prisma.client.updateMany({
+        where: {
+          phone: request.client.phone,
+        },
         data: {
           isBlacklisted: true,
           blacklistReason: request.reason,
@@ -297,7 +307,7 @@ export class BlacklistService {
       throw new ForbiddenException('Only owners and deputy owners can remove clients from blacklist');
     }
 
-    // Найти клиента
+    // Найти клиента, чтобы получить его телефон
     const client = await this.prisma.client.findUnique({
       where: { id: clientId },
     });
@@ -310,9 +320,12 @@ export class BlacklistService {
       throw new BadRequestException('Client is not in blacklist');
     }
 
-    // Удалить из черного списка (очистить причину)
-    return this.prisma.client.update({
-      where: { id: clientId },
+    // Удалить из черного списка во всех студиях (очистить причину)
+    // Находим всех клиентов с таким же телефоном и удаляем их из ЧС
+    return this.prisma.client.updateMany({
+      where: {
+        phone: client.phone,
+      },
       data: {
         isBlacklisted: false,
         blacklistReason: null,
