@@ -325,11 +325,11 @@ export class ClientsService {
       }
     }
 
-    // Get all appointments for this client (with service, upsells; exclude cancelled)
+    // Only completed (DONE) visits for card stats: visits count and average check
     const appointments = await this.prisma.appointment.findMany({
       where: {
         clientId: id,
-        status: { not: 'CANCELLED' },
+        status: 'DONE',
       },
       include: {
         service: true,
