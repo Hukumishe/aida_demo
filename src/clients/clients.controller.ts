@@ -44,6 +44,17 @@ export class ClientsController {
     return this.clientsService.findAll(studioId, query, user?.role, user?.studioId);
   }
 
+  @Get('studios/:studioId/clients/segments')
+  @ApiOperation({ summary: 'Get client segment counts (New, Never visited, Sleeping, Missing)' })
+  @ApiResponse({ status: 200, description: 'Segment counts' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async getSegments(
+    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.clientsService.getClientSegments(studioId, user?.role, user?.studioId);
+  }
+
   @Post('studios/:studioId/clients')
   @ApiOperation({ summary: 'Create a new client' })
   @ApiResponse({ status: 201, description: 'Client created' })

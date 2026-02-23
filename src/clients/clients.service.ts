@@ -199,6 +199,82 @@ export class ClientsService {
     });
   }
 
+  /**
+   * Client segments for dashboard: New, Never visited, Sleeping (3–6 months no booking), Missing (6+ months no booking).
+   * Counts are mutually exclusive; blacklisted clients are excluded.
+   */
+  async getClientSegments(
+    studioId: string,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
+      if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
+      if (userRole === UserRole.MASTER) {
+        throw new ForbiddenException('Masters cannot access client segments');
+      }
+    }
+
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const threeMonthsAgo = new Date(now);
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    const sixMonthsAgo = new Date(now);
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const clients = await this.prisma.client.findMany({
+      where: { studioId, isBlacklisted: false },
+      select: { id: true, createdAt: true },
+    });
+    const clientIds = clients.map((c) => c.id);
+    if (clientIds.length === 0) {
+      return {
+        new: 0,
+        neverVisited: 0,
+        sleeping: 0,
+        missing: 0,
+      };
+    }
+
+    const lastAppointmentByClient = await this.prisma.appointment.groupBy({
+      by: ['clientId'],
+      where: { clientId: { in: clientIds } },
+      _max: { startAt: true },
+    });
+    const lastByClient = new Map(
+      lastAppointmentByClient.map((r) => [r.clientId, r._max.startAt]),
+    );
+
+    let newCount = 0;
+    let neverVisited = 0;
+    let sleeping = 0;
+    let missing = 0;
+
+    for (const c of clients) {
+      const lastAt = lastByClient.get(c.id);
+      const createdInLastWeek = c.createdAt >= sevenDaysAgo;
+
+      if (!lastAt) {
+        if (createdInLastWeek) newCount++;
+        else neverVisited++;
+        continue;
+      }
+      if (lastAt < sixMonthsAgo) missing++;
+      else if (lastAt < threeMonthsAgo) sleeping++;
+      else if (createdInLastWeek) newCount++;
+    }
+
+    return {
+      new: newCount,
+      neverVisited,
+      sleeping,
+      missing,
+    };
+  }
+
   async getClientStatistics(id: string, userRole?: string, userStudioId?: string) {
     const client = await this.prisma.client.findUnique({
       where: { id },
