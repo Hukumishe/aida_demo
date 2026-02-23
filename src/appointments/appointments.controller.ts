@@ -95,7 +95,7 @@ export class AppointmentsController {
     return this.appointmentsService.markNoShow(id, user?.role, user?.studioId, user?.userId);
   }
 
-  @Post('appointments/:id/mark-late')
+  @Post(['appointments/:id/mark-late', 'studios/:studioId/appointments/:id/mark-late'])
   @ApiOperation({ summary: 'Mark appointment as late (Опоздал) – prepayment to income, appointment kept' })
   @ApiResponse({ status: 200, description: 'Appointment marked as late' })
   @ApiResponse({ status: 400, description: 'Too early, no prepayment, or already forfeited' })
