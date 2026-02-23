@@ -95,6 +95,19 @@ export class AppointmentsController {
     return this.appointmentsService.markNoShow(id, user?.role, user?.studioId, user?.userId);
   }
 
+  @Post('appointments/:id/mark-late')
+  @ApiOperation({ summary: 'Mark appointment as late (Опоздал) – prepayment to income, appointment kept' })
+  @ApiResponse({ status: 200, description: 'Appointment marked as late' })
+  @ApiResponse({ status: 400, description: 'Too early, no prepayment, or already forfeited' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Appointment not found' })
+  async markLate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.appointmentsService.markLate(id, user?.role, user?.studioId, user?.userId);
+  }
+
   @Post('appointments/:id/arrived')
   @ApiOperation({ summary: 'Mark appointment as arrived' })
   @ApiResponse({ status: 200, description: 'Appointment marked as arrived' })

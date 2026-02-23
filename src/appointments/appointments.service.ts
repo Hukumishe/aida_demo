@@ -399,13 +399,11 @@ export class AppointmentsService {
 
     // Use transaction to ensure data consistency
     return this.prisma.$transaction(async (tx) => {
-      // If late cancellation (< 4 hours), add prepayment or default price to income
+      // If late cancellation (< 4 hours), add prepayment to income only if not already added (e.g. by "Опоздал")
       if (isLateCancellation) {
-        // Use prepaymentAmount if available, otherwise use service defaultPrice
-        const amountToAdd = appointment.prepaymentAmount || appointment.service.defaultPrice || 0;
-        
-        if (amountToAdd > 0) {
-          // Create NoShowIncome record to track the forfeited prepayment
+        const amountToAdd = appointment.prepaymentAmount ?? appointment.service.defaultPrice ?? 0;
+        const alreadyForfeited = (appointment.forfeitedPrepaymentAmount ?? 0) > 0;
+        if (amountToAdd > 0 && !alreadyForfeited) {
           await tx.noShowIncome.create({
             data: {
               studioId: appointment.studioId,
@@ -447,6 +445,78 @@ export class AppointmentsService {
 
       return { success: true, message: 'Appointment marked as no-show and deleted' };
     });
+  }
+
+  /**
+   * Mark appointment as "late" (Опоздал): prepayment is added to income, appointment is kept.
+   * Available only 15+ minutes after start if "Пришёл" was not pressed.
+   * If "Не пришёл" is pressed later, prepayment is not added again.
+   */
+  async markLate(id: string, userRole?: string, userStudioId?: string, userStaffId?: string) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+      include: { service: true, client: true, staff: { include: { staffProfile: true } } },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException(`Appointment with ID ${id} not found`);
+    }
+
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
+      if (userStudioId !== appointment.studioId) {
+        throw new ForbiddenException('Access denied to this appointment');
+      }
+    }
+    if (userRole === UserRole.MASTER && userStaffId !== appointment.staffUserId) {
+      throw new ForbiddenException('Access denied to this appointment');
+    }
+
+    if (appointment.status !== AppointmentStatus.BOOKED) {
+      throw new BadRequestException(
+        'Can only mark as late an appointment that is still booked (not arrived, done, or cancelled)',
+      );
+    }
+
+    const now = new Date();
+    const startAt = new Date(appointment.startAt);
+    const fifteenMinutesAfterStart = new Date(startAt.getTime() + 15 * 60 * 1000);
+    if (now < fifteenMinutesAfterStart) {
+      throw new BadRequestException(
+        '"Опоздал" can only be used 15 minutes after the appointment start time',
+      );
+    }
+
+    const amount = appointment.prepaymentAmount ?? appointment.service.defaultPrice ?? 0;
+    if (amount <= 0) {
+      throw new BadRequestException('No prepayment to forfeit for this appointment');
+    }
+
+    if ((appointment.forfeitedPrepaymentAmount ?? 0) > 0) {
+      throw new BadRequestException('Prepayment for this appointment was already forfeited (e.g. already marked as late)');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.noShowIncome.create({
+        data: {
+          studioId: appointment.studioId,
+          staffUserId: appointment.staffUserId,
+          clientId: appointment.clientId,
+          serviceId: appointment.serviceId,
+          amount,
+          originalStartAt: appointment.startAt,
+          originalEndAt: appointment.endAt,
+        },
+      });
+      await tx.appointment.update({
+        where: { id },
+        data: { forfeitedPrepaymentAmount: amount },
+      });
+    });
+
+    return {
+      success: true,
+      message: 'Appointment marked as late; prepayment added to income, appointment kept',
+    };
   }
 
   async markArrived(id: string, userId: string, userRole?: string, userStudioId?: string) {
