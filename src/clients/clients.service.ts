@@ -37,12 +37,40 @@ export class ClientsService {
       ];
     }
 
-    return this.prisma.client.findMany({
+    const clients = await this.prisma.client.findMany({
       where,
       orderBy: [
         { lastName: 'asc' },
         { firstName: 'asc' },
       ],
+    });
+
+    if (clients.length === 0) return clients;
+
+    const clientIds = clients.map((c) => c.id);
+    const visitStats = await this.prisma.appointment.groupBy({
+      by: ['clientId'],
+      where: {
+        clientId: { in: clientIds },
+        status: 'DONE',
+      },
+      _count: true,
+      _max: { startAt: true },
+    });
+    const statsByClient = new Map(
+      visitStats.map((s) => [
+        s.clientId,
+        { totalVisits: s._count, lastVisitAt: s._max.startAt ?? null },
+      ]),
+    );
+
+    return clients.map((client) => {
+      const stats = statsByClient.get(client.id) ?? { totalVisits: 0, lastVisitAt: null };
+      return {
+        ...client,
+        totalVisits: stats.totalVisits,
+        lastVisitAt: stats.lastVisitAt,
+      };
     });
   }
 
