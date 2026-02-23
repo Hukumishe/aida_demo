@@ -49,6 +49,22 @@ enum NotificationType {
   BLACKLIST_REQUEST // Запрос на добавление в черный список для владельца
 }
 
+enum WarehouseType {
+  CENTRAL
+  BRANCH
+}
+
+enum ProductUnit {
+  KG   // Кг
+  PCS  // шт
+  ML   // мл
+}
+
+enum StockMovementType {
+  RECEIPT   // Приход
+  WRITE_OFF // Списание
+}
+
 model Studio {
   id        String   @id @default(uuid())
   name      String
@@ -68,6 +84,7 @@ model Studio {
   noShowIncomes         NoShowIncome[]
   Notification          Notification[]
   blacklistRequests     BlacklistRequest[]
+  warehouse             Warehouse?  // Склад филиала (один на студию)
 
   @@map("studios")
 }
@@ -97,6 +114,8 @@ model User {
   notifications             Notification[]
   blacklistRequests         BlacklistRequest[] // Запросы, созданные пользователем
   approvedBlacklistRequests BlacklistRequest[]     @relation("ApprovedByUser") // Запросы, одобренные пользователем
+  transfers                 Transfer[]
+  stockMovements            StockMovement[]
 
   @@index([studioId])
   @@index([email])
@@ -387,4 +406,94 @@ model BlacklistRequest {
   @@index([requestedByUserId])
   @@index([studioId, status])
   @@map("blacklist_requests")
+}
+
+// --- Склад ---
+model Warehouse {
+  id        String        @id @default(uuid())
+  type      WarehouseType // CENTRAL | BRANCH
+  studioId  String?       @unique // null для центрального склада
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  studio         Studio?         @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  stocks         Stock[]
+  transfersFrom  Transfer[]      @relation("TransferFrom")
+  transfersTo    Transfer[]      @relation("TransferTo")
+  stockMovements StockMovement[]
+
+  @@index([type])
+  @@index([studioId])
+  @@map("warehouses")
+}
+
+model Product {
+  id          String      @id @default(uuid())
+  name        String      // Наименование
+  description String?     // Описание (необязательно)
+  article     String?     // Артикул (необязательно)
+  unit        ProductUnit // Единица: Кг/шт/мл
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  stocks         Stock[]
+  transfers      Transfer[]
+  stockMovements StockMovement[]
+
+  @@map("products")
+}
+
+model Stock {
+  warehouseId String
+  productId   String
+  quantity    Int      @default(0) // Кол-во (>= 0)
+  updatedAt   DateTime @updatedAt
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([warehouseId, productId])
+  @@index([warehouseId])
+  @@index([productId])
+  @@map("stocks")
+}
+
+model Transfer {
+  id               String   @id @default(uuid())
+  fromWarehouseId  String
+  toWarehouseId    String
+  productId        String
+  quantity         Int
+  createdAt        DateTime @default(now())
+  createdByUserId  String
+
+  fromWarehouse Warehouse @relation("TransferFrom", fields: [fromWarehouseId], references: [id], onDelete: Cascade)
+  toWarehouse   Warehouse @relation("TransferTo", fields: [toWarehouseId], references: [id], onDelete: Cascade)
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy     User      @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([fromWarehouseId])
+  @@index([toWarehouseId])
+  @@index([productId])
+  @@index([createdAt])
+  @@map("transfers")
+}
+
+model StockMovement {
+  id               String            @id @default(uuid())
+  warehouseId      String
+  productId        String
+  quantityDelta    Int               // + приход, - списание
+  type             StockMovementType // RECEIPT | WRITE_OFF
+  createdAt        DateTime          @default(now())
+  createdByUserId  String
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdBy User      @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([warehouseId])
+  @@index([productId])
+  @@index([createdAt])
+  @@map("stock_movements")
 }
