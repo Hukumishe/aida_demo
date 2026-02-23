@@ -51,6 +51,14 @@ export class WarehouseController {
     return this.warehouseService.listBranchWarehouses(user?.role);
   }
 
+  @Get('warehouse/central/history')
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @ApiOperation({ summary: 'Movement history: all transfers from central warehouse' })
+  @ApiResponse({ status: 200 })
+  getCentralHistory(@CurrentUser() user?: any) {
+    return this.warehouseService.getCentralMovementHistory(user?.role);
+  }
+
   @Get('warehouse/central/products')
   @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
   @ApiOperation({ summary: 'List all products (catalog)' })
@@ -133,6 +141,21 @@ export class WarehouseController {
     @CurrentUser() user?: any,
   ) {
     return this.warehouseService.getBranchWarehouse(
+      studioId,
+      user?.role,
+      user?.studioId,
+    );
+  }
+
+  @Get('studios/:studioId/warehouse/history')
+  @UseGuards(StudioAccessGuard)
+  @ApiOperation({ summary: 'Movement history: transfers in, receipts, write-offs for this branch' })
+  @ApiResponse({ status: 200 })
+  getBranchHistory(
+    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.warehouseService.getBranchMovementHistory(
       studioId,
       user?.role,
       user?.studioId,

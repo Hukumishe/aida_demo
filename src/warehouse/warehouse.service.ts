@@ -447,4 +447,97 @@ export class WarehouseService {
     await this.prisma.product.delete({ where: { id: productId } });
     return { success: true };
   }
+
+  /**
+   * История движения с центрального склада: все перемещения (куда ушёл товар).
+   */
+  async getCentralMovementHistory(userRole?: string) {
+    this.ensureCentralAccess(userRole);
+    const central = await this.getOrCreateCentralWarehouse();
+    const transfers = await this.prisma.transfer.findMany({
+      where: { fromWarehouseId: central.id },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        product: true,
+        toWarehouse: { include: { studio: { select: { id: true, name: true } } } },
+        createdBy: { select: { id: true, staffProfile: true } },
+      },
+    });
+    return transfers.map((t) => ({
+      id: t.id,
+      type: 'TRANSFER_OUT' as const,
+      productId: t.productId,
+      product: t.product,
+      quantity: t.quantity,
+      createdAt: t.createdAt,
+      createdByUserId: t.createdByUserId,
+      createdByName: t.createdBy.staffProfile
+        ? `${t.createdBy.staffProfile.firstName} ${t.createdBy.staffProfile.lastName || ''}`.trim()
+        : null,
+      toWarehouseId: t.toWarehouseId,
+      toWarehouseName: t.toWarehouse.studio?.name ?? 'Филиал',
+    }));
+  }
+
+  /**
+   * История движения по складу филиала: перемещения на склад + приходы + списания.
+   */
+  async getBranchMovementHistory(
+    studioId: string,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    this.ensureBranchAccess(studioId, userRole, userStudioId);
+    const warehouse = await this.getOrCreateBranchWarehouse(studioId);
+
+    const [transfersIn, movements] = await Promise.all([
+      this.prisma.transfer.findMany({
+        where: { toWarehouseId: warehouse.id },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          product: true,
+          createdBy: { select: { id: true, staffProfile: true } },
+        },
+      }),
+      this.prisma.stockMovement.findMany({
+        where: { warehouseId: warehouse.id },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          product: true,
+          createdBy: { select: { id: true, staffProfile: true } },
+        },
+      }),
+    ]);
+
+    const transferEntries = transfersIn.map((t) => ({
+      id: t.id,
+      type: 'TRANSFER_IN' as const,
+      productId: t.productId,
+      product: t.product,
+      quantity: t.quantity,
+      createdAt: t.createdAt,
+      createdByUserId: t.createdByUserId,
+      createdByName: t.createdBy.staffProfile
+        ? `${t.createdBy.staffProfile.firstName} ${t.createdBy.staffProfile.lastName || ''}`.trim()
+        : null,
+    }));
+
+    const movementEntries = movements.map((m) => ({
+      id: m.id,
+      type: m.type as 'RECEIPT' | 'WRITE_OFF',
+      productId: m.productId,
+      product: m.product,
+      quantity: m.quantityDelta,
+      createdAt: m.createdAt,
+      createdByUserId: m.createdByUserId,
+      createdByName: m.createdBy.staffProfile
+        ? `${m.createdBy.staffProfile.firstName} ${m.createdBy.staffProfile.lastName || ''}`.trim()
+        : null,
+    }));
+
+    const combined = [...transferEntries, ...movementEntries].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+    return combined;
+  }
 }
