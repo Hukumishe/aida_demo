@@ -27,7 +27,7 @@ export class ClientsService {
       }
     }
 
-    const where: any = { studioId };
+    const where: any = { studioId, isBlacklisted: false };
 
     if (query) {
       where.OR = [

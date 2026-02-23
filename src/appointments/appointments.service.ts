@@ -139,6 +139,9 @@ export class AppointmentsService {
     if (!client || client.studioId !== studioId) {
       throw new NotFoundException('Client not found or does not belong to this studio');
     }
+    if (client.isBlacklisted) {
+      throw new BadRequestException('Cannot create appointment for a blacklisted client');
+    }
 
     // Verify service exists and belongs to studio
     const service = await this.prisma.service.findUnique({
