@@ -548,6 +548,9 @@ export class UsersService {
     });
   }
 
+  /**
+   * Dismiss (уволить) staff: set isActive = false. User data is preserved, access is revoked.
+   */
   async remove(
     userId: string,
     userRole: string,
@@ -555,10 +558,15 @@ export class UsersService {
   ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      include: { staffProfile: true },
     });
 
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    if (!user.isActive) {
+      throw new BadRequestException('User is already dismissed');
     }
 
     // Check access
@@ -566,19 +574,26 @@ export class UsersService {
       throw new ForbiddenException('Access denied to this user');
     }
 
-    // Cannot delete OWNER (only OWNER can do this, and only via special endpoint)
+    // Cannot dismiss OWNER (only OWNER can do this, and only via special endpoint)
     if (user.role === UserRole.OWNER && !canManageOwners(userRole)) {
-      throw new BadRequestException('Cannot delete OWNER role');
+      throw new BadRequestException('Cannot dismiss OWNER role');
     }
-    // Cannot delete DEPUTY_OWNER (only OWNER can do this)
+    // Cannot dismiss DEPUTY_OWNER (only OWNER can do this)
     if (user.role === UserRole.DEPUTY_OWNER && !canManageDeputies(userRole)) {
-      throw new BadRequestException('Cannot delete DEPUTY_OWNER role');
+      throw new BadRequestException('Cannot dismiss DEPUTY_OWNER role');
     }
 
-    // Delete user (cascade will delete related records: staffProfile, workSchedules, busySlots, appointments, staffServices, etc.)
-    return this.prisma.user.delete({
+    const updated = await this.prisma.user.update({
       where: { id: userId },
+      data: { isActive: false },
+      include: { staffProfile: true },
     });
+
+    if (!isOwnerLevelRole(userRole)) {
+      const { password, ...rest } = updated;
+      return rest;
+    }
+    return updated;
   }
 
   async createServiceOverride(
