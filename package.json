@@ -21,6 +21,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "seed": "ts-node prisma/seed.ts",
+    "seed:demo": "ts-node scripts/seed-demo-owner.ts",
     "apply-admin-migration": "ts-node scripts/apply-admin-role-migration.ts",
     "create-admin": "ts-node scripts/create-admin-user.ts",
     "apply-blacklist-migration": "ts-node scripts/apply-blacklist-migration.ts",

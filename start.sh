@@ -4,6 +4,10 @@ set -e
 echo "Current directory:"
 pwd
 
+echo "Running database migrations..."
+npx prisma migrate deploy
+echo "Migrations done."
+
 echo "Listing files before build:"
 ls -la
 

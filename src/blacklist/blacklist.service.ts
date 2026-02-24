@@ -63,13 +63,16 @@ export class BlacklistService {
       throw new BadRequestException('Client is already blacklisted');
     }
 
-    // Проверить, что клиент не является пользователем системы (OWNER, DEPUTY_OWNER, ADMIN, MANAGER, MASTER)
+    // Не давать добавлять в ЧС, если этот телефон принадлежит активному сотруднику/владельцу
     const userWithSamePhone = await this.prisma.user.findUnique({
       where: { phone: client.phone },
     });
 
-    if (userWithSamePhone) {
-      throw new BadRequestException('System users (owners, admins, managers, masters) cannot be added to blacklist');
+    const systemRoles = [UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.MASTER];
+    if (userWithSamePhone?.isActive && systemRoles.includes(userWithSamePhone.role as UserRole)) {
+      throw new BadRequestException(
+        'Невозможно добавить в ЧС: номер телефона клиента зарегистрирован как аккаунт сотрудника или владельца. Увольте пользователя, если нужно добавить его в чёрный список.',
+      );
     }
 
     // Проверить, нет ли уже активного запроса
