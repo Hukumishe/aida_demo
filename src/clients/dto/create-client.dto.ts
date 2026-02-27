@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsInt, Min, Max, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateClientDto {
@@ -16,6 +16,12 @@ export class CreateClientDto {
   @IsString()
   @IsNotEmpty()
   phone: string;
+
+  @ApiProperty({ example: '1990-05-15', required: false, description: 'День рождения (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'birthDate must be YYYY-MM-DD' })
+  birthDate?: string;
 
   @ApiProperty({ example: 'Regular client, prefers morning appointments', required: false })
   @IsString()

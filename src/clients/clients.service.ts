@@ -122,6 +122,7 @@ export class ClientsService {
           firstName: createClientDto.firstName,
           lastName: createClientDto.lastName,
           phone: createClientDto.phone,
+          birthDate: createClientDto.birthDate ? new Date(createClientDto.birthDate) : undefined,
           notes: createClientDto.notes,
           bonuses: createClientDto.bonuses ?? 0,
           discount: createClientDto.discount ?? 0,
@@ -221,9 +222,13 @@ export class ClientsService {
       }
     }
 
+    const data: any = { ...updateClientDto };
+    if (data.birthDate !== undefined) {
+      data.birthDate = data.birthDate ? new Date(data.birthDate) : null;
+    }
     return this.prisma.client.update({
       where: { id },
-      data: updateClientDto,
+      data,
     });
   }
 

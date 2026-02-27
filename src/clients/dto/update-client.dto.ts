@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsInt, Min, Max, Matches, ValidateIf } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateClientDto {
@@ -16,6 +16,13 @@ export class UpdateClientDto {
   @IsString()
   @IsOptional()
   phone?: string;
+
+  @ApiProperty({ example: '1990-05-15', required: false, description: 'День рождения (YYYY-MM-DD). Передать null чтобы очистить.' })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'birthDate must be YYYY-MM-DD' })
+  birthDate?: string | null;
 
   @ApiProperty({ example: 'Regular client, prefers morning appointments', required: false })
   @IsString()

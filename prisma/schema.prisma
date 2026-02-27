@@ -147,6 +147,7 @@ model Client {
   lastName       String?
   phone          String
   notes          String?
+  birthDate      DateTime? @db.Date // День рождения клиента
   bonuses        Int      @default(0) // Бонусные баллы
   discount       Int      @default(0) // Скидка в процентах (0-100)
   balance        Int      @default(0) // Баланс в тенге
