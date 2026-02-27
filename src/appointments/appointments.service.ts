@@ -15,7 +15,7 @@ import {
 } from '../clients/constants/levels.constants';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { AppointmentStatus } from '@prisma/client';
+import { AppointmentStatus, ClientLevel } from '@prisma/client';
 
 @Injectable()
 export class AppointmentsService {
@@ -693,13 +693,13 @@ export class AppointmentsService {
       const updateData: {
         bonuses: number;
         totalPaidForLevel: number;
-        level?: string;
+        level?: ClientLevel;
       } = {
         bonuses: newBonuses,
         totalPaidForLevel: newTotalPaidForLevel,
       };
       if (!client.levelSetManually) {
-        updateData.level = newLevel;
+        updateData.level = newLevel as ClientLevel;
       }
       await tx.client.update({
         where: { id: client.id },
