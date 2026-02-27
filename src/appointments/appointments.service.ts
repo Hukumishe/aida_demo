@@ -7,7 +7,12 @@ import {
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
+import { MarkAppointmentDoneDto } from './dto/mark-appointment-done.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import {
+  getCashbackPercent,
+  getLevelFromTotalPaid,
+} from '../clients/constants/levels.constants';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AppointmentStatus } from '@prisma/client';
@@ -584,9 +589,21 @@ export class AppointmentsService {
     return appointment;
   }
 
-  async markDone(id: string, userId: string, userRole?: string, userStudioId?: string) {
+  async markDone(
+    id: string,
+    userId: string,
+    userRole?: string,
+    userStudioId?: string,
+    dto?: MarkAppointmentDoneDto,
+  ) {
     const existingAppointment = await this.prisma.appointment.findUnique({
       where: { id },
+      include: {
+        client: true,
+        service: true,
+        studio: true,
+        upsells: true,
+      },
     });
 
     if (!existingAppointment) {
@@ -594,9 +611,7 @@ export class AppointmentsService {
     }
 
     // Check access
-    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      // ADMIN and MASTER can only access their own studio
       if (userStudioId !== existingAppointment.studioId) {
         throw new ForbiddenException('Access denied to this appointment');
       }
@@ -610,30 +625,131 @@ export class AppointmentsService {
       throw new BadRequestException('Appointment is already marked as done');
     }
 
-    const appointment = await this.prisma.appointment.update({
-      where: { id },
-      data: {
-        status: AppointmentStatus.DONE,
-      },
-      include: {
-        staff: {
-          include: {
-            staffProfile: true,
-          },
-        },
-        client: true,
-        service: true,
-        arrivedByUser: {
-          select: {
-            id: true,
-            email: true,
-            phone: true,
-          },
-        },
+    const { client, service, studio, upsells } = existingAppointment;
+    const baseAmount =
+      existingAppointment.prepaymentAmount ?? service.defaultPrice ?? 0;
+    const upsellsSum = upsells.reduce((s, u) => s + u.totalAmount, 0);
+    const total = baseAmount + upsellsSum;
+
+    const limitPercent = studio.globalBonusPaymentLimitPercent ?? 30;
+    const maxBonusesAllowed = Math.floor((total * limitPercent) / 100);
+    const requestedBonus = Math.max(0, dto?.bonusesUsed ?? 0);
+    const bonusesUsed = Math.min(
+      requestedBonus,
+      Math.max(0, client.bonuses),
+      maxBonusesAllowed,
+    );
+    const moneyPaid = total - bonusesUsed;
+
+    const cashbackPercent = getCashbackPercent(client.level);
+    const cashback =
+      service.bonusAccrualEnabled && moneyPaid > 0
+        ? Math.round((moneyPaid * cashbackPercent) / 100)
+        : 0;
+    const newBonuses = Math.max(0, client.bonuses - bonusesUsed + cashback);
+    const newTotalPaidForLevel = client.totalPaidForLevel + moneyPaid;
+    const newLevel = client.levelSetManually
+      ? client.level
+      : getLevelFromTotalPaid(newTotalPaidForLevel);
+
+    console.log('[markDone] Расчёт бонусов и кэшбэка', {
+      appointmentId: id,
+      clientId: client.id,
+      serviceName: service.name,
+      bonusAccrualEnabled: service.bonusAccrualEnabled,
+      math: {
+        baseAmount: `${baseAmount} ₸`,
+        upsellsSum: `${upsellsSum} ₸`,
+        total: `${total} ₸`,
+        limitPercent: `${limitPercent}%`,
+        maxBonusesAllowed,
+        requestedBonus,
+        clientBonusesBefore: client.bonuses,
+        bonusesUsed,
+        moneyPaid: `${moneyPaid} ₸`,
+        clientLevel: client.level,
+        cashbackPercent: `${cashbackPercent}%`,
+        cashbackFormula: `${moneyPaid} × ${cashbackPercent}% = ${cashback} бонусов`,
+        cashback,
+        totalPaidForLevelBefore: client.totalPaidForLevel,
+        totalPaidForLevelAdd: moneyPaid,
+        newTotalPaidForLevel,
+        levelSetManually: client.levelSetManually,
+        newLevel,
+        bonusesAfter: `${client.bonuses} - ${bonusesUsed} + ${cashback} = ${newBonuses}`,
       },
     });
 
-    // Hide client phone for MASTER role
+    const appointment = await this.prisma.$transaction(async (tx) => {
+      await tx.appointment.update({
+        where: { id },
+        data: {
+          status: AppointmentStatus.DONE,
+          completedBonusesUsed: bonusesUsed,
+          completedMoneyPaid: moneyPaid,
+        },
+      });
+
+      const updateData: {
+        bonuses: number;
+        totalPaidForLevel: number;
+        level?: string;
+      } = {
+        bonuses: newBonuses,
+        totalPaidForLevel: newTotalPaidForLevel,
+      };
+      if (!client.levelSetManually) {
+        updateData.level = newLevel;
+      }
+      await tx.client.update({
+        where: { id: client.id },
+        data: updateData,
+      });
+
+      if (bonusesUsed > 0) {
+        await tx.bonusHistoryEntry.create({
+          data: {
+            clientId: client.id,
+            studioId: studio.id,
+            amount: -bonusesUsed,
+            type: 'PAYMENT_USE',
+            appointmentId: id,
+          },
+        });
+      }
+      if (cashback > 0) {
+        await tx.bonusHistoryEntry.create({
+          data: {
+            clientId: client.id,
+            studioId: studio.id,
+            amount: cashback,
+            type: 'CASHBACK',
+            appointmentId: id,
+          },
+        });
+      }
+
+      return tx.appointment.findUniqueOrThrow({
+        where: { id },
+        include: {
+          staff: {
+            include: {
+              staffProfile: true,
+            },
+          },
+          client: true,
+          service: true,
+          arrivedByUser: {
+            select: {
+              id: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      });
+    });
+
     if (userRole === UserRole.MASTER) {
       return {
         ...appointment,

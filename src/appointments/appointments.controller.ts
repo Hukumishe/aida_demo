@@ -19,6 +19,7 @@ import {
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
+import { MarkAppointmentDoneDto } from './dto/mark-appointment-done.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
@@ -128,9 +129,10 @@ export class AppointmentsController {
   @ApiResponse({ status: 400, description: 'Bad request - appointment already done or cancelled' })
   async markDone(
     @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MarkAppointmentDoneDto,
     @CurrentUser() user?: any,
   ) {
-    return this.appointmentsService.markDone(id, user?.userId, user?.role, user?.studioId);
+    return this.appointmentsService.markDone(id, user?.userId, user?.role, user?.studioId, dto);
   }
 }
 

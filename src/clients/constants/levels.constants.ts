@@ -36,3 +36,12 @@ export function getLevelProgress(totalPaidForLevel: number, currentLevel: string
     remainingToNext: nextThreshold != null ? Math.max(0, nextThreshold - totalPaidForLevel) : null,
   };
 }
+
+/** Вычисляет уровень по сумме оплаченных деньгами (только BRONZE/SILVER/GOLD; DIAMOND вручную). */
+export function getLevelFromTotalPaid(totalPaidForLevel: number): string {
+  let level = 'BRONZE';
+  for (const l of ['SILVER', 'GOLD'] as const) {
+    if (totalPaidForLevel >= (LEVEL_THRESHOLDS[l]?.minTotalPaid ?? 0)) level = l;
+  }
+  return level;
+}
