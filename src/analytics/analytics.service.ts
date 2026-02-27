@@ -2,13 +2,17 @@ import { Injectable, ForbiddenException, BadRequestException } from '@nestjs/com
 import { PrismaService } from '../common/prisma/prisma.service';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { AppointmentStatus } from '@prisma/client';
-import { ServiceSalesQueryDto } from './dto/service-sales-query.dto';
+import { AnalyticsPeriod, ServiceSalesQueryDto } from './dto/service-sales-query.dto';
 
 @Injectable()
 export class AnalyticsService {
   constructor(private prisma: PrismaService) {}
 
-  private getDateRange(startDate?: string, endDate?: string): { start: Date; end: Date } {
+  private getDateRange(
+    startDate?: string,
+    endDate?: string,
+    period?: AnalyticsPeriod,
+  ): { start: Date; end: Date } {
     const now = new Date();
     let start: Date;
     let end: Date;
@@ -25,6 +29,31 @@ export class AnalyticsService {
       start.setUTCHours(0, 0, 0, 0);
     } else if (startDate) {
       start = new Date(startDate + 'T00:00:00.000Z');
+      end = new Date(now);
+      end.setUTCHours(23, 59, 59, 999);
+    } else if (period) {
+      // Если период задан без дат — рассчитываем диапазон как в dashboard
+      start = new Date(now);
+      switch (period) {
+        case AnalyticsPeriod.DAY:
+          start.setUTCHours(0, 0, 0, 0);
+          break;
+        case AnalyticsPeriod.WEEK:
+          start.setUTCDate(now.getUTCDate() - 7);
+          start.setUTCHours(0, 0, 0, 0);
+          break;
+        case AnalyticsPeriod.MONTH:
+          start.setUTCMonth(now.getUTCMonth() - 1);
+          start.setUTCHours(0, 0, 0, 0);
+          break;
+        case AnalyticsPeriod.YEAR:
+          start.setUTCFullYear(now.getUTCFullYear() - 1);
+          start.setUTCHours(0, 0, 0, 0);
+          break;
+        case AnalyticsPeriod.ALL:
+          start = new Date(0); // начало времён
+          break;
+      }
       end = new Date(now);
       end.setUTCHours(23, 59, 59, 999);
     } else {
@@ -68,7 +97,11 @@ export class AnalyticsService {
       }
     }
 
-    const { start, end } = this.getDateRange(query.startDate, query.endDate);
+    const { start, end } = this.getDateRange(
+      query.startDate,
+      query.endDate,
+      query.period,
+    );
 
     const where: any = {
       studioId,
