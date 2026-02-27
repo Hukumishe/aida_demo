@@ -12,6 +12,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { UploadModule } from './upload/upload.module';
 import { LoggingModule } from './logging/logging.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BlacklistModule } from './blacklist/blacklist.module';
 import { WarehouseModule } from './warehouse/warehouse.module';
@@ -35,6 +36,7 @@ import { AppController } from './app.controller';
     AppointmentsModule,
     UploadModule,
     DashboardModule,
+    AnalyticsModule,
     NotificationsModule,
     BlacklistModule,
     WarehouseModule,
