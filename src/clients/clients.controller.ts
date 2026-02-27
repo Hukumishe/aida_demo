@@ -19,6 +19,7 @@ import {
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
+import { BonusAdjustmentDto } from './dto/bonus-adjustment.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
@@ -138,6 +139,32 @@ export class ClientsController {
       user?.role,
       user?.studioId,
     );
+  }
+
+  @Get('clients/:id/bonus-history')
+  @ApiOperation({ summary: 'Get client bonus history (accruals and deductions)' })
+  @ApiResponse({ status: 200, description: 'List of bonus history entries' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Client not found' })
+  async getBonusHistory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.clientsService.getBonusHistory(id, user?.role, user?.studioId);
+  }
+
+  @Post('clients/:id/bonus-adjustment')
+  @ApiOperation({ summary: 'Manual bonus adjustment (Owner only)' })
+  @ApiResponse({ status: 201, description: 'Adjustment applied' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Client not found' })
+  @ApiResponse({ status: 400, description: 'Would result in negative balance' })
+  async bonusAdjustment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: BonusAdjustmentDto,
+    @CurrentUser() user?: any,
+  ) {
+    return this.clientsService.bonusAdjustment(id, dto, user?.userId, user?.role, user?.studioId);
   }
 }
 

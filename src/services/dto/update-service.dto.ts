@@ -26,6 +26,11 @@ export class UpdateServiceDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiProperty({ example: true, required: false, description: 'Начислять ли кэшбэк за эту услугу' })
+  @IsBoolean()
+  @IsOptional()
+  bonusAccrualEnabled?: boolean;
 }
 
 

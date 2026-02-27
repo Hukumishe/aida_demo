@@ -1,5 +1,6 @@
-import { IsString, IsOptional, IsInt, Min, Max, Matches, ValidateIf } from 'class-validator';
+import { IsString, IsOptional, IsInt, Min, Max, Matches, ValidateIf, IsEnum, IsBoolean } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { ClientLevel } from '@prisma/client';
 
 export class UpdateClientDto {
   @ApiProperty({ example: 'John', required: false })
@@ -28,6 +29,16 @@ export class UpdateClientDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @ApiProperty({ enum: ['BRONZE', 'SILVER', 'GOLD', 'DIAMOND'], required: false, description: 'Уровень клиента. DIAMOND — только вручную (Owner/Deputy).' })
+  @IsOptional()
+  @IsEnum(ClientLevel)
+  level?: ClientLevel;
+
+  @ApiProperty({ required: false, description: 'true если уровень DIAMOND назначен вручную (только Owner/Deputy)' })
+  @IsOptional()
+  @IsBoolean()
+  levelSetManually?: boolean;
 
   @ApiProperty({ example: 100, required: false, description: 'Бонусные баллы' })
   @IsInt()

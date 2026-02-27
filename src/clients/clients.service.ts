@@ -8,6 +8,8 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { getCashbackPercent, getLevelProgress } from './constants/levels.constants';
+import { ClientLevel } from '@prisma/client';
 
 @Injectable()
 export class ClientsService {
@@ -176,7 +178,13 @@ export class ClientsService {
       };
     }
 
-    return client;
+    const level = (client as any).level ?? 'BRONZE';
+    const totalPaidForLevel = (client as any).totalPaidForLevel ?? 0;
+    return {
+      ...client,
+      cashbackPercent: getCashbackPercent(level),
+      levelProgress: getLevelProgress(totalPaidForLevel, level),
+    };
   }
 
   async update(
@@ -220,6 +228,16 @@ export class ClientsService {
       if (existingClient) {
         throw new BadRequestException('Client with this phone already exists in this studio');
       }
+    }
+
+    // Только Owner и Deputy могут назначать DIAMOND вручную
+    if (updateClientDto.level === ClientLevel.DIAMOND || updateClientDto.levelSetManually === true) {
+      if (!isOwnerLevelRole(userRole)) {
+        throw new ForbiddenException('Only owner or deputy owner can assign DIAMOND level');
+      }
+    }
+    if (updateClientDto.level !== undefined && updateClientDto.level !== ClientLevel.DIAMOND) {
+      (updateClientDto as any).levelSetManually = false;
     }
 
     const data: any = { ...updateClientDto };
@@ -443,6 +461,66 @@ export class ClientsService {
       orderBy: {
         startAt: upcomingOnly ? 'asc' : 'desc',
       },
+    });
+  }
+
+  async getBonusHistory(clientId: string, userRole?: string, userStudioId?: string) {
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      select: { id: true, studioId: true },
+    });
+    if (!client) throw new NotFoundException(`Client with ID ${clientId} not found`);
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
+      if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
+        throw new ForbiddenException('Access denied to this client');
+      }
+      if (userRole === UserRole.MASTER) throw new ForbiddenException('Access denied');
+    }
+    return this.prisma.bonusHistoryEntry.findMany({
+      where: { clientId },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async bonusAdjustment(
+    clientId: string,
+    dto: { amount: number; comment?: string },
+    userId: string,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    if (userRole !== UserRole.OWNER) {
+      throw new ForbiddenException('Only owner can manually adjust bonus balance');
+    }
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      select: { id: true, studioId: true, bonuses: true },
+    });
+    if (!client) throw new NotFoundException(`Client with ID ${clientId} not found`);
+    const newBalance = client.bonuses + dto.amount;
+    if (newBalance < 0) {
+      throw new BadRequestException('Adjustment would result in negative bonus balance');
+    }
+    await this.prisma.$transaction([
+      this.prisma.client.update({
+        where: { id: clientId },
+        data: { bonuses: newBalance },
+      }),
+      this.prisma.bonusHistoryEntry.create({
+        data: {
+          clientId,
+          studioId: client.studioId,
+          amount: dto.amount,
+          type: 'MANUAL_ADJUSTMENT',
+          performedByUserId: userId,
+          comment: dto.comment ?? null,
+        },
+      }),
+    ]);
+    return this.prisma.client.findUnique({
+      where: { id: clientId },
+      select: { id: true, bonuses: true },
     });
   }
 }

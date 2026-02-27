@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateStudioDto } from './dto/create-studio.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
@@ -54,6 +54,36 @@ export class StudiosService {
     }
 
     return studio;
+  }
+
+  async getSettings(studioId: string, userRole: string, userStudioId?: string) {
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { id: true, globalBonusPaymentLimitPercent: true },
+    });
+    if (!studio) throw new NotFoundException('Studio not found');
+    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
+      throw new ForbiddenException('Access denied to this studio');
+    }
+    return { globalBonusPaymentLimitPercent: studio.globalBonusPaymentLimitPercent ?? 30 };
+  }
+
+  async updateSettings(
+    studioId: string,
+    dto: { globalBonusPaymentLimitPercent?: number },
+    userRole: string,
+  ) {
+    if (userRole !== UserRole.OWNER) {
+      throw new ForbiddenException('Only owner can change global bonus payment limit');
+    }
+    const studio = await this.prisma.studio.findUnique({ where: { id: studioId } });
+    if (!studio) throw new NotFoundException('Studio not found');
+    return this.prisma.studio.update({
+      where: { id: studioId },
+      data: {
+        globalBonusPaymentLimitPercent: dto.globalBonusPaymentLimitPercent,
+      },
+    });
   }
 }
 

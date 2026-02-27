@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Body,
+  Patch,
   Param,
   UseGuards,
   ParseUUIDPipe,
@@ -15,6 +16,7 @@ import {
 } from '@nestjs/swagger';
 import { StudiosService } from './studios.service';
 import { CreateStudioDto } from './dto/create-studio.dto';
+import { UpdateStudioSettingsDto } from './dto/update-studio-settings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
@@ -54,6 +56,30 @@ export class StudiosController {
     @CurrentUser() user: any,
   ) {
     return this.studiosService.findOne(studioId, user.role, user.studioId);
+  }
+
+  @Get(':studioId/settings')
+  @ApiOperation({ summary: 'Get studio settings (bonus limit)' })
+  @ApiResponse({ status: 200, description: 'Settings' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async getSettings(
+    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.studiosService.getSettings(studioId, user.role, user.studioId);
+  }
+
+  @Patch(':studioId/settings')
+  @Roles(UserRole.OWNER)
+  @ApiOperation({ summary: 'Update studio settings (global bonus limit, Owner only)' })
+  @ApiResponse({ status: 200, description: 'Studio updated' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async updateSettings(
+    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Body() dto: UpdateStudioSettingsDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.studiosService.updateSettings(studioId, dto, user.role);
   }
 }
 

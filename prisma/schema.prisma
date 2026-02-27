@@ -25,6 +25,13 @@ enum AppointmentStatus {
   DONE
 }
 
+enum ClientLevel {
+  BRONZE  // при регистрации, 3%
+  SILVER  // 50 000 ₸ оплачено, 5%
+  GOLD    // 120 000 ₸ оплачено, 10%
+  DIAMOND // вручную, 30%
+}
+
 enum LogLevel {
   ERROR
   WARN
@@ -70,6 +77,7 @@ model Studio {
   name      String
   address   String?
   timezone  String   @default("Asia/Almaty")
+  globalBonusPaymentLimitPercent Int @default(30) // 0–100, лимит оплаты бонусами (только Owner)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -85,6 +93,7 @@ model Studio {
   Notification          Notification[]
   blacklistRequests     BlacklistRequest[]
   warehouse             Warehouse?  // Склад филиала (один на студию)
+  bonusHistory          BonusHistoryEntry[]
 
   @@map("studios")
 }
@@ -114,6 +123,7 @@ model User {
   notifications             Notification[]
   blacklistRequests         BlacklistRequest[] // Запросы, созданные пользователем
   approvedBlacklistRequests BlacklistRequest[]     @relation("ApprovedByUser") // Запросы, одобренные пользователем
+  bonusHistoryPerformed     BonusHistoryEntry[]    @relation("BonusPerformedBy") // Ручные корректировки бонусов
   transfers                 Transfer[]
   stockMovements            StockMovement[]
 
@@ -141,25 +151,29 @@ model StaffProfile {
 }
 
 model Client {
-  id             String   @id @default(uuid())
-  studioId       String
-  firstName      String
-  lastName       String?
-  phone          String
-  notes          String?
-  birthDate      DateTime? @db.Date // День рождения клиента
-  bonuses        Int      @default(0) // Бонусные баллы
-  discount       Int      @default(0) // Скидка в процентах (0-100)
-  balance        Int      @default(0) // Баланс в тенге
-  isBlacklisted  Boolean  @default(false) // Флаг черного списка
-  blacklistReason String? // Причина добавления в черный список
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id               String     @id @default(uuid())
+  studioId         String
+  firstName        String
+  lastName         String?
+  phone            String
+  notes            String?
+  birthDate        DateTime?  @db.Date // День рождения клиента
+  level            ClientLevel @default(BRONZE)
+  levelSetManually Boolean    @default(false) // true если DIAMOND назначен вручную
+  totalPaidForLevel Int       @default(0) // Сумма оплаченных деньгами по DONE (для расчёта уровня)
+  bonuses          Int        @default(0) // Бонусные баллы (1 балл = 1 ₸)
+  discount         Int        @default(0) // Скидка в процентах (0-100)
+  balance         Int        @default(0) // Баланс в тенге (историческое поле)
+  isBlacklisted   Boolean     @default(false) // Флаг черного списка
+  blacklistReason String?     // Причина добавления в черный список
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   studio            Studio             @relation(fields: [studioId], references: [id], onDelete: Cascade)
   appointments      Appointment[]
   noShowIncomes     NoShowIncome[]
   blacklistRequests BlacklistRequest[]
+  bonusHistory      BonusHistoryEntry[]
 
   @@unique([studioId, phone])
   @@index([studioId])
@@ -214,6 +228,7 @@ model Service {
   defaultPrice       Int?
   requiredStaffCount Int      @default(1)
   isActive           Boolean  @default(true)
+  bonusAccrualEnabled Boolean @default(true) // Начислять ли кэшбэк за эту услугу
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -277,6 +292,8 @@ model Appointment {
   status                    AppointmentStatus @default(BOOKED)
   prepaymentAmount          Int?
   forfeitedPrepaymentAmount Int? // Предоплата, сгоревшая при поздней отмене
+  completedBonusesUsed      Int? // Сколько бонусов списано при завершении (DONE)
+  completedMoneyPaid        Int? // Сумма, оплаченная деньгами при DONE (для уровня и кэшбэка)
   arrivedAt                 DateTime?
   arrivedByUserId           String?
   createdAt                 DateTime          @default(now())
@@ -407,6 +424,27 @@ model BlacklistRequest {
   @@index([requestedByUserId])
   @@index([studioId, status])
   @@map("blacklist_requests")
+}
+
+model BonusHistoryEntry {
+  id              String   @id @default(uuid())
+  clientId        String
+  studioId        String
+  amount          Int     // положительное — начисление, отрицательное — списание
+  type            String  // CASHBACK | PAYMENT_USE | MANUAL_ADJUSTMENT
+  appointmentId   String?  // если начисление/списание по записи
+  performedByUserId String? // кто сделал ручную корректировку
+  comment         String?
+  createdAt       DateTime @default(now())
+
+  client    Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  studio    Studio  @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  performedBy User? @relation("BonusPerformedBy", fields: [performedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([studioId])
+  @@index([createdAt])
+  @@map("bonus_history")
 }
 
 // --- Склад ---
