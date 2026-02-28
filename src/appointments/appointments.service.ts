@@ -652,32 +652,40 @@ export class AppointmentsService {
       ? client.level
       : getLevelFromTotalPaid(newTotalPaidForLevel);
 
-    // Реферальная программа: при первом визите с кодом — 10% пригласившему, 20% новому клиенту
+    // Реферальная программа: только на первую запись в системе; 10% пригласившему, 20% новому клиенту
     let referrer: { id: string; bonuses: number } | null = null;
     let referrerBonus = 0;
     let newClientReferralBonus = 0;
     const referralCodeRaw = dto?.referralCode?.trim();
-    if (
-      referralCodeRaw &&
-      !(client as any).referralFirstVisitBonusCredited &&
-      moneyPaid > 0
-    ) {
-      const ref = await this.prisma.client.findUnique({
-        where: {
-          studioId_referralCode: {
-            studioId: studio.id,
-            referralCode: referralCodeRaw.toUpperCase(),
-          },
-        },
-        select: { id: true, bonuses: true },
+    if (referralCodeRaw && moneyPaid > 0) {
+      const clientAppointmentsCount = await this.prisma.appointment.count({
+        where: { clientId: client.id },
       });
-      if (ref && ref.id !== client.id) {
-        referrer = ref;
-        referrerBonus = Math.round((moneyPaid * 10) / 100);
-        newClientReferralBonus = Math.round((moneyPaid * 20) / 100);
-        newBonuses += newClientReferralBonus;
-      } else if (referralCodeRaw) {
-        throw new BadRequestException('Неверный реферальный код или нельзя использовать свой код');
+      if (clientAppointmentsCount > 1) {
+        throw new BadRequestException(
+          'Реферальный код можно использовать только при первой записи в системе',
+        );
+      }
+      if (!(client as any).referralFirstVisitBonusCredited) {
+        const ref = await this.prisma.client.findUnique({
+          where: {
+            studioId_referralCode: {
+              studioId: studio.id,
+              referralCode: referralCodeRaw.toUpperCase(),
+            },
+          },
+          select: { id: true, bonuses: true },
+        });
+        if (ref && ref.id !== client.id) {
+          referrer = ref;
+          referrerBonus = Math.round((moneyPaid * 10) / 100);
+          newClientReferralBonus = Math.round((moneyPaid * 20) / 100);
+          newBonuses += newClientReferralBonus;
+        } else {
+          throw new BadRequestException(
+            'Неверный реферальный код или нельзя использовать свой код',
+          );
+        }
       }
     }
 
