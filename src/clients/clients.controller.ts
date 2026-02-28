@@ -56,6 +56,17 @@ export class ClientsController {
     return this.clientsService.getClientSegments(studioId, user?.role, user?.studioId);
   }
 
+  @Get('studios/:studioId/clients/referred')
+  @ApiOperation({ summary: 'List referred clients (for dashboard table)' })
+  @ApiResponse({ status: 200, description: 'List of clients who were referred, with referrer info' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async getReferredClients(
+    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.clientsService.getReferredClients(studioId, user?.role, user?.studioId);
+  }
+
   @Post('studios/:studioId/clients')
   @ApiOperation({ summary: 'Create a new client' })
   @ApiResponse({ status: 201, description: 'Client created' })

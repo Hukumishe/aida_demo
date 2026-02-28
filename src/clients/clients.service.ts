@@ -100,6 +100,58 @@ export class ClientsService {
     });
   }
 
+  /**
+   * Список приведённых клиентов по студии (кто кем привлечён) — для таблицы на дэшборде.
+   */
+  async getReferredClients(
+    studioId: string,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
+      if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
+      if (userRole === UserRole.MASTER) {
+        throw new ForbiddenException('Masters cannot access referred clients list');
+      }
+    }
+
+    const clients = await this.prisma.client.findMany({
+      where: {
+        studioId,
+        referredByClientId: { not: null },
+      },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        referredByClientId: true,
+        referredByClient: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            referralCode: true,
+          },
+        },
+      },
+    });
+
+    return clients.map((c) => ({
+      clientId: c.id,
+      clientFirstName: c.firstName,
+      clientLastName: c.lastName,
+      clientPhone: c.phone,
+      referrerId: c.referredByClientId,
+      referrerFirstName: c.referredByClient?.firstName ?? '',
+      referrerLastName: c.referredByClient?.lastName ?? '',
+      referrerCode: c.referredByClient?.referralCode ?? '',
+    }));
+  }
+
   async create(
     studioId: string,
     createClientDto: CreateClientDto,
