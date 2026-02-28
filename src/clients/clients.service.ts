@@ -176,6 +176,9 @@ export class ClientsService {
             name: true,
           },
         },
+        _count: {
+          select: { referredClients: true },
+        },
       },
     });
 
@@ -206,17 +209,22 @@ export class ClientsService {
     }
 
     // Hide phone for MASTER (though they shouldn't access this endpoint)
+    const referredCount = (client as any)._count?.referredClients ?? 0;
     if (userRole === UserRole.MASTER) {
+      const { _count, ...rest } = client as any;
       return {
-        ...client,
+        ...rest,
+        referredCount,
         phone: undefined,
       };
     }
 
     const level = (client as any).level ?? 'BRONZE';
     const totalPaidForLevel = (client as any).totalPaidForLevel ?? 0;
+    const { _count, ...clientData } = client as any;
     return {
-      ...client,
+      ...clientData,
+      referredCount,
       cashbackPercent: getCashbackPercent(level),
       levelProgress: getLevelProgress(totalPaidForLevel, level),
     };

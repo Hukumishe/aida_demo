@@ -118,11 +118,10 @@ export class WarehouseService {
       where: { id: warehouseId },
     });
     if (!warehouse) throw new NotFoundException('Warehouse not found');
-    if (warehouse.type === WarehouseType.CENTRAL) {
-      this.ensureCentralAccess(userRole);
-    } else {
-      this.ensureBranchAccess(warehouse.studioId!, userRole, userStudioId);
+    if (warehouse.type === WarehouseType.BRANCH) {
+      throw new ForbiddenException('Добавлять товары можно только на основном складе');
     }
+    this.ensureCentralAccess(userRole);
 
     const product = await this.prisma.product.create({
       data: {
@@ -319,10 +318,21 @@ export class WarehouseService {
     userStudioId?: string,
     userId?: string,
   ) {
-    this.ensureBranchAccess(studioId, userRole, userStudioId);
+    throw new ForbiddenException('Приход возможен только на основном складе');
+  }
+
+  /**
+   * Приход товара на основной (центральный) склад. Только Owner/Deputy.
+   */
+  async receiptAtCentral(
+    dto: CreateReceiptDto,
+    userRole?: string,
+    userId?: string,
+  ) {
+    this.ensureCentralAccess(userRole);
     if (!userId) throw new ForbiddenException('User required');
 
-    const warehouse = await this.getOrCreateBranchWarehouse(studioId);
+    const warehouse = await this.getOrCreateCentralWarehouse();
     const product = await this.prisma.product.findUnique({
       where: { id: dto.productId },
     });

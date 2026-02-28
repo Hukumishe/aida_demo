@@ -129,6 +129,22 @@ export class WarehouseController {
     );
   }
 
+  @Post('warehouse/central/receipt')
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @ApiOperation({ summary: 'Record receipt (приход) on central warehouse only' })
+  @ApiResponse({ status: 201 })
+  @ApiResponse({ status: 404 })
+  receiptCentral(
+    @Body() dto: CreateReceiptDto,
+    @CurrentUser() user?: any,
+  ) {
+    return this.warehouseService.receiptAtCentral(
+      dto,
+      user?.role,
+      user?.userId,
+    );
+  }
+
   // ---------- Склад филиала ----------
   @Get('studios/:studioId/warehouse')
   @UseGuards(StudioAccessGuard)
