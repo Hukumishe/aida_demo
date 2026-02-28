@@ -14,10 +14,30 @@ import {
   getLevelFromTotalPaid,
 } from './constants/levels.constants';
 import { ClientLevel } from '@prisma/client';
+import * as crypto from 'crypto';
+
+const REFERRAL_CODE_LENGTH = 6;
+const REFERRAL_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 @Injectable()
 export class ClientsService {
   constructor(private prisma: PrismaService) {}
+
+  /** Генерирует уникальный реферальный код в рамках студии. */
+  private async generateReferralCode(studioId: string): Promise<string> {
+    for (let attempt = 0; attempt < 50; attempt++) {
+      let code = '';
+      const bytes = crypto.randomBytes(REFERRAL_CODE_LENGTH);
+      for (let i = 0; i < REFERRAL_CODE_LENGTH; i++) {
+        code += REFERRAL_CODE_CHARS[bytes[i]! % REFERRAL_CODE_CHARS.length];
+      }
+      const existing = await this.prisma.client.findUnique({
+        where: { studioId_referralCode: { studioId, referralCode: code } },
+      });
+      if (!existing) return code;
+    }
+    throw new BadRequestException('Could not generate unique referral code');
+  }
 
   async findAll(studioId: string, query?: string, userRole?: string, userStudioId?: string) {
     // Check access
@@ -121,6 +141,7 @@ export class ClientsService {
       throw new BadRequestException('Client with this phone already exists in this studio');
     }
 
+    const referralCode = await this.generateReferralCode(studioId);
     try {
       return await this.prisma.client.create({
         data: {
@@ -133,6 +154,7 @@ export class ClientsService {
           bonuses: createClientDto.bonuses ?? 0,
           discount: createClientDto.discount ?? 0,
           balance: createClientDto.balance ?? 0,
+          referralCode,
         },
       });
     } catch (error: any) {
@@ -172,6 +194,15 @@ export class ClientsService {
       if (userRole === UserRole.MASTER) {
         throw new ForbiddenException('Masters cannot access client details');
       }
+    }
+
+    // Для старых клиентов без реферального кода — сгенерировать при первом чтении
+    if (!client.referralCode) {
+      client.referralCode = await this.generateReferralCode(client.studioId);
+      await this.prisma.client.update({
+        where: { id: client.id },
+        data: { referralCode: client.referralCode },
+      });
     }
 
     // Hide phone for MASTER (though they shouldn't access this endpoint)

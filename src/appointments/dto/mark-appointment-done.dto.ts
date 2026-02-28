@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min } from 'class-validator';
+import { IsOptional, IsInt, Min, IsString, MaxLength } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -13,6 +13,16 @@ export class MarkAppointmentDoneDto {
   @IsInt()
   @Min(0)
   bonusesUsed?: number;
+
+  @ApiPropertyOptional({
+    description: 'Реферальный код «приведи подругу»: при первом визите новому клиенту начисляется 20% от чека бонусами, пригласившему — 10%',
+    example: 'ABC123',
+    maxLength: 20,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  referralCode?: string;
 
   /** Игнорируется: бэкенд считает сам. Разрешено только чтобы не падала валидация при лишних полях от фронта. */
   @IsOptional()

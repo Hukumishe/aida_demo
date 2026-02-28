@@ -646,11 +646,40 @@ export class AppointmentsService {
       service.bonusAccrualEnabled && moneyPaid > 0
         ? Math.round((moneyPaid * cashbackPercent) / 100)
         : 0;
-    const newBonuses = Math.max(0, client.bonuses - bonusesUsed + cashback);
+    let newBonuses = Math.max(0, client.bonuses - bonusesUsed + cashback);
     const newTotalPaidForLevel = client.totalPaidForLevel + moneyPaid;
     const newLevel = client.levelSetManually
       ? client.level
       : getLevelFromTotalPaid(newTotalPaidForLevel);
+
+    // Реферальная программа: при первом визите с кодом — 10% пригласившему, 20% новому клиенту
+    let referrer: { id: string; bonuses: number } | null = null;
+    let referrerBonus = 0;
+    let newClientReferralBonus = 0;
+    const referralCodeRaw = dto?.referralCode?.trim();
+    if (
+      referralCodeRaw &&
+      !(client as any).referralFirstVisitBonusCredited &&
+      moneyPaid > 0
+    ) {
+      const ref = await this.prisma.client.findUnique({
+        where: {
+          studioId_referralCode: {
+            studioId: studio.id,
+            referralCode: referralCodeRaw.toUpperCase(),
+          },
+        },
+        select: { id: true, bonuses: true },
+      });
+      if (ref && ref.id !== client.id) {
+        referrer = ref;
+        referrerBonus = Math.round((moneyPaid * 10) / 100);
+        newClientReferralBonus = Math.round((moneyPaid * 20) / 100);
+        newBonuses += newClientReferralBonus;
+      } else if (referralCodeRaw) {
+        throw new BadRequestException('Неверный реферальный код или нельзя использовать свой код');
+      }
+    }
 
     console.log('[markDone] Расчёт бонусов и кэшбэка', {
       appointmentId: id,
@@ -694,6 +723,8 @@ export class AppointmentsService {
         bonuses: number;
         totalPaidForLevel: number;
         level?: ClientLevel;
+        referredByClientId?: string;
+        referralFirstVisitBonusCredited?: boolean;
       } = {
         bonuses: newBonuses,
         totalPaidForLevel: newTotalPaidForLevel,
@@ -701,10 +732,41 @@ export class AppointmentsService {
       if (!client.levelSetManually) {
         updateData.level = newLevel as ClientLevel;
       }
+      if (referrer) {
+        updateData.referredByClientId = referrer.id;
+        updateData.referralFirstVisitBonusCredited = true;
+      }
       await tx.client.update({
         where: { id: client.id },
         data: updateData,
       });
+
+      if (referrer) {
+        await tx.client.update({
+          where: { id: referrer.id },
+          data: { bonuses: referrer.bonuses + referrerBonus },
+        });
+        await tx.bonusHistoryEntry.create({
+          data: {
+            clientId: referrer.id,
+            studioId: studio.id,
+            amount: referrerBonus,
+            type: 'REFERRAL_REFERRER',
+            appointmentId: id,
+            comment: '10% от чека приведённой подруги',
+          },
+        });
+        await tx.bonusHistoryEntry.create({
+          data: {
+            clientId: client.id,
+            studioId: studio.id,
+            amount: newClientReferralBonus,
+            type: 'REFERRAL_NEW_CLIENT',
+            appointmentId: id,
+            comment: '20% за первый визит по реферальному коду',
+          },
+        });
+      }
 
       if (bonusesUsed > 0) {
         await tx.bonusHistoryEntry.create({
