@@ -8,7 +8,11 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
-import { getCashbackPercent, getLevelProgress } from './constants/levels.constants';
+import {
+  getCashbackPercent,
+  getLevelProgress,
+  getLevelFromTotalPaid,
+} from './constants/levels.constants';
 import { ClientLevel } from '@prisma/client';
 
 @Injectable()
@@ -230,17 +234,33 @@ export class ClientsService {
       }
     }
 
-    // Только Owner и Deputy могут назначать DIAMOND вручную
-    if (updateClientDto.level === ClientLevel.DIAMOND || updateClientDto.levelSetManually === true) {
+    // Только Owner и Deputy могут назначать или снимать DIAMOND
+    const assigningDiamond =
+      updateClientDto.level === ClientLevel.DIAMOND || updateClientDto.levelSetManually === true;
+    const removingDiamond =
+      (client as any).level === ClientLevel.DIAMOND &&
+      (updateClientDto.levelSetManually === false ||
+        (updateClientDto.level !== undefined && updateClientDto.level !== ClientLevel.DIAMOND));
+    if (assigningDiamond || removingDiamond) {
       if (!isOwnerLevelRole(userRole)) {
-        throw new ForbiddenException('Only owner or deputy owner can assign DIAMOND level');
+        throw new ForbiddenException('Only owner or deputy owner can assign or remove DIAMOND level');
       }
     }
+
     if (updateClientDto.level !== undefined && updateClientDto.level !== ClientLevel.DIAMOND) {
       (updateClientDto as any).levelSetManually = false;
     }
 
+    // Снять DIAMOND: передали levelSetManually: false — пересчитать уровень по totalPaidForLevel
     const data: any = { ...updateClientDto };
+    if (
+      updateClientDto.levelSetManually === false &&
+      (client as any).level === ClientLevel.DIAMOND &&
+      updateClientDto.level === undefined
+    ) {
+      const totalPaid = (client as any).totalPaidForLevel ?? 0;
+      data.level = getLevelFromTotalPaid(totalPaid);
+    }
     if (data.birthDate !== undefined) {
       data.birthDate = data.birthDate ? new Date(data.birthDate) : null;
     }
