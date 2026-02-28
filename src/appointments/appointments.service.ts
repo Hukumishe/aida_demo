@@ -141,8 +141,8 @@ export class AppointmentsService {
       where: { id: createAppointmentDto.clientId },
     });
 
-    if (!client || client.studioId !== studioId) {
-      throw new NotFoundException('Client not found or does not belong to this studio');
+    if (!client) {
+      throw new NotFoundException('Client not found');
     }
     if (client.isBlacklisted) {
       throw new BadRequestException('Cannot create appointment for a blacklisted client');
@@ -667,15 +667,10 @@ export class AppointmentsService {
         );
       }
       if (!(client as any).referralFirstVisitBonusCredited) {
-        const ref = await this.prisma.client.findUnique({
-          where: {
-            studioId_referralCode: {
-              studioId: studio.id,
-              referralCode: referralCodeRaw.toUpperCase(),
-            },
-          },
-          select: { id: true, bonuses: true },
-        });
+      const ref = await this.prisma.client.findUnique({
+        where: { referralCode: referralCodeRaw.toUpperCase() },
+        select: { id: true, bonuses: true },
+      });
         if (ref && ref.id !== client.id) {
           referrer = ref;
           referrerBonus = Math.round((moneyPaid * 10) / 100);

@@ -23,8 +23,8 @@ const REFERRAL_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export class ClientsService {
   constructor(private prisma: PrismaService) {}
 
-  /** Генерирует уникальный реферальный код в рамках студии. */
-  private async generateReferralCode(studioId: string): Promise<string> {
+  /** Генерирует уникальный реферальный код (общая база клиентов). */
+  private async generateReferralCode(): Promise<string> {
     for (let attempt = 0; attempt < 50; attempt++) {
       let code = '';
       const bytes = crypto.randomBytes(REFERRAL_CODE_LENGTH);
@@ -32,7 +32,7 @@ export class ClientsService {
         code += REFERRAL_CODE_CHARS[bytes[i]! % REFERRAL_CODE_CHARS.length];
       }
       const existing = await this.prisma.client.findUnique({
-        where: { studioId_referralCode: { studioId, referralCode: code } },
+        where: { referralCode: code },
       });
       if (!existing) return code;
     }
@@ -53,7 +53,7 @@ export class ClientsService {
       }
     }
 
-    const where: any = { studioId, isBlacklisted: false };
+    const where: any = { isBlacklisted: false };
 
     if (query) {
       where.OR = [
@@ -120,7 +120,6 @@ export class ClientsService {
 
     const clients = await this.prisma.client.findMany({
       where: {
-        studioId,
         referredByClientId: { not: null },
       },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
@@ -173,7 +172,6 @@ export class ClientsService {
 
     const clients = await this.prisma.client.findMany({
       where: {
-        studioId,
         referredClients: { some: {} },
       },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
@@ -216,33 +214,19 @@ export class ClientsService {
       }
     }
 
-    // Verify studio exists
-    const studio = await this.prisma.studio.findUnique({
-      where: { id: studioId },
-    });
-    if (!studio) {
-      throw new NotFoundException(`Studio with ID ${studioId} not found`);
-    }
-
-    // Check phone uniqueness within studio
+    // Check phone uniqueness globally (одна база клиентов на все салоны)
     const existingClient = await this.prisma.client.findUnique({
-      where: {
-        studioId_phone: {
-          studioId,
-          phone: createClientDto.phone,
-        },
-      },
+      where: { phone: createClientDto.phone },
     });
 
     if (existingClient) {
-      throw new BadRequestException('Client with this phone already exists in this studio');
+      throw new BadRequestException('Клиент с таким номером телефона уже существует');
     }
 
-    const referralCode = await this.generateReferralCode(studioId);
+    const referralCode = await this.generateReferralCode();
     try {
       return await this.prisma.client.create({
         data: {
-          studioId,
           firstName: createClientDto.firstName,
           lastName: createClientDto.lastName,
           phone: createClientDto.phone,
@@ -255,9 +239,8 @@ export class ClientsService {
         },
       });
     } catch (error: any) {
-      // Handle Prisma unique constraint errors
       if (error.code === 'P2002') {
-        throw new BadRequestException('Client with this phone already exists in this studio');
+        throw new BadRequestException('Клиент с таким номером телефона уже существует');
       }
       throw error;
     }
@@ -267,12 +250,6 @@ export class ClientsService {
     const client = await this.prisma.client.findUnique({
       where: { id },
       include: {
-        studio: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
         _count: {
           select: { referredClients: true },
         },
@@ -283,14 +260,11 @@ export class ClientsService {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
 
-    // Check access
-    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    // Check access (клиенты общие для всех салонов; ADMIN/MASTER как раньше)
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      // ADMIN can only access clients from their own studio
-      if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
+      if (userRole === UserRole.ADMIN && !userStudioId) {
         throw new ForbiddenException('Access denied to this client');
       }
-      // MASTER cannot access client details (phone is hidden in appointments)
       if (userRole === UserRole.MASTER) {
         throw new ForbiddenException('Masters cannot access client details');
       }
@@ -298,7 +272,7 @@ export class ClientsService {
 
     // Для старых клиентов без реферального кода — сгенерировать при первом чтении
     if (!client.referralCode) {
-      client.referralCode = await this.generateReferralCode(client.studioId);
+      client.referralCode = await this.generateReferralCode();
       await this.prisma.client.update({
         where: { id: client.id },
         data: { referralCode: client.referralCode },
@@ -374,32 +348,23 @@ export class ClientsService {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
 
-    // Check access
-    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    // Check access (клиенты общие для всех салонов)
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      // ADMIN can only update clients from their own studio
-      if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
+      if (userRole === UserRole.ADMIN && !userStudioId) {
         throw new ForbiddenException('Access denied to this client');
       }
-      // MASTER cannot update clients
       if (userRole === UserRole.MASTER) {
         throw new ForbiddenException('Masters cannot update clients');
       }
     }
 
-    // Check phone uniqueness if phone is being updated
+    // Check phone uniqueness globally if phone is being updated
     if (updateClientDto.phone && updateClientDto.phone !== client.phone) {
       const existingClient = await this.prisma.client.findUnique({
-        where: {
-          studioId_phone: {
-            studioId: client.studioId,
-            phone: updateClientDto.phone,
-          },
-        },
+        where: { phone: updateClientDto.phone },
       });
-
       if (existingClient) {
-        throw new BadRequestException('Client with this phone already exists in this studio');
+        throw new BadRequestException('Клиент с таким номером телефона уже существует');
       }
     }
 
@@ -466,7 +431,7 @@ export class ClientsService {
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
     const clients = await this.prisma.client.findMany({
-      where: { studioId, isBlacklisted: false },
+      where: { isBlacklisted: false },
       select: { id: true, createdAt: true },
     });
     const clientIds = clients.map((c) => c.id);
@@ -479,13 +444,14 @@ export class ClientsService {
       };
     }
 
-    const lastAppointmentByClient = await this.prisma.appointment.groupBy({
+    // Последний визит в эту студию (клиенты общие, сегменты считаем по студии)
+    const lastAppointmentByClientAtStudio = await this.prisma.appointment.groupBy({
       by: ['clientId'],
-      where: { clientId: { in: clientIds } },
+      where: { clientId: { in: clientIds }, studioId },
       _max: { startAt: true },
     });
     const lastByClient = new Map(
-      lastAppointmentByClient.map((r) => [r.clientId, r._max.startAt]),
+      lastAppointmentByClientAtStudio.map((r) => [r.clientId, r._max.startAt]),
     );
 
     let newCount = 0;
@@ -494,17 +460,16 @@ export class ClientsService {
     let missing = 0;
 
     for (const c of clients) {
-      const lastAt = lastByClient.get(c.id);
+      const lastAtThisStudio = lastByClient.get(c.id);
       const createdInLastWeek = c.createdAt >= sevenDaysAgo;
 
-      if (!lastAt) {
-        if (createdInLastWeek) newCount++;
-        else neverVisited++;
+      if (!lastAtThisStudio) {
+        neverVisited++;
         continue;
       }
-      if (lastAt < sixMonthsAgo) missing++;
-      else if (lastAt < threeMonthsAgo) sleeping++;
-      else if (createdInLastWeek) newCount++;
+      if (lastAtThisStudio < sixMonthsAgo) missing++;
+      else if (lastAtThisStudio < threeMonthsAgo) sleeping++;
+      else if (lastAtThisStudio >= sevenDaysAgo) newCount++;
     }
 
     return {
@@ -524,16 +489,13 @@ export class ClientsService {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
 
-    // Check access
-    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    // Check access (клиенты общие для всех салонов)
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      // ADMIN can only update clients from their own studio
-      if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
+      if (userRole === UserRole.ADMIN && !userStudioId) {
         throw new ForbiddenException('Access denied to this client');
       }
-      // MASTER cannot update clients
       if (userRole === UserRole.MASTER) {
-        throw new ForbiddenException('Masters cannot update clients');
+        throw new ForbiddenException('Masters cannot access client details');
       }
     }
 
@@ -603,14 +565,11 @@ export class ClientsService {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
 
-    // Check access
-    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
+    // Check access (клиенты общие для всех салонов)
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      // ADMIN can only update clients from their own studio
-      if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
+      if (userRole === UserRole.ADMIN && !userStudioId) {
         throw new ForbiddenException('Access denied to this client');
       }
-      // MASTER cannot update clients
       if (userRole === UserRole.MASTER) {
         throw new ForbiddenException('Masters cannot update clients');
       }
@@ -656,11 +615,11 @@ export class ClientsService {
   async getBonusHistory(clientId: string, userRole?: string, userStudioId?: string) {
     const client = await this.prisma.client.findUnique({
       where: { id: clientId },
-      select: { id: true, studioId: true },
+      select: { id: true },
     });
     if (!client) throw new NotFoundException(`Client with ID ${clientId} not found`);
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      if (userRole === UserRole.ADMIN && userStudioId !== client.studioId) {
+      if (userRole === UserRole.ADMIN && !userStudioId) {
         throw new ForbiddenException('Access denied to this client');
       }
       if (userRole === UserRole.MASTER) throw new ForbiddenException('Access denied');
@@ -684,12 +643,18 @@ export class ClientsService {
     }
     const client = await this.prisma.client.findUnique({
       where: { id: clientId },
-      select: { id: true, studioId: true, bonuses: true },
+      select: { id: true, bonuses: true },
     });
     if (!client) throw new NotFoundException(`Client with ID ${clientId} not found`);
     const newBalance = client.bonuses + dto.amount;
     if (newBalance < 0) {
       throw new BadRequestException('Adjustment would result in negative bonus balance');
+    }
+    const studioId =
+      userStudioId ??
+      (await this.prisma.studio.findFirst({ select: { id: true } }))?.id;
+    if (!studioId) {
+      throw new BadRequestException('No studio context for bonus history');
     }
     await this.prisma.$transaction([
       this.prisma.client.update({
@@ -699,7 +664,7 @@ export class ClientsService {
       this.prisma.bonusHistoryEntry.create({
         data: {
           clientId,
-          studioId: client.studioId,
+          studioId,
           amount: dto.amount,
           type: 'MANUAL_ADJUSTMENT',
           performedByUserId: userId,

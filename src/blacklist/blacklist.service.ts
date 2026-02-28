@@ -39,23 +39,17 @@ export class BlacklistService {
       throw new ForbiddenException('Only managers, admins, owners and deputy owners can create blacklist requests');
     }
 
-    // Найти клиента
     const client = await this.prisma.client.findUnique({
       where: { id: clientId },
-      include: {
-        studio: true,
-      },
     });
 
     if (!client) {
       throw new NotFoundException('Client not found');
     }
 
-    // Проверка доступа к студии
-    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      if (userStudioId !== client.studioId) {
-        throw new ForbiddenException('Access denied to this studio');
-      }
+    // Клиенты общие; для ADMIN нужен контекст студии
+    if (userRole === UserRole.ADMIN && !userStudioId) {
+      throw new ForbiddenException('Access denied');
     }
 
     // Проверить, не находится ли клиент уже в черном списке
@@ -99,10 +93,14 @@ export class BlacklistService {
       ? `${requestedBy.staffProfile.firstName} ${requestedBy.staffProfile.lastName || ''}`.trim()
       : requestedBy?.email || requestedBy?.phone || 'Неизвестный';
 
-    // Создать запрос
+    const requestStudioId = userStudioId ?? (await this.prisma.studio.findFirst({ select: { id: true } }))?.id;
+    if (!requestStudioId) {
+      throw new BadRequestException('No studio context for blacklist request');
+    }
+
     const request = await this.prisma.blacklistRequest.create({
       data: {
-        studioId: client.studioId,
+        studioId: requestStudioId,
         clientId,
         requestedByUserId: userId,
         reason: createDto.reason,
@@ -152,10 +150,9 @@ export class BlacklistService {
       return updatedRequest;
     }
 
-    // Для MANAGER и ADMIN - создать уведомления для владельцев
     const clientName = `${client.firstName} ${client.lastName || ''}`.trim();
     await this.notificationsService.createBlacklistRequestNotification(
-      client.studioId,
+      requestStudioId,
       request.id,
       clientName,
       requestedByName,
@@ -180,12 +177,8 @@ export class BlacklistService {
       throw new ForbiddenException('Only owners and deputy owners can add clients to blacklist directly');
     }
 
-    // Найти клиента
     const client = await this.prisma.client.findUnique({
       where: { id: clientId },
-      include: {
-        studio: true,
-      },
     });
 
     if (!client) {
@@ -399,13 +392,8 @@ export class BlacklistService {
     }
 
     return this.prisma.client.findMany({
-      where: {
-        studioId,
-        isBlacklisted: true,
-      },
-      orderBy: {
-        updatedAt: 'desc',
-      },
+      where: { isBlacklisted: true },
+      orderBy: { updatedAt: 'desc' },
     });
   }
 

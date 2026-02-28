@@ -82,7 +82,6 @@ model Studio {
   updatedAt DateTime @updatedAt
 
   users                 User[]
-  clients               Client[]
   workSchedules         WorkScheduleDay[]
   busySlots             BusySlot[]
   services              Service[]
@@ -152,7 +151,6 @@ model StaffProfile {
 
 model Client {
   id               String     @id @default(uuid())
-  studioId         String
   firstName        String
   lastName         String?
   phone            String
@@ -166,13 +164,12 @@ model Client {
   balance         Int        @default(0) // Баланс в тенге (историческое поле)
   isBlacklisted   Boolean     @default(false) // Флаг черного списка
   blacklistReason String?     // Причина добавления в черный список
-  referralCode    String?     // Уникальный код «приведи подругу» (в рамках студии)
+  referralCode    String?     // Уникальный код «приведи подругу» (общая база)
   referredByClientId String?  // Кто привёл этого клиента (заполняется при первом визите с кодом)
   referralFirstVisitBonusCredited Boolean @default(false) // 20% за первый визит уже начислены
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  studio            Studio             @relation(fields: [studioId], references: [id], onDelete: Cascade)
   referredByClient  Client?            @relation("Referrer", fields: [referredByClientId], references: [id], onDelete: SetNull)
   referredClients   Client[]           @relation("Referrer")
   appointments      Appointment[]
@@ -180,10 +177,9 @@ model Client {
   blacklistRequests BlacklistRequest[]
   bonusHistory      BonusHistoryEntry[]
 
-  @@unique([studioId, phone])
-  @@unique([studioId, referralCode])
-  @@index([studioId])
-  @@index([studioId, isBlacklisted])
+  @@unique([phone])
+  @@unique([referralCode])
+  @@index([isBlacklisted])
   @@map("clients")
 }
 
