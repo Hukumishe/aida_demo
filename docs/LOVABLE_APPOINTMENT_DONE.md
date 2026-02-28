@@ -17,6 +17,12 @@
 **Параметры:**
 - `id` (path) - ID записи
 
+**Тело запроса (JSON, опционально):**
+```json
+{ "bonusesUsed": 0 }
+```
+- `bonusesUsed` (number, необязательно) — сколько бонусов клиент списал при оплате этого визита. Бэкенд сам посчитает сумму к оплате деньгами и начислит кэшбэк. Если не передать — считается 0.
+
 **Ответ:**
 ```json
 {
@@ -91,6 +97,31 @@
 └─────────────────────────────────┘
 ```
 
+### Модальное окно «Завершить запись»
+
+При нажатии на кнопку **«Завершить»** должно открываться модальное окно **«Завершить запись»**, а не сразу отправляться запрос на сервер.
+
+**Содержимое модалки:**
+
+1. **Заголовок:** «Завершить запись», кнопка закрытия (×).
+2. **Услуга:** название и цена (например: «Шугаринг подмышки 1к — 1000 ₸»). Сумма визита = цена услуги + апселлы (если есть).
+3. **Ползунок «Использовать бонусы»:**
+   - Подпись: «Использовать бонусы» (или «Списано бонусов (₸)»).
+   - Ползунок (slider) от 0 до максимума. Максимум = минимум из:
+     - баланс бонусов клиента (`client.bonuses`);
+     - лимит по студии: не более X% от суммы визита (настройка студии `globalBonusPaymentLimitPercent`, по умолчанию 30%). То есть макс. бонусов = `Math.floor(суммаВизита * globalBonusPaymentLimitPercent / 100)`.
+   - При движении ползунка обновлять поле «Списано бонусов» и **итоговый чек**.
+4. **Итоговый чек (обязательно показывать):**
+   - Строка: **«Итого к оплате: X ₸»** — сумма, которую клиент платит деньгами после списания бонусов.  
+     Формула: **Итого к оплате = сумма визита − списано бонусов** (не меньше 0).
+   - Можно дополнительно показать: сумма визита, минус бонусы, равно итого к оплате.
+
+**Кнопки в модалке:** «Отмена» (закрыть) и «Завершить» (отправить на сервер).
+
+**При нажатии «Завершить»:** отправить `POST /appointments/:id/done` с телом `{ "bonusesUsed": <значение ползунка> }`. После успешного ответа закрыть модалку, обновить запись и при необходимости обновить данные клиента (GET /clients/:clientId), чтобы обновились бонусы и уровень лояльности.
+
+**Данные для модалки:** сумма визита (из записи: услуга + апселлы), баланс бонусов клиента и лимит % — из GET /clients/:id и GET /studios/:id/settings (или из уже загруженных данных записи/клиента/студии).
+
 ---
 
 ## 📝 Примеры кода
@@ -98,7 +129,7 @@
 ### Обработка завершения записи
 
 ```typescript
-async function markAppointmentAsDone(appointmentId: string) {
+async function markAppointmentAsDone(appointmentId: string, bonusesUsed: number = 0) {
   try {
     const response = await fetch(`/api/appointments/${appointmentId}/done`, {
       method: 'POST',
@@ -106,6 +137,7 @@ async function markAppointmentAsDone(appointmentId: string) {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ bonusesUsed }),
     });
 
     if (!response.ok) {
@@ -132,14 +164,10 @@ function AppointmentDetailsModal({ appointment, onClose, onUpdate }) {
   const isDone = appointment.status === 'DONE';
   const isCancelled = appointment.status === 'CANCELLED';
 
-  async function handleMarkAsDone() {
-    if (!confirm('Завершить запись?')) {
-      return;
-    }
-
+  async function handleMarkAsDone(bonusesUsed: number = 0) {
     setLoading(true);
     try {
-      const updated = await markAppointmentAsDone(appointment.id);
+      const updated = await markAppointmentAsDone(appointment.id, bonusesUsed);
       onUpdate(updated);
       // Можно показать уведомление об успехе
       alert('Запись завершена');

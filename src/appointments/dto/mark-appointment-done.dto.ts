@@ -13,4 +13,18 @@ export class MarkAppointmentDoneDto {
   @IsInt()
   @Min(0)
   bonusesUsed?: number;
+
+  /** Игнорируется: бэкенд считает сам. Разрешено только чтобы не падала валидация при лишних полях от фронта. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  completedMoneyPaid?: number;
+
+  /** Игнорируется: бэкенд считает сам. Разрешено только чтобы не падала валидация при лишних полях от фронта. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  completedBonusesUsed?: number;
 }
