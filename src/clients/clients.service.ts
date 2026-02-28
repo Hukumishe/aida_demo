@@ -101,7 +101,8 @@ export class ClientsService {
   }
 
   /**
-   * Список приведённых клиентов по студии (кто кем привлечён) — для таблицы на дэшборде.
+   * Список приведённых клиентов по студии (кто кем привлечён).
+   * @deprecated Для таблицы на дэшборде используйте getReferrers — там показываются владельцы кодов со счётчиком.
    */
   async getReferredClients(
     studioId: string,
@@ -149,6 +150,50 @@ export class ClientsService {
       referrerFirstName: c.referredByClient?.firstName ?? '',
       referrerLastName: c.referredByClient?.lastName ?? '',
       referrerCode: c.referredByClient?.referralCode ?? '',
+    }));
+  }
+
+  /**
+   * Список клиентов, чьими реферальными кодами воспользовались (для таблицы на дэшборде).
+   * Каждая строка — владелец кода + счётчик приведённых. По клику открывается профиль этого клиента.
+   */
+  async getReferrers(
+    studioId: string,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
+      if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
+      if (userRole === UserRole.MASTER) {
+        throw new ForbiddenException('Masters cannot access referrers list');
+      }
+    }
+
+    const clients = await this.prisma.client.findMany({
+      where: {
+        studioId,
+        referredClients: { some: {} },
+      },
+      orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        referralCode: true,
+        _count: { select: { referredClients: true } },
+      },
+    });
+
+    return clients.map((c) => ({
+      clientId: c.id,
+      firstName: c.firstName,
+      lastName: c.lastName,
+      phone: c.phone,
+      referralCode: c.referralCode ?? '',
+      referredCount: c._count.referredClients,
     }));
   }
 
@@ -274,9 +319,42 @@ export class ClientsService {
     const level = (client as any).level ?? 'BRONZE';
     const totalPaidForLevel = (client as any).totalPaidForLevel ?? 0;
     const { _count, ...clientData } = client as any;
+
+    let referredList: { clientId: string; firstName: string; lastName: string; usedAt: string }[] = [];
+    if (referredCount > 0) {
+      const referred = await this.prisma.client.findMany({
+        where: { referredByClientId: id },
+        select: { id: true, firstName: true, lastName: true },
+      });
+      const referredIds = referred.map((c) => c.id);
+      const dates = await this.prisma.bonusHistoryEntry.findMany({
+        where: {
+          clientId: { in: referredIds },
+          type: 'REFERRAL_NEW_CLIENT',
+        },
+        select: { clientId: true, createdAt: true },
+      });
+      const usedAtByClientId = new Map<string, Date>();
+      for (const d of dates) {
+        const existing = usedAtByClientId.get(d.clientId);
+        if (!existing || d.createdAt < existing) usedAtByClientId.set(d.clientId, d.createdAt);
+      }
+      referredList = referred.map((c) => {
+        const usedAt = usedAtByClientId.get(c.id);
+        return {
+          clientId: c.id,
+          firstName: c.firstName,
+          lastName: c.lastName,
+          usedAt: usedAt ? usedAt.toISOString() : '',
+        };
+      });
+      referredList.sort((a, b) => (b.usedAt || '').localeCompare(a.usedAt || ''));
+    }
+
     return {
       ...clientData,
       referredCount,
+      referredList,
       cashbackPercent: getCashbackPercent(level),
       levelProgress: getLevelProgress(totalPaidForLevel, level),
     };

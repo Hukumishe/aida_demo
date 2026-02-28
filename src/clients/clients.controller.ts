@@ -57,14 +57,25 @@ export class ClientsController {
   }
 
   @Get('studios/:studioId/clients/referred')
-  @ApiOperation({ summary: 'List referred clients (for dashboard table)' })
-  @ApiResponse({ status: 200, description: 'List of clients who were referred, with referrer info' })
+  @ApiOperation({ summary: 'List referred clients (who was referred, by whom)' })
+  @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getReferredClients(
     @Param('studioId', ParseUUIDPipe) studioId: string,
     @CurrentUser() user?: any,
   ) {
     return this.clientsService.getReferredClients(studioId, user?.role, user?.studioId);
+  }
+
+  @Get('studios/:studioId/clients/referrers')
+  @ApiOperation({ summary: 'List referrers (people whose codes were used) with referred count — for dashboard table' })
+  @ApiResponse({ status: 200, description: 'List of clients who referred someone, with referredCount; click row → open client profile' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async getReferrers(
+    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.clientsService.getReferrers(studioId, user?.role, user?.studioId);
   }
 
   @Post('studios/:studioId/clients')
