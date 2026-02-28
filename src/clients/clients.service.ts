@@ -344,7 +344,7 @@ export class ClientsService {
         return {
           clientId: c.id,
           firstName: c.firstName,
-          lastName: c.lastName,
+          lastName: c.lastName ?? '',
           usedAt: usedAt ? usedAt.toISOString() : '',
         };
       });
