@@ -35,7 +35,7 @@ export class WarehouseController {
 
   // ---------- Центральный склад (только OWNER, DEPUTY_OWNER) ----------
   @Get('warehouse/central')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Get central warehouse and stock' })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403 })
@@ -44,7 +44,7 @@ export class WarehouseController {
   }
 
   @Get('warehouse/central/branches')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'List branch warehouses (for transfer destination)' })
   @ApiResponse({ status: 200 })
   listBranches(@CurrentUser() user?: any) {
@@ -52,7 +52,7 @@ export class WarehouseController {
   }
 
   @Get('warehouse/central/history')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Movement history: all transfers from central warehouse' })
   @ApiResponse({ status: 200 })
   getCentralHistory(@CurrentUser() user?: any) {
@@ -60,7 +60,7 @@ export class WarehouseController {
   }
 
   @Get('warehouse/central/products')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'List all products (catalog)' })
   @ApiResponse({ status: 200 })
   listProducts(@CurrentUser() user?: any) {
@@ -68,7 +68,7 @@ export class WarehouseController {
   }
 
   @Post('warehouse/central/products')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Add product (optional initial quantity on central)' })
   @ApiResponse({ status: 201 })
   @ApiResponse({ status: 403 })
@@ -86,7 +86,7 @@ export class WarehouseController {
   }
 
   @Patch('warehouse/central/products/:id')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Update product' })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 404 })
@@ -99,7 +99,7 @@ export class WarehouseController {
   }
 
   @Delete('warehouse/central/products/:id')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Delete product (only if no stock anywhere)' })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 400 })
@@ -112,7 +112,7 @@ export class WarehouseController {
   }
 
   @Post('warehouse/central/transfer')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Transfer from central to branch warehouse' })
   @ApiResponse({ status: 201 })
   @ApiResponse({ status: 400 })
@@ -130,7 +130,7 @@ export class WarehouseController {
   }
 
   @Post('warehouse/central/receipt')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Record receipt (приход) on central warehouse only' })
   @ApiResponse({ status: 201 })
   @ApiResponse({ status: 404 })

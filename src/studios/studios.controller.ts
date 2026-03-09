@@ -38,7 +38,7 @@ export class StudiosController {
   }
 
   @Post()
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Create a new studio (OWNER and DEPUTY_OWNER only)' })
   @ApiResponse({ status: 201, description: 'Studio created' })
   @ApiResponse({ status: 403, description: 'Forbidden' })

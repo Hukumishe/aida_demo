@@ -73,8 +73,8 @@ export class StudiosService {
     dto: { globalBonusPaymentLimitPercent?: number },
     userRole: string,
   ) {
-    if (userRole !== UserRole.OWNER) {
-      throw new ForbiddenException('Only owner can change global bonus payment limit');
+    if (!isOwnerLevelRole(userRole)) {
+      throw new ForbiddenException('Only owner level role can change global bonus payment limit');
     }
     const studio = await this.prisma.studio.findUnique({ where: { id: studioId } });
     if (!studio) throw new NotFoundException('Studio not found');

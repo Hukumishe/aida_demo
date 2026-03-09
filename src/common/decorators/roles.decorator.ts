@@ -3,6 +3,7 @@ import { SetMetadata } from '@nestjs/common';
 export enum UserRole {
   OWNER = 'OWNER',
   DEPUTY_OWNER = 'DEPUTY_OWNER',
+  SERVICE = 'SERVICE', // Те же права что у владельца; доступ к панели промптов
   ADMIN = 'ADMIN',
   MANAGER = 'MANAGER',
   MASTER = 'MASTER',
@@ -12,10 +13,14 @@ export const ROLES_KEY = 'roles';
 export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
 
 /**
- * Проверяет, является ли роль уровнем владельца (OWNER или DEPUTY_OWNER)
+ * Проверяет, является ли роль уровнем владельца (OWNER, DEPUTY_OWNER или SERVICE)
  */
 export function isOwnerLevelRole(role: string | undefined): boolean {
-  return role === UserRole.OWNER || role === UserRole.DEPUTY_OWNER;
+  return (
+    role === UserRole.OWNER ||
+    role === UserRole.DEPUTY_OWNER ||
+    role === UserRole.SERVICE
+  );
 }
 
 /**

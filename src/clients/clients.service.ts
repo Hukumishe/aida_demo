@@ -638,8 +638,8 @@ export class ClientsService {
     userRole?: string,
     userStudioId?: string,
   ) {
-    if (userRole !== UserRole.OWNER) {
-      throw new ForbiddenException('Only owner can manually adjust bonus balance');
+    if (!isOwnerLevelRole(userRole)) {
+      throw new ForbiddenException('Only owner level role can manually adjust bonus balance');
     }
     const client = await this.prisma.client.findUnique({
       where: { id: clientId },

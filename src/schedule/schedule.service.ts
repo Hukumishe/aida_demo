@@ -290,7 +290,7 @@ export class ScheduleService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== scheduleDay.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== scheduleDay.studioId) {
       throw new ForbiddenException('Access denied to this schedule');
     }
 
@@ -327,7 +327,7 @@ export class ScheduleService {
     }
 
     // Check access
-    if (userRole !== UserRole.OWNER && userStudioId !== scheduleDay.studioId) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== scheduleDay.studioId) {
       throw new ForbiddenException('Access denied to this schedule');
     }
 

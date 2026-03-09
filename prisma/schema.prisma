@@ -13,6 +13,7 @@ datasource db {
 enum UserRole {
   OWNER
   DEPUTY_OWNER
+  SERVICE   // Те же права что у владельца; доступ к панели промптов
   ADMIN
   MANAGER
   MASTER
@@ -95,6 +96,16 @@ model Studio {
   bonusHistory          BonusHistoryEntry[]
 
   @@map("studios")
+}
+
+model Prompt {
+  id          String   @id @default(uuid())
+  key         String   @unique // Название промпта: строго латиница без пробелов
+  description String   // Описание промпта (открытый текст, эмодзи)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("prompts")
 }
 
 model User {

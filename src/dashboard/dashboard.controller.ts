@@ -30,7 +30,7 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('studios/:studioId/dashboard')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ 
     summary: 'Get dashboard statistics for a studio (OWNER and DEPUTY_OWNER only)',
     description: 'Filter by date range (startDate/endDate) or by period. If both startDate and endDate are provided, period is ignored. If only startDate is provided, endDate defaults to today. If only endDate is provided, startDate defaults to 30 days before endDate.'
@@ -136,7 +136,7 @@ export class DashboardController {
   }
 
   @Get('dashboard/all')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ 
     summary: 'Get aggregated dashboard statistics for all studios (OWNER and DEPUTY_OWNER only)',
     description: 'Filter by date range (startDate/endDate) or by period. If both startDate and endDate are provided, period is ignored. If only startDate is provided, endDate defaults to today. If only endDate is provided, startDate defaults to 30 days before endDate.'
