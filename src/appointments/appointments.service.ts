@@ -710,7 +710,7 @@ export class AppointmentsService {
         cashbackFormula: `${totalMoneyPaid} × ${cashbackPercent}% = ${cashback} бонусов`,
         cashback,
         totalPaidForLevelBefore: client.totalPaidForLevel,
-        totalPaidForLevelAdd: moneyPaid,
+        totalPaidForLevelAdd: totalMoneyPaid,
         newTotalPaidForLevel,
         levelSetManually: client.levelSetManually,
         newLevel,
