@@ -626,8 +626,8 @@ export class AppointmentsService {
     }
 
     const { client, service, studio, upsells } = existingAppointment;
-    const baseAmount =
-      existingAppointment.prepaymentAmount ?? service.defaultPrice ?? 0;
+    const prepayment = existingAppointment.prepaymentAmount ?? 0;
+    const baseAmount = service.defaultPrice ?? 0;
     const upsellsSum = upsells.reduce((s, u) => s + u.totalAmount, 0);
     const total = baseAmount + upsellsSum;
 
@@ -639,15 +639,19 @@ export class AppointmentsService {
       Math.max(0, client.bonuses),
       maxBonusesAllowed,
     );
-    const moneyPaid = total - bonusesUsed;
+
+    // Общая сумма, которую клиент оплачивает деньгами за визит (включая предоплату)
+    const totalMoneyPaid = total - bonusesUsed;
+    // Сколько клиент доплачивает при расчёте (на кассе сейчас)
+    const moneyPaidNow = Math.max(0, totalMoneyPaid - prepayment);
 
     const cashbackPercent = getCashbackPercent(client.level);
     const cashback =
-      service.bonusAccrualEnabled && moneyPaid > 0
-        ? Math.round((moneyPaid * cashbackPercent) / 100)
+      service.bonusAccrualEnabled && totalMoneyPaid > 0
+        ? Math.round((totalMoneyPaid * cashbackPercent) / 100)
         : 0;
     let newBonuses = Math.max(0, client.bonuses - bonusesUsed + cashback);
-    const newTotalPaidForLevel = client.totalPaidForLevel + moneyPaid;
+    const newTotalPaidForLevel = client.totalPaidForLevel + totalMoneyPaid;
     const newLevel = client.levelSetManually
       ? client.level
       : getLevelFromTotalPaid(newTotalPaidForLevel);
@@ -657,7 +661,7 @@ export class AppointmentsService {
     let referrerBonus = 0;
     let newClientReferralBonus = 0;
     const referralCodeRaw = dto?.referralCode?.trim();
-    if (referralCodeRaw && moneyPaid > 0) {
+    if (referralCodeRaw && totalMoneyPaid > 0) {
       const clientAppointmentsCount = await this.prisma.appointment.count({
         where: { clientId: client.id },
       });
@@ -673,8 +677,8 @@ export class AppointmentsService {
       });
         if (ref && ref.id !== client.id) {
           referrer = ref;
-          referrerBonus = Math.round((moneyPaid * 10) / 100);
-          newClientReferralBonus = Math.round((moneyPaid * 20) / 100);
+          referrerBonus = Math.round((totalMoneyPaid * 10) / 100);
+          newClientReferralBonus = Math.round((totalMoneyPaid * 20) / 100);
           newBonuses += newClientReferralBonus;
         } else {
           throw new BadRequestException(
@@ -693,15 +697,17 @@ export class AppointmentsService {
         baseAmount: `${baseAmount} ₸`,
         upsellsSum: `${upsellsSum} ₸`,
         total: `${total} ₸`,
+        prepayment: `${prepayment} ₸`,
         limitPercent: `${limitPercent}%`,
         maxBonusesAllowed,
         requestedBonus,
         clientBonusesBefore: client.bonuses,
         bonusesUsed,
-        moneyPaid: `${moneyPaid} ₸`,
+        totalMoneyPaid: `${totalMoneyPaid} ₸`,
+        moneyPaidNow: `${moneyPaidNow} ₸`,
         clientLevel: client.level,
         cashbackPercent: `${cashbackPercent}%`,
-        cashbackFormula: `${moneyPaid} × ${cashbackPercent}% = ${cashback} бонусов`,
+        cashbackFormula: `${totalMoneyPaid} × ${cashbackPercent}% = ${cashback} бонусов`,
         cashback,
         totalPaidForLevelBefore: client.totalPaidForLevel,
         totalPaidForLevelAdd: moneyPaid,
@@ -718,7 +724,7 @@ export class AppointmentsService {
         data: {
           status: AppointmentStatus.DONE,
           completedBonusesUsed: bonusesUsed,
-          completedMoneyPaid: moneyPaid,
+          completedMoneyPaid: totalMoneyPaid,
         },
       });
 
