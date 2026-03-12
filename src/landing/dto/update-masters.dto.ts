@@ -24,6 +24,4 @@ export class UpdateLandingMastersDto {
   @Type(() => LandingMasterConfigDto)
   items: LandingMasterConfigDto[];
 }
-*** End Patch
-```}  !***  */}
 

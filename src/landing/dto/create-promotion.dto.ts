@@ -79,4 +79,3 @@ export class CreateLandingPromotionDto {
   @Min(0)
   bundlePrice?: number;
 }
-*** End Patch`"}]} ***!

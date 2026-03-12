@@ -28,5 +28,3 @@ export class CreateLandingServiceCardDto {
   @Min(0)
   order?: number;
 }
-*** End Patch
-```}  !***  */" /> JSON to=functions.ApplyPatch िस्तान  latina ***!

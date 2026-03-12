@@ -8,5 +8,3 @@ import { LandingService } from './landing.service';
   exports: [LandingService],
 })
 export class LandingModule {}
-*** End Patch
-```}  ***!

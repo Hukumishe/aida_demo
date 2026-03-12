@@ -211,5 +211,3 @@ export class LandingController {
     );
   }
 }
-*** End Patch
-```}  ***!
