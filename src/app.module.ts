@@ -17,6 +17,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { BlacklistModule } from './blacklist/blacklist.module';
 import { WarehouseModule } from './warehouse/warehouse.module';
 import { PromptsModule } from './prompts/prompts.module';
+import { LandingModule } from './landing/landing.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -42,6 +43,7 @@ import { AppController } from './app.controller';
     BlacklistModule,
     WarehouseModule,
     PromptsModule,
+    LandingModule,
   ],
   controllers: [AppController],
 })
