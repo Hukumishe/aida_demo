@@ -21,6 +21,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
 import { Roles, UserRole } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { CreateLandingPromotionDto } from './dto/create-promotion.dto';
 import { UpdateLandingPromotionDto } from './dto/update-promotion.dto';
 import { UpdateLandingMastersDto } from './dto/update-masters.dto';
@@ -30,15 +31,14 @@ import { ReorderLandingServiceCardsDto } from './dto/reorder-service-cards.dto';
 
 @ApiTags('landing')
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
-@ApiBearerAuth()
 export class LandingController {
   constructor(private readonly landingService: LandingService) {}
 
   // --- Promotions ---
 
+  // Публичный список акций для лендинга
+  @Public()
   @Get('studios/:studioId/landing/promotions')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Список акций для лендинга по студии' })
   @ApiResponse({ status: 200, description: 'Список акций с промокодами и услугами' })
   async getPromotions(
@@ -48,6 +48,8 @@ export class LandingController {
   }
 
   @Post('studios/:studioId/landing/promotions')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
   @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Создать акцию для лендинга (скидка или 1+1)' })
   @ApiResponse({ status: 201, description: 'Акция создана' })
@@ -65,6 +67,8 @@ export class LandingController {
   }
 
   @Patch('studios/:studioId/landing/promotions/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
   @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Обновить акцию' })
   @ApiResponse({ status: 200, description: 'Акция обновлена' })
@@ -84,6 +88,8 @@ export class LandingController {
   }
 
   @Delete('studios/:studioId/landing/promotions/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
   @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Удалить акцию' })
   @ApiResponse({ status: 200, description: 'Акция удалена' })
@@ -102,8 +108,9 @@ export class LandingController {
 
   // --- Masters ---
 
+  // Публичный список мастеров для лендинга
+  @Public()
   @Get('studios/:studioId/landing/masters')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Список мастеров для лендинга с конфигурацией видимости и порядка' })
   @ApiResponse({ status: 200 })
   async getMasters(
@@ -113,6 +120,8 @@ export class LandingController {
   }
 
   @Patch('studios/:studioId/landing/masters')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
   @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Обновить список мастеров для лендинга (галочки + порядок)' })
   @ApiResponse({ status: 200, description: 'Список мастеров обновлён' })
@@ -131,8 +140,9 @@ export class LandingController {
 
   // --- Services ---
 
+  // Публичный список карточек услуг для лендинга
+  @Public()
   @Get('studios/:studioId/landing/services')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Карточки услуг для лендинга' })
   @ApiResponse({ status: 200 })
   async getServiceCards(
@@ -142,6 +152,8 @@ export class LandingController {
   }
 
   @Post('studios/:studioId/landing/services')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
   @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Создать карточку услуги для лендинга' })
   @ApiResponse({ status: 201 })
@@ -159,6 +171,8 @@ export class LandingController {
   }
 
   @Patch('studios/:studioId/landing/services/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
   @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Обновить карточку услуги (текст, картинка)' })
   @ApiResponse({ status: 200 })
@@ -178,6 +192,8 @@ export class LandingController {
   }
 
   @Delete('studios/:studioId/landing/services/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
   @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Удалить карточку услуги с лендинга' })
   @ApiResponse({ status: 200 })
@@ -195,6 +211,8 @@ export class LandingController {
   }
 
   @Patch('studios/:studioId/landing/services/reorder')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
   @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Обновить порядок карточек услуг (drag&drop)' })
   @ApiResponse({ status: 200 })
