@@ -53,6 +53,9 @@ JWT_REFRESH_EXPIRES_IN="7d"
 PORT=3000
 NODE_ENV=development
 CORS_ORIGIN="http://localhost:3000"
+
+# Опционально: API-ключ для ботов (NextBot и др.). Если задан, запросы с заголовком X-API-Key или Authorization: ApiKey <key> считаются авторизованными (роль SERVICE).
+# NEXTBOT_API_KEY="your-secret-api-key"
 ```
 
 ### 3. Database Setup
