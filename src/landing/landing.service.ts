@@ -6,6 +6,7 @@ import { UpdateLandingMastersDto } from './dto/update-masters.dto';
 import { CreateLandingServiceCardDto } from './dto/create-service-card.dto';
 import { UpdateLandingServiceCardDto } from './dto/update-service-card.dto';
 import { ReorderLandingServiceCardsDto } from './dto/reorder-service-cards.dto';
+import { generateId, IdPrefix } from '../common/id-generator';
 import { isOwnerLevelRole } from '../common/decorators/roles.decorator';
 
 @Injectable()
@@ -48,6 +49,7 @@ export class LandingService {
 
     const promotion = await this.prisma.landingPromotion.create({
       data: {
+        id: generateId(IdPrefix.LandingPromotion),
         studioId,
         type: dto.type,
         title: dto.title,
@@ -60,7 +62,10 @@ export class LandingService {
         services:
           dto.type === 'DISCOUNT' && dto.serviceIds
             ? {
-                create: dto.serviceIds.map((serviceId) => ({ serviceId })),
+                create: dto.serviceIds.map((serviceId) => ({
+                  id: generateId(IdPrefix.LandingPromotionService),
+                  serviceId,
+                })),
               }
             : undefined,
       },
@@ -70,6 +75,7 @@ export class LandingService {
     const code = await this.generatePromoCode();
     await this.prisma.landingPromotionCode.create({
       data: {
+        id: generateId(IdPrefix.LandingPromotionCode),
         promotionId: promotion.id,
         code,
       },
@@ -108,12 +114,15 @@ export class LandingService {
         this.prisma.landingPromotionService.deleteMany({
           where: { promotionId: id },
         }),
-        this.prisma.landingPromotionService.createMany({
-          data: dto.serviceIds.map((serviceId) => ({
-            promotionId: id,
-            serviceId,
-          })),
-        }),
+        ...dto.serviceIds.map((serviceId) =>
+          this.prisma.landingPromotionService.create({
+            data: {
+              id: generateId(IdPrefix.LandingPromotionService),
+              promotionId: id,
+              serviceId,
+            },
+          }),
+        ),
       ]);
     }
 
@@ -208,14 +217,15 @@ export class LandingService {
 
     await this.prisma.$transaction(async (tx) => {
       await tx.landingMaster.deleteMany({ where: { studioId } });
-      if (filtered.length > 0) {
-        await tx.landingMaster.createMany({
-          data: filtered.map((i) => ({
+      for (const i of filtered) {
+        await tx.landingMaster.create({
+          data: {
+            id: generateId(IdPrefix.LandingMaster),
             studioId,
             staffUserId: i.staffUserId,
             isVisible: i.isVisible,
             order: i.order,
-          })),
+          },
         });
       }
     });
@@ -256,6 +266,7 @@ export class LandingService {
 
     return this.prisma.landingServiceCard.create({
       data: {
+        id: generateId(IdPrefix.LandingServiceCard),
         studioId,
         serviceId: dto.serviceId,
         title: dto.title ?? null,

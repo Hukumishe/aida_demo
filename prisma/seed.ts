@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { generateId, IdPrefix } from '../src/common/id-generator';
 
 const prisma = new PrismaClient();
 
@@ -9,6 +10,7 @@ async function main() {
   // Create studio
   const studio = await prisma.studio.create({
     data: {
+      id: generateId(IdPrefix.Studio),
       name: 'Beauty Studio Almaty',
       address: 'Almaty, Abay Ave 150',
       timezone: 'Asia/Almaty',
@@ -21,6 +23,7 @@ async function main() {
   const ownerPasswordHash = await bcrypt.hash('owner123', 10);
   const owner = await prisma.user.create({
     data: {
+      id: generateId(IdPrefix.User),
       email: 'owner@example.com',
       phone: '+79991234567',
       passwordHash: ownerPasswordHash,
@@ -35,6 +38,7 @@ async function main() {
   const managerPasswordHash = await bcrypt.hash('manager123', 10);
   const manager = await prisma.user.create({
     data: {
+      id: generateId(IdPrefix.User),
       email: 'manager@example.com',
       phone: '+79991234568',
       passwordHash: managerPasswordHash,
@@ -58,6 +62,7 @@ async function main() {
   const adminPasswordHash = await bcrypt.hash('admin123', 10);
   const admin = await prisma.user.create({
     data: {
+      id: generateId(IdPrefix.User),
       email: 'admin@example.com',
       phone: '+79991234570',
       passwordHash: adminPasswordHash,
@@ -81,6 +86,7 @@ async function main() {
   const masterPasswordHash = await bcrypt.hash('master123', 10);
   const master = await prisma.user.create({
     data: {
+      id: generateId(IdPrefix.User),
       email: 'master@example.com',
       phone: '+79991234569',
       passwordHash: masterPasswordHash,
@@ -104,7 +110,7 @@ async function main() {
   // Create client
   const client = await prisma.client.create({
     data: {
-      studioId: studio.id,
+      id: generateId(IdPrefix.Client),
       firstName: 'John',
       lastName: 'Doe',
       phone: '+79991234570',
@@ -117,6 +123,7 @@ async function main() {
   // Create service
   const service = await prisma.service.create({
     data: {
+      id: generateId(IdPrefix.Service),
       studioId: studio.id,
       name: 'Haircut',
       defaultDurationMin: 60,
@@ -141,6 +148,7 @@ async function main() {
     if (dayOfWeek >= 1 && dayOfWeek <= 5) {
       await prisma.workScheduleDay.create({
         data: {
+          id: generateId(IdPrefix.WorkScheduleDay),
           studioId: studio.id,
           staffUserId: master.id,
           date,

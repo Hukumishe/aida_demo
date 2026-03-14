@@ -4,6 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
@@ -63,6 +64,7 @@ export class ServicesService {
 
     return this.prisma.service.create({
       data: {
+        id: generateId(IdPrefix.Service),
         studioId,
         name: createServiceDto.name,
         defaultDurationMin: createServiceDto.defaultDurationMin,

@@ -7,6 +7,7 @@
  */
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { generateId, IdPrefix } from '../src/common/id-generator';
 
 const prisma = new PrismaClient();
 
@@ -22,6 +23,7 @@ async function main() {
   if (!studio) {
     studio = await prisma.studio.create({
       data: {
+        id: generateId(IdPrefix.Studio),
         name: DEMO_STUDIO_NAME,
         address: null,
         timezone: 'Asia/Almaty',
@@ -44,6 +46,7 @@ async function main() {
   const passwordHash = await bcrypt.hash(DEMO_OWNER_PASSWORD, 10);
   const owner = await prisma.user.create({
     data: {
+      id: generateId(IdPrefix.User),
       email: 'demo@demo-studio.example',
       phone: DEMO_OWNER_PHONE,
       passwordHash,

@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { MarkAppointmentDoneDto } from './dto/mark-appointment-done.dto';
@@ -196,6 +197,7 @@ export class AppointmentsService {
 
       const appointment = await tx.appointment.create({
         data: {
+          id: generateId(IdPrefix.Appointment),
           studioId,
           staffUserId: createAppointmentDto.staffUserId,
           clientId: createAppointmentDto.clientId,
@@ -411,6 +413,7 @@ export class AppointmentsService {
         if (amountToAdd > 0 && !alreadyForfeited) {
           await tx.noShowIncome.create({
             data: {
+              id: generateId(IdPrefix.NoShowIncome),
               studioId: appointment.studioId,
               staffUserId: appointment.staffUserId,
               clientId: appointment.clientId,
@@ -503,6 +506,7 @@ export class AppointmentsService {
     await this.prisma.$transaction(async (tx) => {
       await tx.noShowIncome.create({
         data: {
+          id: generateId(IdPrefix.NoShowIncome),
           studioId: appointment.studioId,
           staffUserId: appointment.staffUserId,
           clientId: appointment.clientId,
@@ -757,6 +761,7 @@ export class AppointmentsService {
         });
         await tx.bonusHistoryEntry.create({
           data: {
+            id: generateId(IdPrefix.BonusHistoryEntry),
             clientId: referrer.id,
             studioId: studio.id,
             amount: referrerBonus,
@@ -767,6 +772,7 @@ export class AppointmentsService {
         });
         await tx.bonusHistoryEntry.create({
           data: {
+            id: generateId(IdPrefix.BonusHistoryEntry),
             clientId: client.id,
             studioId: studio.id,
             amount: newClientReferralBonus,
@@ -780,6 +786,7 @@ export class AppointmentsService {
       if (bonusesUsed > 0) {
         await tx.bonusHistoryEntry.create({
           data: {
+            id: generateId(IdPrefix.BonusHistoryEntry),
             clientId: client.id,
             studioId: studio.id,
             amount: -bonusesUsed,
@@ -791,6 +798,7 @@ export class AppointmentsService {
       if (cashback > 0) {
         await tx.bonusHistoryEntry.create({
           data: {
+            id: generateId(IdPrefix.BonusHistoryEntry),
             clientId: client.id,
             studioId: studio.id,
             amount: cashback,

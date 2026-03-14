@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { generateId, IdPrefix } from '../common/id-generator';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -22,7 +23,7 @@ export class WarehouseService {
     });
     if (!wh) {
       wh = await this.prisma.warehouse.create({
-        data: { type: WarehouseType.CENTRAL },
+        data: { id: generateId(IdPrefix.Warehouse), type: WarehouseType.CENTRAL },
       });
     }
     return wh;
@@ -36,7 +37,7 @@ export class WarehouseService {
     if (!studio) throw new NotFoundException('Studio not found');
     if (studio.warehouse) return studio.warehouse;
     return this.prisma.warehouse.create({
-      data: { type: WarehouseType.BRANCH, studioId },
+      data: { id: generateId(IdPrefix.Warehouse), type: WarehouseType.BRANCH, studioId },
     });
   }
 
@@ -125,6 +126,7 @@ export class WarehouseService {
 
     const product = await this.prisma.product.create({
       data: {
+        id: generateId(IdPrefix.Product),
         name: dto.name,
         description: dto.description,
         article: dto.article,
@@ -241,6 +243,7 @@ export class WarehouseService {
       });
       await tx.transfer.create({
         data: {
+          id: generateId(IdPrefix.Transfer),
           fromWarehouseId: central.id,
           toWarehouseId: dto.toWarehouseId,
           productId: dto.productId,
@@ -299,6 +302,7 @@ export class WarehouseService {
       });
       await tx.transfer.create({
         data: {
+          id: generateId(IdPrefix.Transfer),
           fromWarehouseId: central.id,
           toWarehouseId: branch.id,
           productId: dto.productId,
@@ -348,6 +352,7 @@ export class WarehouseService {
       });
       await tx.stockMovement.create({
         data: {
+          id: generateId(IdPrefix.StockMovement),
           warehouseId: warehouse.id,
           productId: dto.productId,
           quantityDelta: dto.quantity,
@@ -392,6 +397,7 @@ export class WarehouseService {
       });
       await tx.stockMovement.create({
         data: {
+          id: generateId(IdPrefix.StockMovement),
           warehouseId: warehouse.id,
           productId: dto.productId,
           quantityDelta: -dto.quantity,

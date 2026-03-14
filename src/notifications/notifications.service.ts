@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { generateId, IdPrefix } from '../common/id-generator';
 import { NotificationType } from '@prisma/client';
 
 @Injectable()
@@ -24,6 +25,7 @@ export class NotificationsService {
 
     return this.prisma.notification.create({
       data: {
+        id: generateId(IdPrefix.Notification),
         userId: staffUserId,
         studioId,
         type: NotificationType.NEW_APPOINTMENT,
@@ -69,6 +71,7 @@ export class NotificationsService {
       managers.map((manager) =>
         this.prisma.notification.create({
           data: {
+            id: generateId(IdPrefix.Notification),
             userId: manager.id,
             studioId,
             type: NotificationType.APPOINTMENT_CANCELLED,
@@ -210,6 +213,7 @@ export class NotificationsService {
       owners.map((owner) =>
         this.prisma.notification.create({
           data: {
+            id: generateId(IdPrefix.Notification),
             userId: owner.id,
             studioId,
             type: NotificationType.BLACKLIST_REQUEST,

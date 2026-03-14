@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { generateId, IdPrefix } from '../src/common/id-generator';
 
 const prisma = new PrismaClient();
 
@@ -20,6 +21,7 @@ async function createServiceAccount() {
     const passwordHash = await bcrypt.hash(SERVICE_PASSWORD, 10);
     const user = await prisma.user.create({
       data: {
+        id: generateId(IdPrefix.User),
         phone: SERVICE_PHONE,
         email: null,
         passwordHash,

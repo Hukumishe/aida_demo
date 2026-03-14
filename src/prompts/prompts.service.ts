@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { generateId, IdPrefix } from '../common/id-generator';
 import { CreatePromptDto } from './dto/create-prompt.dto';
 import { UpdatePromptDto } from './dto/update-prompt.dto';
 
@@ -14,6 +15,7 @@ export class PromptsService {
     }
     return this.prisma.prompt.create({
       data: {
+        id: generateId(IdPrefix.Prompt),
         key: dto.key,
         description: dto.description,
       },

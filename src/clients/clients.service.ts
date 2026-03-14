@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
@@ -227,6 +228,7 @@ export class ClientsService {
     try {
       return await this.prisma.client.create({
         data: {
+          id: generateId(IdPrefix.Client),
           firstName: createClientDto.firstName,
           lastName: createClientDto.lastName,
           phone: createClientDto.phone,
@@ -663,6 +665,7 @@ export class ClientsService {
       }),
       this.prisma.bonusHistoryEntry.create({
         data: {
+          id: generateId(IdPrefix.BonusHistoryEntry),
           clientId,
           studioId,
           amount: dto.amount,

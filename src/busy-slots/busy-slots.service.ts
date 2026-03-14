@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateBusySlotDto } from './dto/create-busy-slot.dto';
 import { UpdateBusySlotDto } from './dto/update-busy-slot.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
@@ -123,6 +124,7 @@ export class BusySlotsService {
 
     return this.prisma.busySlot.create({
       data: {
+        id: generateId(IdPrefix.BusySlot),
         studioId,
         staffUserId: createBusySlotDto.staffUserId,
         startAt,

@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { generateId, IdPrefix } from '../common/id-generator';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateBlacklistRequestDto } from './dto/create-blacklist-request.dto';
 import { ApproveBlacklistRequestDto } from './dto/approve-blacklist-request.dto';
@@ -100,6 +101,7 @@ export class BlacklistService {
 
     const request = await this.prisma.blacklistRequest.create({
       data: {
+        id: generateId(IdPrefix.BlacklistRequest),
         studioId: requestStudioId,
         clientId,
         requestedByUserId: userId,

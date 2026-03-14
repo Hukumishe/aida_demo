@@ -79,7 +79,7 @@ enum LandingPromotionType {
 }
 
 model Studio {
-  id        String   @id @default(uuid())
+  id        String   @id
   name      String
   address   String?
   timezone  String   @default("Asia/Almaty")
@@ -108,7 +108,7 @@ model Studio {
 }
 
 model Prompt {
-  id          String   @id @default(uuid())
+  id          String   @id
   key         String   @unique // Название промпта: строго латиница без пробелов
   description String   // Описание промпта (открытый текст, эмодзи)
   createdAt   DateTime @default(now())
@@ -118,7 +118,7 @@ model Prompt {
 }
 
 model User {
-  id              String   @id @default(uuid())
+  id              String   @id
   email           String?  @unique
   phone           String?  @unique
   passwordHash    String
@@ -172,7 +172,7 @@ model StaffProfile {
 }
 
 model Client {
-  id               String     @id @default(uuid())
+  id               String     @id
   firstName        String
   lastName         String?
   phone            String
@@ -206,7 +206,7 @@ model Client {
 }
 
 model WorkScheduleDay {
-  id          String   @id @default(uuid())
+  id          String   @id
   studioId    String
   staffUserId String
   date        DateTime @db.Date
@@ -227,7 +227,7 @@ model WorkScheduleDay {
 }
 
 model BusySlot {
-  id                        String   @id @default(uuid())
+  id                        String   @id
   studioId                  String
   staffUserId               String
   startAt                   DateTime
@@ -245,7 +245,7 @@ model BusySlot {
 }
 
 model Service {
-  id                 String   @id @default(uuid())
+  id                 String   @id
   studioId           String
   name               String
   defaultDurationMin Int
@@ -273,7 +273,7 @@ model Service {
 // --- Настройки лендинга ---
 
 model LandingPromotion {
-  id          String                @id @default(uuid())
+  id          String                @id
   studioId    String
   type        LandingPromotionType
   title       String
@@ -295,7 +295,7 @@ model LandingPromotion {
 }
 
 model LandingPromotionService {
-  id           String   @id @default(uuid())
+  id           String   @id
   promotionId  String
   serviceId    String
 
@@ -308,7 +308,7 @@ model LandingPromotionService {
 }
 
 model LandingPromotionCode {
-  id           String   @id @default(uuid())
+  id           String   @id
   promotionId  String
   code         String   @unique
   usageLimit   Int?     // Максимальное количество использований (null = без лимита)
@@ -324,7 +324,7 @@ model LandingPromotionCode {
 }
 
 model LandingMaster {
-  id         String   @id @default(uuid())
+  id         String   @id
   studioId   String
   staffUserId String
   isVisible  Boolean  @default(true)
@@ -340,7 +340,7 @@ model LandingMaster {
 }
 
 model LandingServiceCard {
-  id          String   @id @default(uuid())
+  id          String   @id
   studioId    String
   serviceId   String
   title       String?  // Кастомный заголовок на лендинге; если null, использовать Service.name
@@ -360,7 +360,7 @@ model LandingServiceCard {
 }
 
 model StaffService {
-  id          String   @id @default(uuid())
+  id          String   @id
   studioId    String
   staffUserId String
   serviceId   String
@@ -378,7 +378,7 @@ model StaffService {
 }
 
 model StaffServiceOverride {
-  id          String   @id @default(uuid())
+  id          String   @id
   studioId    String
   staffUserId String
   serviceId   String
@@ -398,7 +398,7 @@ model StaffServiceOverride {
 }
 
 model Appointment {
-  id                        String            @id @default(uuid())
+  id                        String            @id
   studioId                  String
   staffUserId               String
   clientId                  String
@@ -429,7 +429,7 @@ model Appointment {
 }
 
 model AppointmentUpsell {
-  id            String   @id @default(uuid())
+  id            String   @id
   appointmentId String
   serviceId     String
   quantity      Int      @default(1)
@@ -449,7 +449,7 @@ model AppointmentUpsell {
 }
 
 model Log {
-  id         String   @id @default(uuid())
+  id         String   @id
   level      LogLevel
   type       LogType
   message    String
@@ -474,7 +474,7 @@ model Log {
 }
 
 model NoShowIncome {
-  id              String   @id @default(uuid())
+  id              String   @id
   studioId        String
   staffUserId     String
   clientId        String
@@ -495,7 +495,7 @@ model NoShowIncome {
 }
 
 model Notification {
-  id        String           @id @default(uuid())
+  id        String           @id
   userId    String // Пользователь, которому адресовано уведомление
   studioId  String
   type      NotificationType
@@ -516,7 +516,7 @@ model Notification {
 }
 
 model BlacklistRequest {
-  id                String    @id @default(uuid())
+  id                String    @id
   studioId          String
   clientId          String
   requestedByUserId String // Кто создал запрос (MANAGER или ADMIN)
@@ -543,7 +543,7 @@ model BlacklistRequest {
 }
 
 model BonusHistoryEntry {
-  id              String   @id @default(uuid())
+  id              String   @id
   clientId        String
   studioId        String
   amount          Int     // положительное — начисление, отрицательное — списание
@@ -565,7 +565,7 @@ model BonusHistoryEntry {
 
 // --- Склад ---
 model Warehouse {
-  id        String        @id @default(uuid())
+  id        String        @id
   type      WarehouseType // CENTRAL | BRANCH
   studioId  String?       @unique // null для центрального склада
   createdAt DateTime      @default(now())
@@ -583,7 +583,7 @@ model Warehouse {
 }
 
 model Product {
-  id          String      @id @default(uuid())
+  id          String      @id
   name        String      // Наименование
   description String?     // Описание (необязательно)
   article     String?     // Артикул (необязательно)
@@ -614,7 +614,7 @@ model Stock {
 }
 
 model Transfer {
-  id               String   @id @default(uuid())
+  id               String   @id
   fromWarehouseId  String
   toWarehouseId    String
   productId        String
@@ -635,7 +635,7 @@ model Transfer {
 }
 
 model StockMovement {
-  id               String            @id @default(uuid())
+  id               String            @id
   warehouseId      String
   productId        String
   quantityDelta    Int               // + приход, - списание

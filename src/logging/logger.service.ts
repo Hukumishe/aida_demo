@@ -1,5 +1,6 @@
 import { Injectable, LoggerService as NestLoggerService } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { generateId, IdPrefix } from '../common/id-generator';
 import * as winston from 'winston';
 import { ConfigService } from '@nestjs/config';
 
@@ -108,6 +109,7 @@ export class LoggerService implements NestLoggerService {
     try {
       await this.prisma.log.create({
         data: {
+          id: generateId(IdPrefix.Log),
           level,
           type,
           message,

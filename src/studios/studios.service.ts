@@ -1,5 +1,6 @@
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateStudioDto } from './dto/create-studio.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 
@@ -27,6 +28,7 @@ export class StudiosService {
   async create(createStudioDto: CreateStudioDto) {
     return this.prisma.studio.create({
       data: {
+        id: generateId(IdPrefix.Studio),
         name: createStudioDto.name,
         address: createStudioDto.address,
         timezone: createStudioDto.timezone || 'Asia/Almaty',

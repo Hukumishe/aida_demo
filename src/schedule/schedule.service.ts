@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateScheduleDayDto } from './dto/create-schedule-day.dto';
 import { UpdateScheduleDayDto } from './dto/update-schedule-day.dto';
 import { GenerateScheduleDto, SchedulePattern } from './dto/generate-schedule.dto';
@@ -152,6 +153,7 @@ export class ScheduleService {
         isDayOff: createScheduleDayDto.isDayOff ?? false,
       },
       create: {
+        id: generateId(IdPrefix.WorkScheduleDay),
         studioId,
         staffUserId: createScheduleDayDto.staffUserId,
         date,
@@ -230,8 +232,9 @@ export class ScheduleService {
         // Normalize date for storage: use UTC midnight to ensure date is preserved correctly
         const dateStr = currentDate.toISOString().split('T')[0]; // Get YYYY-MM-DD from UTC date
         const normalizedDate = new Date(dateStr + 'T00:00:00.000Z'); // UTC midnight
-        
+
         schedules.push({
+          id: generateId(IdPrefix.WorkScheduleDay),
           studioId,
           staffUserId: generateScheduleDto.staffUserId,
           date: normalizedDate,

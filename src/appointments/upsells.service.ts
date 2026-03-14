@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateUpsellDto } from './dto/create-upsell.dto';
 import { UpdateUpsellDto } from './dto/update-upsell.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
@@ -56,6 +57,7 @@ export class UpsellsService {
 
     return this.prisma.appointmentUpsell.create({
       data: {
+        id: generateId(IdPrefix.AppointmentUpsell),
         appointmentId,
         serviceId: createUpsellDto.serviceId,
         quantity,

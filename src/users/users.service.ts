@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { UpdateStaffProfileDto } from './dto/update-staff-profile.dto';
@@ -120,6 +121,7 @@ export class UsersService {
 
     const createdUser = await this.prisma.user.create({
       data: {
+        id: generateId(IdPrefix.User),
         email: createStaffDto.email,
         phone: createStaffDto.phone,
         passwordHash,
@@ -310,6 +312,7 @@ export class UsersService {
     // Create staff service
     return this.prisma.staffService.create({
       data: {
+        id: generateId(IdPrefix.StaffService),
         studioId: staff.studioId!,
         staffUserId,
         serviceId,
@@ -664,6 +667,7 @@ export class UsersService {
     // Create override
     return this.prisma.staffServiceOverride.create({
       data: {
+        id: generateId(IdPrefix.StaffServiceOverride),
         studioId: staff.studioId!,
         staffUserId,
         serviceId,
