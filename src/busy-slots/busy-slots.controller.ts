@@ -8,7 +8,6 @@ import {
   Param,
   Query,
   UseGuards,
-  ParseUUIDPipe,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -40,7 +39,7 @@ export class BusySlotsController {
   @ApiResponse({ status: 200, description: 'List of busy slots' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAll(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Query('date') date?: string,
     @CurrentUser() user?: any,
   ) {
@@ -53,7 +52,7 @@ export class BusySlotsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 409, description: 'Conflict - slot not allowed' })
   async create(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() createBusySlotDto: CreateBusySlotDto,
     @CurrentUser() user?: any,
   ) {
@@ -67,7 +66,7 @@ export class BusySlotsController {
   @ApiResponse({ status: 404, description: 'Busy slot not found' })
   @ApiResponse({ status: 409, description: 'Conflict - slot not allowed' })
   async update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() updateBusySlotDto: UpdateBusySlotDto,
     @CurrentUser() user?: any,
   ) {
@@ -81,7 +80,7 @@ export class BusySlotsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Busy slot not found' })
   async remove(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
     return this.busySlotsService.remove(id, user?.role, user?.studioId);

@@ -8,7 +8,6 @@ import {
   Param,
   Query,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -39,7 +38,7 @@ export class ScheduleController {
   @ApiResponse({ status: 200, description: 'List of schedule days' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAll(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Query('date') date?: string,
     @CurrentUser() user?: any,
   ) {
@@ -51,7 +50,7 @@ export class ScheduleController {
   @ApiResponse({ status: 201, description: 'Schedule day created/updated' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async create(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() createScheduleDayDto: CreateScheduleDayDto,
     @CurrentUser() user?: any,
   ) {
@@ -63,7 +62,7 @@ export class ScheduleController {
   @ApiResponse({ status: 201, description: 'Schedule generated' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async generate(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() generateScheduleDto: GenerateScheduleDto,
     @CurrentUser() user?: any,
   ) {
@@ -76,7 +75,7 @@ export class ScheduleController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Schedule day not found' })
   async update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() updateScheduleDayDto: UpdateScheduleDayDto,
     @CurrentUser() user?: any,
   ) {
@@ -89,7 +88,7 @@ export class ScheduleController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Schedule day not found' })
   async remove(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
     return this.scheduleService.remove(id, user?.role, user?.studioId);

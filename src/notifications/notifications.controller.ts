@@ -6,7 +6,6 @@ import {
   Delete,
   Query,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -60,7 +59,7 @@ export class NotificationsController {
   @ApiResponse({ status: 200, description: 'Notification marked as read' })
   @ApiResponse({ status: 404, description: 'Notification not found' })
   async markAsRead(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
     return this.notificationsService.markAsRead(id, user?.userId);
@@ -78,7 +77,7 @@ export class NotificationsController {
   @ApiResponse({ status: 200, description: 'Notification deleted' })
   @ApiResponse({ status: 404, description: 'Notification not found' })
   async remove(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
     return this.notificationsService.remove(id, user?.userId);

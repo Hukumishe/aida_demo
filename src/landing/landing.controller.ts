@@ -7,7 +7,6 @@ import {
   Body,
   Param,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -42,7 +41,7 @@ export class LandingController {
   @ApiOperation({ summary: 'Список акций для лендинга по студии' })
   @ApiResponse({ status: 200, description: 'Список акций с промокодами и услугами' })
   async getPromotions(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
   ) {
     return this.landingService.getPromotions(studioId);
   }
@@ -54,7 +53,7 @@ export class LandingController {
   @ApiOperation({ summary: 'Создать акцию для лендинга (скидка или 1+1)' })
   @ApiResponse({ status: 201, description: 'Акция создана' })
   async createPromotion(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() dto: CreateLandingPromotionDto,
     @CurrentUser() user: any,
   ) {
@@ -73,8 +72,8 @@ export class LandingController {
   @ApiOperation({ summary: 'Обновить акцию' })
   @ApiResponse({ status: 200, description: 'Акция обновлена' })
   async updatePromotion(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('studioId') studioId: string,
+    @Param('id') id: string,
     @Body() dto: UpdateLandingPromotionDto,
     @CurrentUser() user: any,
   ) {
@@ -94,8 +93,8 @@ export class LandingController {
   @ApiOperation({ summary: 'Удалить акцию' })
   @ApiResponse({ status: 200, description: 'Акция удалена' })
   async deletePromotion(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('studioId') studioId: string,
+    @Param('id') id: string,
     @CurrentUser() user: any,
   ) {
     return this.landingService.deletePromotion(
@@ -114,7 +113,7 @@ export class LandingController {
   @ApiOperation({ summary: 'Список мастеров для лендинга с конфигурацией видимости и порядка' })
   @ApiResponse({ status: 200 })
   async getMasters(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
   ) {
     return this.landingService.getMasters(studioId);
   }
@@ -126,7 +125,7 @@ export class LandingController {
   @ApiOperation({ summary: 'Обновить список мастеров для лендинга (галочки + порядок)' })
   @ApiResponse({ status: 200, description: 'Список мастеров обновлён' })
   async updateMasters(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() dto: UpdateLandingMastersDto,
     @CurrentUser() user: any,
   ) {
@@ -146,7 +145,7 @@ export class LandingController {
   @ApiOperation({ summary: 'Карточки услуг для лендинга' })
   @ApiResponse({ status: 200 })
   async getServiceCards(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
   ) {
     return this.landingService.getServiceCards(studioId);
   }
@@ -158,7 +157,7 @@ export class LandingController {
   @ApiOperation({ summary: 'Создать карточку услуги для лендинга' })
   @ApiResponse({ status: 201 })
   async createServiceCard(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() dto: CreateLandingServiceCardDto,
     @CurrentUser() user: any,
   ) {
@@ -177,8 +176,8 @@ export class LandingController {
   @ApiOperation({ summary: 'Обновить карточку услуги (текст, картинка)' })
   @ApiResponse({ status: 200 })
   async updateServiceCard(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('studioId') studioId: string,
+    @Param('id') id: string,
     @Body() dto: UpdateLandingServiceCardDto,
     @CurrentUser() user: any,
   ) {
@@ -198,8 +197,8 @@ export class LandingController {
   @ApiOperation({ summary: 'Удалить карточку услуги с лендинга' })
   @ApiResponse({ status: 200 })
   async deleteServiceCard(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('studioId') studioId: string,
+    @Param('id') id: string,
     @CurrentUser() user: any,
   ) {
     return this.landingService.deleteServiceCard(
@@ -217,7 +216,7 @@ export class LandingController {
   @ApiOperation({ summary: 'Обновить порядок карточек услуг (drag&drop)' })
   @ApiResponse({ status: 200 })
   async reorderServiceCards(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() dto: ReorderLandingServiceCardsDto,
     @CurrentUser() user: any,
   ) {

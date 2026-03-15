@@ -6,7 +6,6 @@ import {
   Patch,
   Param,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -35,7 +34,7 @@ export class ServicesController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async findAll(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @CurrentUser() user?: any,
   ) {
     try {
@@ -57,7 +56,7 @@ export class ServicesController {
   @ApiResponse({ status: 201, description: 'Service created' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async create(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() createServiceDto: CreateServiceDto,
     @CurrentUser() user?: any,
   ) {
@@ -70,8 +69,8 @@ export class ServicesController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Service not found' })
   async update(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('studioId') studioId: string,
+    @Param('id') id: string,
     @Body() updateServiceDto: UpdateServiceDto,
     @CurrentUser() user?: any,
   ) {

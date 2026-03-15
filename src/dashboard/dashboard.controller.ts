@@ -4,7 +4,6 @@ import {
   Param,
   Query,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -123,7 +122,7 @@ export class DashboardController {
   })
   @ApiResponse({ status: 403, description: 'Forbidden - Only OWNER and DEPUTY_OWNER can access dashboard' })
   async getStudioDashboard(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Query() query: DashboardQueryDto,
     @CurrentUser() user?: any,
   ) {

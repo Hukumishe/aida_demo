@@ -39,17 +39,9 @@ CREATE TABLE IF NOT EXISTS "staff_services" (
 CREATE INDEX IF NOT EXISTS "staff_services_studioId_staffUserId_idx" ON "staff_services"("studioId", "staffUserId");
 CREATE INDEX IF NOT EXISTS "staff_services_serviceId_idx" ON "staff_services"("serviceId");
 
--- Create unique constraint if it doesn't exist
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint 
-        WHERE conname = 'staff_services_studioId_staffUserId_serviceId_key'
-    ) THEN
-        CREATE UNIQUE INDEX "staff_services_studioId_staffUserId_serviceId_key" 
-        ON "staff_services"("studioId", "staffUserId", "serviceId");
-    END IF;
-END $$;
+-- Create unique index if it doesn't exist (index, not constraint — check pg_indexes)
+CREATE UNIQUE INDEX IF NOT EXISTS "staff_services_studioId_staffUserId_serviceId_key"
+ON "staff_services"("studioId", "staffUserId", "serviceId");
 
 -- Add foreign keys if they don't exist
 DO $$

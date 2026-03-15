@@ -6,7 +6,6 @@ import {
   Patch,
   Param,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -52,7 +51,7 @@ export class StudiosController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Studio not found' })
   async findOne(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @CurrentUser() user: any,
   ) {
     return this.studiosService.findOne(studioId, user.role, user.studioId);
@@ -63,7 +62,7 @@ export class StudiosController {
   @ApiResponse({ status: 200, description: 'Settings' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getSettings(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @CurrentUser() user: any,
   ) {
     return this.studiosService.getSettings(studioId, user.role, user.studioId);
@@ -75,7 +74,7 @@ export class StudiosController {
   @ApiResponse({ status: 200, description: 'Studio updated' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async updateSettings(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() dto: UpdateStudioSettingsDto,
     @CurrentUser() user: any,
   ) {

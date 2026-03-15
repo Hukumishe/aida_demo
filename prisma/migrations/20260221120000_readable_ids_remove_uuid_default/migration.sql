@@ -1,28 +1,22 @@
 -- Remove UUID default from id columns so application can set readable prefixed IDs (e.g. stu_abc12, usr_xyz98).
 -- Existing rows keep their current id values. New rows get id from application via generateId().
+-- Only alter tables that exist (some may be created in later migrations).
 
-ALTER TABLE "studios" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "prompts" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "users" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "clients" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "work_schedule_days" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "busy_slots" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "services" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "landing_promotions" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "landing_promotion_services" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "landing_promotion_codes" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "landing_masters" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "landing_service_cards" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "staff_services" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "staff_service_overrides" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "appointments" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "appointment_upsells" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "logs" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "no_show_incomes" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "notifications" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "blacklist_requests" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "bonus_history" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "warehouses" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "products" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "transfers" ALTER COLUMN "id" DROP DEFAULT;
-ALTER TABLE "stock_movements" ALTER COLUMN "id" DROP DEFAULT;
+DO $$
+DECLARE
+  t text;
+  tables text[] := ARRAY[
+    'studios', 'prompts', 'users', 'clients', 'work_schedule_days', 'busy_slots', 'services',
+    'landing_promotions', 'landing_promotion_services', 'landing_promotion_codes', 'landing_masters', 'landing_service_cards',
+    'staff_services', 'staff_service_overrides', 'appointments', 'appointment_upsells', 'logs',
+    'no_show_incomes', 'notifications', 'blacklist_requests', 'bonus_history',
+    'warehouses', 'products', 'transfers', 'stock_movements'
+  ];
+BEGIN
+  FOREACH t IN ARRAY tables
+  LOOP
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = t) THEN
+      EXECUTE format('ALTER TABLE %I ALTER COLUMN id DROP DEFAULT', t);
+    END IF;
+  END LOOP;
+END $$;

@@ -7,7 +7,6 @@ import {
   Param,
   Query,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -38,7 +37,7 @@ export class ClientsController {
   @ApiResponse({ status: 200, description: 'List of clients' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAll(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Query('q') query?: string,
     @CurrentUser() user?: any,
   ) {
@@ -50,7 +49,7 @@ export class ClientsController {
   @ApiResponse({ status: 200, description: 'Segment counts' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getSegments(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @CurrentUser() user?: any,
   ) {
     return this.clientsService.getClientSegments(studioId, user?.role, user?.studioId);
@@ -61,7 +60,7 @@ export class ClientsController {
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getReferredClients(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @CurrentUser() user?: any,
   ) {
     return this.clientsService.getReferredClients(studioId, user?.role, user?.studioId);
@@ -72,7 +71,7 @@ export class ClientsController {
   @ApiResponse({ status: 200, description: 'List of clients who referred someone, with referredCount; click row → open client profile' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getReferrers(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @CurrentUser() user?: any,
   ) {
     return this.clientsService.getReferrers(studioId, user?.role, user?.studioId);
@@ -83,7 +82,7 @@ export class ClientsController {
   @ApiResponse({ status: 201, description: 'Client created' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async create(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() createClientDto: CreateClientDto,
     @CurrentUser() user?: any,
   ) {
@@ -96,7 +95,7 @@ export class ClientsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
   async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
     return this.clientsService.findOne(id, user?.role, user?.studioId);
@@ -108,7 +107,7 @@ export class ClientsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
   async update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() updateClientDto: UpdateClientDto,
     @CurrentUser() user?: any,
   ) {
@@ -132,7 +131,7 @@ export class ClientsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
   async getStatistics(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
     return this.clientsService.getClientStatistics(id, user?.role, user?.studioId);
@@ -150,7 +149,7 @@ export class ClientsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
   async getAppointments(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Query('upcoming') upcoming?: string,
     @CurrentUser() user?: any,
   ) {
@@ -169,7 +168,7 @@ export class ClientsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
   async getBonusHistory(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
     return this.clientsService.getBonusHistory(id, user?.role, user?.studioId);
@@ -182,7 +181,7 @@ export class ClientsController {
   @ApiResponse({ status: 404, description: 'Client not found' })
   @ApiResponse({ status: 400, description: 'Would result in negative balance' })
   async bonusAdjustment(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: BonusAdjustmentDto,
     @CurrentUser() user?: any,
   ) {

@@ -7,7 +7,6 @@ import {
   Param,
   Delete,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -37,7 +36,7 @@ export class UpsellsController {
   @ApiResponse({ status: 404, description: 'Appointment or service not found' })
   @ApiResponse({ status: 400, description: 'Bad request - service not active' })
   async create(
-    @Param('appointmentId', ParseUUIDPipe) appointmentId: string,
+    @Param('appointmentId') appointmentId: string,
     @Body() createUpsellDto: CreateUpsellDto,
     @CurrentUser() user?: any,
   ) {
@@ -55,7 +54,7 @@ export class UpsellsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Appointment not found' })
   async findAll(
-    @Param('appointmentId', ParseUUIDPipe) appointmentId: string,
+    @Param('appointmentId') appointmentId: string,
     @CurrentUser() user?: any,
   ) {
     return this.upsellsService.findAll(
@@ -71,7 +70,7 @@ export class UpsellsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Upsell not found' })
   async update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() updateUpsellDto: UpdateUpsellDto,
     @CurrentUser() user?: any,
   ) {
@@ -89,7 +88,7 @@ export class UpsellsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Upsell not found' })
   async remove(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
     return this.upsellsService.remove(id, user?.role, user?.studioId);

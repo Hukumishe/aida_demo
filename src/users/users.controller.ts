@@ -7,7 +7,6 @@ import {
   Param,
   Delete,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -39,7 +38,7 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'List of staff members' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAll(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @CurrentUser() user: any,
   ) {
     return this.usersService.findAll(studioId, user.role, user.studioId);
@@ -50,7 +49,7 @@ export class UsersController {
   @ApiResponse({ status: 201, description: 'Staff member created' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async create(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() createStaffDto: CreateStaffDto,
     @CurrentUser() user: any,
   ) {
@@ -63,7 +62,7 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Staff member not found' })
   async update(
-    @Param('userId', ParseUUIDPipe) userId: string,
+    @Param('userId') userId: string,
     @Body() updateStaffDto: UpdateStaffDto,
     @CurrentUser() user: any,
   ) {
@@ -76,7 +75,7 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Staff member not found' })
   async getStaffServices(
-    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
+    @Param('staffUserId') staffUserId: string,
     @CurrentUser() user: any,
   ) {
     return this.usersService.getStaffServices(staffUserId, user.role, user.studioId);
@@ -89,7 +88,7 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Staff member or service not found' })
   async addService(
-    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
+    @Param('staffUserId') staffUserId: string,
     @Body() addStaffServiceDto: AddStaffServiceDto,
     @CurrentUser() user: any,
   ) {
@@ -107,8 +106,8 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Staff member or service assignment not found' })
   async removeService(
-    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
-    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @Param('staffUserId') staffUserId: string,
+    @Param('serviceId') serviceId: string,
     @CurrentUser() user: any,
   ) {
     return this.usersService.removeService(staffUserId, serviceId, user.role, user.studioId);
@@ -120,7 +119,7 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Staff member not found' })
   async getStaffProfile(
-    @Param('userId', ParseUUIDPipe) userId: string,
+    @Param('userId') userId: string,
     @CurrentUser() user: any,
   ) {
     return this.usersService.getStaffProfile(userId, user.role, user.studioId);
@@ -132,7 +131,7 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Staff member not found' })
   async updateStaffProfile(
-    @Param('userId', ParseUUIDPipe) userId: string,
+    @Param('userId') userId: string,
     @Body() updateProfileDto: UpdateStaffProfileDto,
     @CurrentUser() user: any,
   ) {
@@ -146,7 +145,7 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Staff member not found' })
   async remove(
-    @Param('userId', ParseUUIDPipe) userId: string,
+    @Param('userId') userId: string,
     @CurrentUser() user: any,
   ) {
     return this.usersService.remove(userId, user.role, user.studioId);
@@ -158,8 +157,8 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Override not found' })
   async getServiceOverride(
-    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
-    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @Param('staffUserId') staffUserId: string,
+    @Param('serviceId') serviceId: string,
     @CurrentUser() user: any,
   ) {
     return this.usersService.getServiceOverride(staffUserId, serviceId, user.role, user.studioId);
@@ -171,7 +170,7 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Staff member not found' })
   async getStaffServiceOverrides(
-    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
+    @Param('staffUserId') staffUserId: string,
     @CurrentUser() user: any,
   ) {
     return this.usersService.getStaffServiceOverrides(staffUserId, user.role, user.studioId);
@@ -184,8 +183,8 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Staff member or service not found' })
   async createServiceOverride(
-    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
-    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @Param('staffUserId') staffUserId: string,
+    @Param('serviceId') serviceId: string,
     @Body() createOverrideDto: CreateServiceOverrideDto,
     @CurrentUser() user: any,
   ) {
@@ -204,8 +203,8 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Override not found' })
   async updateServiceOverride(
-    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
-    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @Param('staffUserId') staffUserId: string,
+    @Param('serviceId') serviceId: string,
     @Body() updateOverrideDto: UpdateServiceOverrideDto,
     @CurrentUser() user: any,
   ) {
@@ -224,8 +223,8 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Override not found' })
   async deleteServiceOverride(
-    @Param('staffUserId', ParseUUIDPipe) staffUserId: string,
-    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @Param('staffUserId') staffUserId: string,
+    @Param('serviceId') serviceId: string,
     @CurrentUser() user: any,
   ) {
     return this.usersService.deleteServiceOverride(staffUserId, serviceId, user.role, user.studioId);

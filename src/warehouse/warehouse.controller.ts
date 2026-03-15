@@ -7,7 +7,6 @@ import {
   Body,
   Param,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -91,7 +90,7 @@ export class WarehouseController {
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 404 })
   updateProductCentral(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: UpdateProductDto,
     @CurrentUser() user?: any,
   ) {
@@ -105,7 +104,7 @@ export class WarehouseController {
   @ApiResponse({ status: 400 })
   @ApiResponse({ status: 404 })
   deleteProductCentral(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
     return this.warehouseService.deleteProduct(id, user?.role);
@@ -153,7 +152,7 @@ export class WarehouseController {
   @ApiResponse({ status: 403 })
   @ApiResponse({ status: 404 })
   getBranch(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @CurrentUser() user?: any,
   ) {
     return this.warehouseService.getBranchWarehouse(
@@ -168,7 +167,7 @@ export class WarehouseController {
   @ApiOperation({ summary: 'Movement history: transfers in, receipts, write-offs for this branch' })
   @ApiResponse({ status: 200 })
   getBranchHistory(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @CurrentUser() user?: any,
   ) {
     return this.warehouseService.getBranchMovementHistory(
@@ -183,7 +182,7 @@ export class WarehouseController {
   @ApiOperation({ summary: 'List products (for dropdowns)' })
   @ApiResponse({ status: 200 })
   getBranchProducts(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @CurrentUser() user?: any,
   ) {
     return this.warehouseService.getProductsForBranch(
@@ -199,7 +198,7 @@ export class WarehouseController {
   @ApiResponse({ status: 201 })
   @ApiResponse({ status: 403 })
   async createProductBranch(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() dto: CreateProductDto,
     @CurrentUser() user?: any,
   ) {
@@ -222,8 +221,8 @@ export class WarehouseController {
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 404 })
   updateProductBranch(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
-    @Param('productId', ParseUUIDPipe) productId: string,
+    @Param('studioId') studioId: string,
+    @Param('productId') productId: string,
     @Body() dto: UpdateProductDto,
     @CurrentUser() user?: any,
   ) {
@@ -243,8 +242,8 @@ export class WarehouseController {
   @ApiResponse({ status: 400 })
   @ApiResponse({ status: 404 })
   deleteProductBranch(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
-    @Param('productId', ParseUUIDPipe) productId: string,
+    @Param('studioId') studioId: string,
+    @Param('productId') productId: string,
     @CurrentUser() user?: any,
   ) {
     return this.warehouseService.deleteProductAtBranch(
@@ -262,7 +261,7 @@ export class WarehouseController {
   @ApiResponse({ status: 400 })
   @ApiResponse({ status: 404 })
   transferToBranch(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() dto: TransferToBranchDto,
     @CurrentUser() user?: any,
   ) {
@@ -281,7 +280,7 @@ export class WarehouseController {
   @ApiResponse({ status: 201 })
   @ApiResponse({ status: 404 })
   receipt(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() dto: CreateReceiptDto,
     @CurrentUser() user?: any,
   ) {
@@ -301,7 +300,7 @@ export class WarehouseController {
   @ApiResponse({ status: 400 })
   @ApiResponse({ status: 404 })
   writeOff(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() dto: CreateWriteOffDto,
     @CurrentUser() user?: any,
   ) {

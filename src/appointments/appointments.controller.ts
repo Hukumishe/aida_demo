@@ -7,7 +7,6 @@ import {
   Param,
   Query,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -38,7 +37,7 @@ export class AppointmentsController {
   @ApiResponse({ status: 200, description: 'List of appointments' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAll(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Query('date') date?: string,
     @CurrentUser() user?: any,
   ) {
@@ -57,7 +56,7 @@ export class AppointmentsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 409, description: 'Conflict - time slot not available' })
   async create(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Body() createAppointmentDto: CreateAppointmentDto,
     @CurrentUser() user?: any,
   ) {
@@ -71,7 +70,7 @@ export class AppointmentsController {
   @ApiResponse({ status: 404, description: 'Appointment not found' })
   @ApiResponse({ status: 409, description: 'Conflict - time slot not available' })
   async update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() updateAppointmentDto: UpdateAppointmentDto,
     @CurrentUser() user?: any,
   ) {
@@ -90,7 +89,7 @@ export class AppointmentsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Appointment not found' })
   async markNoShow(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
     return this.appointmentsService.markNoShow(id, user?.role, user?.studioId, user?.userId);
@@ -103,7 +102,7 @@ export class AppointmentsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Appointment not found' })
   async markLate(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
     return this.appointmentsService.markLate(id, user?.role, user?.studioId, user?.userId);
@@ -115,7 +114,7 @@ export class AppointmentsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Appointment not found' })
   async markArrived(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
     return this.appointmentsService.markArrived(id, user?.userId, user?.role, user?.studioId);
@@ -128,7 +127,7 @@ export class AppointmentsController {
   @ApiResponse({ status: 404, description: 'Appointment not found' })
   @ApiResponse({ status: 400, description: 'Bad request - appointment already done or cancelled' })
   async markDone(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: MarkAppointmentDoneDto,
     @CurrentUser() user?: any,
   ) {

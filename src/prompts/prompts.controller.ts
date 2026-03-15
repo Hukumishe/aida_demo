@@ -7,7 +7,6 @@ import {
   Body,
   Param,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -52,7 +51,7 @@ export class PromptsController {
   @ApiResponse({ status: 200, description: 'Промпт' })
   @ApiResponse({ status: 404, description: 'Промпт не найден' })
   @ApiResponse({ status: 403, description: 'Доступ только для роли SERVICE' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
+  findOne(@Param('id') id: string) {
     return this.promptsService.findOne(id);
   }
 
@@ -63,7 +62,7 @@ export class PromptsController {
   @ApiResponse({ status: 404, description: 'Промпт не найден' })
   @ApiResponse({ status: 403, description: 'Доступ только для роли SERVICE' })
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: UpdatePromptDto,
   ) {
     return this.promptsService.update(id, dto);
@@ -74,7 +73,7 @@ export class PromptsController {
   @ApiResponse({ status: 200, description: 'Промпт удалён' })
   @ApiResponse({ status: 404, description: 'Промпт не найден' })
   @ApiResponse({ status: 403, description: 'Доступ только для роли SERVICE' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
+  remove(@Param('id') id: string) {
     return this.promptsService.remove(id);
   }
 }

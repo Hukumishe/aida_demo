@@ -7,7 +7,6 @@ import {
   Body,
   Query,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -41,7 +40,7 @@ export class BlacklistController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
   async createRequest(
-    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('clientId') clientId: string,
     @Body() createDto: CreateBlacklistRequestDto,
     @CurrentUser() user: any,
   ) {
@@ -61,7 +60,7 @@ export class BlacklistController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
   async addToBlacklist(
-    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('clientId') clientId: string,
     @Body() createDto: CreateBlacklistRequestDto,
     @CurrentUser() user: any,
   ) {
@@ -80,7 +79,7 @@ export class BlacklistController {
   @ApiResponse({ status: 200, description: 'List of blacklist requests' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAllRequests(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Query('status') status?: string,
     @CurrentUser() user?: any,
   ) {
@@ -99,7 +98,7 @@ export class BlacklistController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Request not found' })
   async approveRequest(
-    @Param('requestId', ParseUUIDPipe) requestId: string,
+    @Param('requestId') requestId: string,
     @Body() approveDto: ApproveBlacklistRequestDto,
     @CurrentUser() user: any,
   ) {
@@ -118,7 +117,7 @@ export class BlacklistController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Request not found' })
   async rejectRequest(
-    @Param('requestId', ParseUUIDPipe) requestId: string,
+    @Param('requestId') requestId: string,
     @Body() rejectDto: RejectBlacklistRequestDto,
     @CurrentUser() user: any,
   ) {
@@ -136,7 +135,7 @@ export class BlacklistController {
   @ApiResponse({ status: 200, description: 'List of blacklisted clients' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getBlacklistedClients(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @CurrentUser() user?: any,
   ) {
     return this.blacklistService.getBlacklistedClients(
@@ -153,7 +152,7 @@ export class BlacklistController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
   async removeFromBlacklist(
-    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('clientId') clientId: string,
     @CurrentUser() user: any,
   ) {
     return this.blacklistService.removeFromBlacklist(clientId, user.role);

@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
 import { ServiceSalesQueryDto } from './dto/service-sales-query.dto';
@@ -26,7 +26,7 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, description: 'Monthly service sales data' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   getServiceSales(
-    @Param('studioId', ParseUUIDPipe) studioId: string,
+    @Param('studioId') studioId: string,
     @Query() query: ServiceSalesQueryDto,
     @CurrentUser() user?: { userId?: string; role?: string; studioId?: string },
   ) {
