@@ -7,6 +7,10 @@
 **Base (пример):** `https://demo-studio-production.up.railway.app`  
 **Auth:** `X-API-Key: <NEXTBOT_API_KEY>` или `Authorization: ApiKey …` или Bearer JWT.
 
+> **Важно (Nextbot Custom API):** в URL вместо **`:studioId`** должна быть **реальная строка id** из ответа `GET /nextbot/context` (поле `id` у студии). Нельзя вставлять буквально `{studioId}` или `STUDIO_ID` из примеров в доке — иначе запрос пойдёт на несуществующую студию. В конструкторе Nextbot подставь **переменную сценария** (синтаксис платформы, часто двойные фигурные скобки), куда ты записал id после первого вызова context.
+
+**Готовые тексты «что куда вставить»** (промпт + Nextbot + схема `{}`): [`NEXTBOT_FUNCTION_CALLING_STUDIO.md`](./NEXTBOT_FUNCTION_CALLING_STUDIO.md).
+
 Все изменения записи (перенос, отмена, статус, предоплата) — **одна функция в xmind: `modify_booking`** → **POST** `.../nextbot/appointments/{id}/update` с JSON (`startAt`, `prepaymentAmount`, `status`). Отмена: `{"status":"CANCELLED"}`.
 
 ---

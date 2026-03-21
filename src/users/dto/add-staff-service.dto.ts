@@ -1,13 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsNotEmpty } from 'class-validator';
+import { IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
 
+/** В CRM id услуги — строка (часто префикс `srv_`), не обязательно UUID. */
 export class AddStaffServiceDto {
   @ApiProperty({
-    example: '123e4567-e89b-12d3-a456-426614174000',
-    description: 'Service ID to add to staff member',
+    example: 'srv_a1b2c3d4e5',
+    description: 'ID услуги из каталога студии (формат srv_… или иной строковый id)',
   })
-  @IsUUID()
+  @IsString()
   @IsNotEmpty()
+  @MinLength(3)
+  @MaxLength(128)
   serviceId: string;
 }
 

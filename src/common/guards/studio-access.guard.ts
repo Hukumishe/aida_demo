@@ -2,6 +2,7 @@ import {
   Injectable,
   CanActivate,
   ExecutionContext,
+  BadRequestException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -21,6 +22,20 @@ export class StudioAccessGuard implements CanActivate {
     // The service layer will handle access control based on the resource (client, appointment, etc.)
     if (!studioId) {
       return true;
+    }
+
+    // Документация использует {studioId}; Nextbot иногда шлёт строку буквально без подстановки переменной
+    if (
+      studioId.includes('{') ||
+      studioId.includes('}') ||
+      /^STUDIO_ID$/i.test(studioId) ||
+      /^your[_-]?studio/i.test(studioId)
+    ) {
+      throw new BadRequestException(
+        'В URL попал плейсхолдер вместо реального id студии (например "{studioId}"). ' +
+          'Сначала вызовите GET /nextbot/context, возьмите поле id нужной студии и подставьте в путь. ' +
+          'В Nextbot Custom API используйте переменную сценария (часто {{название}}), а не текст из примера.',
+      );
     }
 
     if (!user) {
