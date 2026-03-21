@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from .config import AidaConfig, build_headers
+from ..config import AidaConfig, build_headers
 
 
 def get_company_context(cfg: AidaConfig) -> Dict[str, Any]:
@@ -28,11 +28,3 @@ def get_company_context(cfg: AidaConfig) -> Dict[str, Any]:
   if cfg.company_id is not None:
     out["companyId"] = cfg.company_id
   return out
-
-
-def get_studio_details(cfg: AidaConfig, studio_id: str) -> Dict[str, Any]:
-  """GET /studios/:studioId"""
-  url = f"{cfg.base_url}/studios/{studio_id}"
-  resp = requests.get(url, headers=build_headers(cfg), timeout=10)
-  resp.raise_for_status()
-  return resp.json()

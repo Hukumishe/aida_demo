@@ -2,7 +2,7 @@ from typing import Any, Dict, List
 
 import requests
 
-from .config import AidaConfig, build_headers
+from ..config import AidaConfig, build_headers
 
 
 def get_services_and_prices(cfg: AidaConfig) -> List[Dict[str, Any]]:

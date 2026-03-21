@@ -2,7 +2,7 @@ from typing import Any, Dict, List
 
 import requests
 
-from .config import AidaConfig, build_headers
+from ..config import AidaConfig, build_headers
 
 
 def get_active_promotions(cfg: AidaConfig) -> List[Dict[str, Any]]:

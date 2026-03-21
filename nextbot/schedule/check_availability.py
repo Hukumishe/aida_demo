@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from .config import AidaConfig, build_headers
+from ..config import AidaConfig, build_headers
 
 
 def check_availability(
