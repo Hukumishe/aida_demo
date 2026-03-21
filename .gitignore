@@ -45,3 +45,8 @@ lerna-debug.log*
 # Uploads
 /uploads
 
+# Local XMind / temp extraction
+tmp_xmind/
+tmp_xmind.zip
+.tmp_xmind*.json
+
