@@ -8,7 +8,6 @@ import { LandingModule } from '../landing/landing.module';
 import { ScheduleModule } from '../schedule/schedule.module';
 import { BusySlotsModule } from '../busy-slots/busy-slots.module';
 import { AppointmentsModule } from '../appointments/appointments.module';
-import { PromptsModule } from '../prompts/prompts.module';
 
 @Module({
   imports: [
@@ -19,7 +18,6 @@ import { PromptsModule } from '../prompts/prompts.module';
     ScheduleModule,
     BusySlotsModule,
     AppointmentsModule,
-    PromptsModule,
   ],
   controllers: [NextbotController],
   providers: [NextbotService],

@@ -4,24 +4,27 @@
 
 **HTTP-агрегатор для Nextbot (без Python в сценарии):** префикс **`/nextbot`** — те же сценарии, что и функции в `nextbot/`, но одним вызовом из блока «HTTP» в Nextbot. Авторизация: **`Authorization: Bearer <JWT>`** или **`X-API-Key`** / **`Authorization: ApiKey <key>`** (= `NEXTBOT_API_KEY`), см. `JwtAuthGuard`.
 
-| Сценарий | Метод и путь |
-|----------|----------------|
-| Контекст компании (список студий) | `GET /nextbot/context` |
-| Студия | `GET /nextbot/studios/:studioId` |
-| Проверка клиента (q + профиль) | `GET /nextbot/studios/:studioId/clients/verify?q=` |
-| Лояльность (кратко) | `GET /nextbot/studios/:studioId/clients/loyalty?q=` |
-| Реферальный код | `GET /nextbot/studios/:studioId/clients/referral?q=` |
-| Регистрация клиента | `POST /nextbot/studios/:studioId/clients/register` |
-| Анкета → notes | `POST /nextbot/clients/:clientId/survey` |
-| Профиль | `GET /nextbot/clients/:id` |
-| Записи клиента | `GET /nextbot/clients/:id/appointments?upcoming=` |
-| Услуги | `GET /nextbot/studios/:studioId/services` |
-| Акции лендинга | `GET /nextbot/studios/:studioId/landing/promotions` |
-| Сырые данные для слотов | `GET /nextbot/studios/:studioId/availability-raw?date=YYYY-MM-DD&staffUserId=` |
-| Создать запись | `POST /nextbot/studios/:studioId/appointments` |
-| Изменить запись | `PATCH /nextbot/appointments/:id` |
-| Отменить запись | `PATCH /nextbot/appointments/:id/cancel` |
-| Промпты | `GET /nextbot/prompts`, `GET /nextbot/prompts/:id` (только роль **SERVICE**, в т.ч. API-key) |
+**Карта `/nextbot` = только функции xmind:** [`docs/NEXTBOT_XMIND_API.md`](./NEXTBOT_XMIND_API.md). Кратко: [`docs/NEXTBOT_ENDPOINTS.md`](./NEXTBOT_ENDPOINTS.md).
+
+**Выбор филиала → `studioId`:** [`docs/NEXTBOT_STUDIO_SELECTION.md`](./NEXTBOT_STUDIO_SELECTION.md) (через `get_company_context`).
+
+**`modify_booking` / перенос / отмена:** [`docs/NEXTBOT_PROMPT_FUNCTIONS.md`](./NEXTBOT_PROMPT_FUNCTIONS.md).
+
+| Сценарий (xmind) | Метод и путь `/nextbot` |
+|------------------|-------------------------|
+| `get_company_context` | `GET /nextbot/context` |
+| `verify_client_status` | `GET /nextbot/studios/:studioId/clients/verify?q=` |
+| `register_new_client` | `POST /nextbot/studios/:studioId/clients/register` |
+| `process_survey_answers` | `POST /nextbot/clients/:clientId/survey` |
+| `process_survey_answers_failed` | `POST /nextbot/clients/:clientId/survey-failed` → **501** |
+| `get_services_and_prices` | `GET /nextbot/studios/:studioId/services` |
+| `get_active_promotions` | `GET /nextbot/studios/:studioId/landing/promotions` |
+| `check_loyalty_status` | `GET /nextbot/studios/:studioId/clients/loyalty?q=` |
+| `get_referral_code` | `GET /nextbot/studios/:studioId/clients/referral?q=` |
+| `check_availability` | `GET /nextbot/studios/:studioId/availability-raw?date=&staffUserId=` |
+| `create_booking_request` | `POST /nextbot/studios/:studioId/appointments` |
+| `modify_booking` (в т.ч. отмена `status:CANCELLED`) | `POST /nextbot/appointments/:id/update` |
+| `add_to_waitlist`, счета, оплата, чеки, сертификаты, тикеты, `dev_error_report` | см. **501** в [`NEXTBOT_XMIND_API.md`](./NEXTBOT_XMIND_API.md) |
 
 ---
 
@@ -64,20 +67,21 @@
 
 ---
 
-## Пока нет в backend (заглушки в `nextbot/placeholders/*.py`)
+## Пока нет бизнес-логики в CRM
 
-Эти вызовы из промпта **нельзя** честно реализовать только существующими маршрутами:
+В **`/nextbot`** для этих функций xmind отдаётся **501** (тело ответа с `code: NOT_IMPLEMENTED`). В Python по-прежнему **`nextbot/placeholders/*.py`** → `NotImplementedError`.
 
 | Функция | Зачем нужен backend |
 |--------|---------------------|
+| `process_survey_answers_failed` | Отдельная ветка CRM при отказе от анкеты |
 | `add_to_waitlist` | Модель и CRUD листа ожидания |
 | `request_manager_invoice` | Заявки на счёт / задачи менеджеру |
 | `generate_payment_link` | Платёжный провайдер + хранение платежей |
-| `verify_receipt_nighttime` | Приём файла чека + привязка к платежу; `POST /upload/avatar` только для картинок аватара |
+| `verify_receipt_nighttime` | Приём файла чека + привязка к платежу |
 | `purchase_certificate` | Подарочные сертификаты |
 | `validate_certificate_code` | Проверка кода сертификата |
-| `create_escalation_ticket` | Тикеты/задачи в CRM (не путать с внутренними `Notification` при записи) |
-| `dev_error_report` | Приём технических логов от бота (отдельный endpoint / очередь) |
+| `create_escalation_ticket` | Тикеты/задачи в CRM |
+| `dev_error_report` | Приём технических логов от бота |
 
 ---
 

@@ -1,5 +1,4 @@
-import { Injectable } from '@nestjs/common';
-import { AppointmentStatus } from '@prisma/client';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { StudiosService } from '../studios/studios.service';
 import { ClientsService } from '../clients/clients.service';
 import { ServicesService } from '../services/services.service';
@@ -7,12 +6,23 @@ import { LandingService } from '../landing/landing.service';
 import { ScheduleService } from '../schedule/schedule.service';
 import { BusySlotsService } from '../busy-slots/busy-slots.service';
 import { AppointmentsService } from '../appointments/appointments.service';
-import { PromptsService } from '../prompts/prompts.service';
 import { CreateClientDto } from '../clients/dto/create-client.dto';
 import { CreateAppointmentDto } from '../appointments/dto/create-appointment.dto';
 import { UpdateAppointmentDto } from '../appointments/dto/update-appointment.dto';
 import { NextbotSurveyDto } from './dto/nextbot-survey.dto';
 import { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+
+/** Имена функций из системного промпта xmind (aida_xmind.pdf). */
+export type NextbotXmindFunction =
+  | 'add_to_waitlist'
+  | 'request_manager_invoice'
+  | 'generate_payment_link'
+  | 'verify_receipt_nighttime'
+  | 'purchase_certificate'
+  | 'validate_certificate_code'
+  | 'create_escalation_ticket'
+  | 'dev_error_report'
+  | 'process_survey_answers_failed';
 
 @Injectable()
 export class NextbotService {
@@ -24,20 +34,27 @@ export class NextbotService {
     private readonly scheduleService: ScheduleService,
     private readonly busySlotsService: BusySlotsService,
     private readonly appointmentsService: AppointmentsService,
-    private readonly promptsService: PromptsService,
   ) {}
 
+  /** Заглушка: функция из xmind, в CRM ещё нет реализации. */
+  notImplemented(fn: NextbotXmindFunction): never {
+    throw new HttpException(
+      {
+        function: fn,
+        code: 'NOT_IMPLEMENTED',
+        message:
+          'Эндпоинт зарезервирован под сценарий xmind; логика в backend ещё не реализована.',
+      },
+      HttpStatus.NOT_IMPLEMENTED,
+    );
+  }
+
+  /** get_company_context */
   getCompanyContext(user: CurrentUserPayload) {
     return this.studiosService.findAll(user.role, user.studioId);
   }
 
-  getStudioDetails(studioId: string, user: CurrentUserPayload) {
-    return this.studiosService.findOne(studioId, user.role, user.studioId);
-  }
-
-  /**
-   * Поиск клиента по q + полный профиль (как verify_client_status в nextbot/).
-   */
+  /** verify_client_status */
   async verifyClient(studioId: string, q: string | undefined, user: CurrentUserPayload) {
     const list = await this.clientsService.findAll(
       studioId,
@@ -56,7 +73,7 @@ export class NextbotService {
     return { found: true, client: profile };
   }
 
-  /** Обёртка как в check_loyalty_status.py */
+  /** check_loyalty_status */
   async loyaltySummary(studioId: string, q: string | undefined, user: CurrentUserPayload) {
     const status = await this.verifyClient(studioId, q, user);
     if (!status.found || !status.client) {
@@ -80,7 +97,7 @@ export class NextbotService {
     };
   }
 
-  /** Обёртка как в get_referral_code.py */
+  /** get_referral_code */
   async referralSummary(studioId: string, q: string | undefined, user: CurrentUserPayload) {
     const status = await this.verifyClient(studioId, q, user);
     if (!status.found || !status.client) {
@@ -95,6 +112,7 @@ export class NextbotService {
     };
   }
 
+  /** register_new_client */
   registerClient(
     studioId: string,
     dto: CreateClientDto,
@@ -103,9 +121,7 @@ export class NextbotService {
     return this.clientsService.create(studioId, dto, user.role, user.studioId);
   }
 
-  /**
-   * Сохранение анкеты в notes (как process_survey_answers.py).
-   */
+  /** process_survey_answers */
   async processSurvey(
     clientId: string,
     dto: NextbotSurveyDto,
@@ -133,34 +149,17 @@ export class NextbotService {
     );
   }
 
-  getClientProfile(clientId: string, user: CurrentUserPayload) {
-    return this.clientsService.findOne(clientId, user.role, user.studioId);
-  }
-
-  listClientAppointments(
-    clientId: string,
-    upcoming: boolean,
-    user: CurrentUserPayload,
-  ) {
-    return this.clientsService.getClientAppointments(
-      clientId,
-      upcoming,
-      user.role,
-      user.studioId,
-    );
-  }
-
+  /** get_services_and_prices */
   getServices(studioId: string, user: CurrentUserPayload) {
     return this.servicesService.findAll(studioId, user.role, user.studioId);
   }
 
+  /** get_active_promotions */
   getPromotions(studioId: string) {
     return this.landingService.getPromotions(studioId);
   }
 
-  /**
-   * Сырые данные для слотов (как check_availability.py): schedule + busy + appointments.
-   */
+  /** check_availability */
   async availabilityRaw(
     studioId: string,
     date: string,
@@ -193,6 +192,7 @@ export class NextbotService {
     };
   }
 
+  /** create_booking_request */
   createAppointment(
     studioId: string,
     dto: CreateAppointmentDto,
@@ -206,7 +206,11 @@ export class NextbotService {
     );
   }
 
-  updateAppointment(
+  /**
+   * modify_booking (в т.ч. перенос и отмена: `status: CANCELLED` в теле).
+   * В xmind отмена/перенос не выделены отдельными функциями.
+   */
+  modifyBooking(
     id: string,
     dto: UpdateAppointmentDto,
     user: CurrentUserPayload,
@@ -218,23 +222,5 @@ export class NextbotService {
       user.studioId,
       user.userId,
     );
-  }
-
-  cancelAppointment(id: string, user: CurrentUserPayload) {
-    return this.appointmentsService.update(
-      id,
-      { status: AppointmentStatus.CANCELLED },
-      user.role,
-      user.studioId,
-      user.userId,
-    );
-  }
-
-  listPrompts() {
-    return this.promptsService.findAll();
-  }
-
-  getPrompt(id: string) {
-    return this.promptsService.findOne(id);
   }
 }

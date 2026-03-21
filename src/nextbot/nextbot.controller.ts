@@ -3,13 +3,13 @@ import {
   Controller,
   Get,
   Param,
-  Patch,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiOperation,
   ApiQuery,
   ApiResponse,
@@ -18,7 +18,6 @@ import {
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
-import { Roles, UserRole } from '../common/decorators/roles.decorator';
 import {
   CurrentUser,
   CurrentUserPayload,
@@ -29,6 +28,11 @@ import { CreateAppointmentDto } from '../appointments/dto/create-appointment.dto
 import { UpdateAppointmentDto } from '../appointments/dto/update-appointment.dto';
 import { NextbotSurveyDto } from './dto/nextbot-survey.dto';
 
+/**
+ * Эндпоинты строго по функциям из системного промпта xmind (aida_xmind.pdf).
+ * get_user_id — только внутри Nextbot, HTTP нет.
+ * cancel_booking / reschedule_booking в PDF не отделены: используй modify_booking (POST .../appointments/:id/update).
+ */
 @ApiTags('nextbot')
 @Controller('nextbot')
 @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
@@ -36,29 +40,18 @@ import { NextbotSurveyDto } from './dto/nextbot-survey.dto';
 export class NextbotController {
   constructor(private readonly nextbotService: NextbotService) {}
 
+  // --- get_company_context ---
   @Get('context')
-  @ApiOperation({
-    summary: 'Контекст компании: список студий (аналог get_company_context)',
-  })
+  @ApiOperation({ summary: 'get_company_context' })
   @ApiResponse({ status: 200 })
   getContext(@CurrentUser() user: CurrentUserPayload) {
     return this.nextbotService.getCompanyContext(user);
   }
 
-  @Get('studios/:studioId')
-  @ApiOperation({ summary: 'Карточка студии (аналог get_studio_details)' })
-  @ApiResponse({ status: 200 })
-  getStudio(
-    @Param('studioId') studioId: string,
-    @CurrentUser() user: CurrentUserPayload,
-  ) {
-    return this.nextbotService.getStudioDetails(studioId, user);
-  }
-
+  // --- verify_client_status ---
   @Get('studios/:studioId/clients/verify')
-  @ApiOperation({ summary: 'Поиск клиента по q + полный профиль' })
+  @ApiOperation({ summary: 'verify_client_status' })
   @ApiQuery({ name: 'q', required: false })
-  @ApiResponse({ status: 200 })
   verifyClient(
     @Param('studioId') studioId: string,
     @Query('q') q: string | undefined,
@@ -67,30 +60,9 @@ export class NextbotController {
     return this.nextbotService.verifyClient(studioId, q, user);
   }
 
-  @Get('studios/:studioId/clients/loyalty')
-  @ApiOperation({ summary: 'Краткая сводка лояльности по контакту (q)' })
-  @ApiQuery({ name: 'q', required: false })
-  loyalty(
-    @Param('studioId') studioId: string,
-    @Query('q') q: string | undefined,
-    @CurrentUser() user: CurrentUserPayload,
-  ) {
-    return this.nextbotService.loyaltySummary(studioId, q, user);
-  }
-
-  @Get('studios/:studioId/clients/referral')
-  @ApiOperation({ summary: 'Реферальный код по контакту (q)' })
-  @ApiQuery({ name: 'q', required: false })
-  referral(
-    @Param('studioId') studioId: string,
-    @Query('q') q: string | undefined,
-    @CurrentUser() user: CurrentUserPayload,
-  ) {
-    return this.nextbotService.referralSummary(studioId, q, user);
-  }
-
+  // --- register_new_client ---
   @Post('studios/:studioId/clients/register')
-  @ApiOperation({ summary: 'Регистрация клиента (alias POST .../clients)' })
+  @ApiOperation({ summary: 'register_new_client' })
   @ApiResponse({ status: 201 })
   registerClient(
     @Param('studioId') studioId: string,
@@ -100,9 +72,9 @@ export class NextbotController {
     return this.nextbotService.registerClient(studioId, dto, user);
   }
 
+  // --- process_survey_answers ---
   @Post('clients/:clientId/survey')
-  @ApiOperation({ summary: 'Сохранить ответы анкеты в notes клиента' })
-  @ApiResponse({ status: 200 })
+  @ApiOperation({ summary: 'process_survey_answers' })
   processSurvey(
     @Param('clientId') clientId: string,
     @Body() dto: NextbotSurveyDto,
@@ -111,36 +83,21 @@ export class NextbotController {
     return this.nextbotService.processSurvey(clientId, dto, user);
   }
 
-  @Get('clients/:id')
-  @ApiOperation({ summary: 'Профиль клиента' })
-  @ApiResponse({ status: 200 })
-  getClient(
-    @Param('id') id: string,
-    @CurrentUser() user: CurrentUserPayload,
+  // --- process_survey_answers_failed (xmind) ---
+  @Post('clients/:clientId/survey-failed')
+  @ApiOperation({ summary: 'process_survey_answers_failed (заглушка)' })
+  @ApiBody({ required: false })
+  @ApiResponse({ status: 501 })
+  surveyFailed(
+    @Param('clientId') _clientId: string,
+    @Body() _body?: Record<string, unknown>,
   ) {
-    return this.nextbotService.getClientProfile(id, user);
+    return this.nextbotService.notImplemented('process_survey_answers_failed');
   }
 
-  @Get('clients/:id/appointments')
-  @ApiOperation({ summary: 'Записи клиента' })
-  @ApiQuery({
-    name: 'upcoming',
-    required: false,
-    description: 'Только предстоящие',
-  })
-  @ApiResponse({ status: 200 })
-  listAppointments(
-    @Param('id') id: string,
-    @Query('upcoming') upcoming: string | undefined,
-    @CurrentUser() user: CurrentUserPayload,
-  ) {
-    const upcomingOnly = upcoming === 'true' || upcoming === '1';
-    return this.nextbotService.listClientAppointments(id, upcomingOnly, user);
-  }
-
+  // --- get_services_and_prices ---
   @Get('studios/:studioId/services')
-  @ApiOperation({ summary: 'Услуги и цены студии' })
-  @ApiResponse({ status: 200 })
+  @ApiOperation({ summary: 'get_services_and_prices' })
   getServices(
     @Param('studioId') studioId: string,
     @CurrentUser() user: CurrentUserPayload,
@@ -148,21 +105,42 @@ export class NextbotController {
     return this.nextbotService.getServices(studioId, user);
   }
 
+  // --- get_active_promotions ---
   @Get('studios/:studioId/landing/promotions')
-  @ApiOperation({ summary: 'Активные акции лендинга' })
-  @ApiResponse({ status: 200 })
+  @ApiOperation({ summary: 'get_active_promotions' })
   getPromotions(@Param('studioId') studioId: string) {
     return this.nextbotService.getPromotions(studioId);
   }
 
+  // --- check_loyalty_status ---
+  @Get('studios/:studioId/clients/loyalty')
+  @ApiOperation({ summary: 'check_loyalty_status' })
+  @ApiQuery({ name: 'q', required: false })
+  loyalty(
+    @Param('studioId') studioId: string,
+    @Query('q') q: string | undefined,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.nextbotService.loyaltySummary(studioId, q, user);
+  }
+
+  // --- get_referral_code ---
+  @Get('studios/:studioId/clients/referral')
+  @ApiOperation({ summary: 'get_referral_code' })
+  @ApiQuery({ name: 'q', required: false })
+  referral(
+    @Param('studioId') studioId: string,
+    @Query('q') q: string | undefined,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.nextbotService.referralSummary(studioId, q, user);
+  }
+
+  // --- check_availability ---
   @Get('studios/:studioId/availability-raw')
-  @ApiOperation({
-    summary:
-      'Сырые schedule + busy-slots + appointments за дату (для расчёта слотов в боте)',
-  })
-  @ApiQuery({ name: 'date', required: true, description: 'YYYY-MM-DD' })
+  @ApiOperation({ summary: 'check_availability' })
+  @ApiQuery({ name: 'date', required: true })
   @ApiQuery({ name: 'staffUserId', required: false })
-  @ApiResponse({ status: 200 })
   availabilityRaw(
     @Param('studioId') studioId: string,
     @Query('date') date: string,
@@ -172,8 +150,9 @@ export class NextbotController {
     return this.nextbotService.availabilityRaw(studioId, date, staffUserId, user);
   }
 
+  // --- create_booking_request ---
   @Post('studios/:studioId/appointments')
-  @ApiOperation({ summary: 'Создать запись' })
+  @ApiOperation({ summary: 'create_booking_request' })
   @ApiResponse({ status: 201 })
   createAppointment(
     @Param('studioId') studioId: string,
@@ -183,40 +162,83 @@ export class NextbotController {
     return this.nextbotService.createAppointment(studioId, dto, user);
   }
 
-  @Patch('appointments/:id')
-  @ApiOperation({ summary: 'Изменить запись (в т.ч. перенос — startAt)' })
-  @ApiResponse({ status: 200 })
-  updateAppointment(
+  // --- modify_booking (перенос, отмена через status, prepayment и т.д.) ---
+  @Post('appointments/:id/update')
+  @ApiOperation({
+    summary:
+      'modify_booking (отмена: {"status":"CANCELLED"}, перенос: {"startAt":"..."})',
+  })
+  modifyBooking(
     @Param('id') id: string,
     @Body() dto: UpdateAppointmentDto,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.nextbotService.updateAppointment(id, dto, user);
+    return this.nextbotService.modifyBooking(id, dto, user);
   }
 
-  @Patch('appointments/:id/cancel')
-  @ApiOperation({ summary: 'Отменить запись (status = CANCELLED)' })
-  @ApiResponse({ status: 200 })
-  cancelAppointment(
-    @Param('id') id: string,
-    @CurrentUser() user: CurrentUserPayload,
-  ) {
-    return this.nextbotService.cancelAppointment(id, user);
+  // --- Заглушки xmind (нет в CRM) — до маршрутов с :studioId не требуется, но порядок ниже ок ---
+
+  @Post('add-to-waitlist')
+  @ApiOperation({ summary: 'add_to_waitlist' })
+  @ApiBody({ required: false })
+  @ApiResponse({ status: 501 })
+  addToWaitlist(@Body() _body?: Record<string, unknown>) {
+    return this.nextbotService.notImplemented('add_to_waitlist');
   }
 
-  @Get('prompts')
-  @Roles(UserRole.SERVICE)
-  @ApiOperation({ summary: 'Список промптов (как GET /prompts)' })
-  @ApiResponse({ status: 200 })
-  listPrompts() {
-    return this.nextbotService.listPrompts();
+  @Post('request-manager-invoice')
+  @ApiOperation({ summary: 'request_manager_invoice' })
+  @ApiBody({ required: false })
+  @ApiResponse({ status: 501 })
+  requestManagerInvoice(@Body() _body?: Record<string, unknown>) {
+    return this.nextbotService.notImplemented('request_manager_invoice');
   }
 
-  @Get('prompts/:id')
-  @Roles(UserRole.SERVICE)
-  @ApiOperation({ summary: 'Промпт по id' })
-  @ApiResponse({ status: 200 })
-  getPrompt(@Param('id') id: string) {
-    return this.nextbotService.getPrompt(id);
+  @Post('generate-payment-link')
+  @ApiOperation({ summary: 'generate_payment_link' })
+  @ApiBody({ required: false })
+  @ApiResponse({ status: 501 })
+  generatePaymentLink(@Body() _body?: Record<string, unknown>) {
+    return this.nextbotService.notImplemented('generate_payment_link');
+  }
+
+  @Post('verify-receipt-nighttime')
+  @ApiOperation({ summary: 'verify_receipt_nighttime' })
+  @ApiBody({ required: false })
+  @ApiResponse({ status: 501 })
+  verifyReceiptNighttime(@Body() _body?: Record<string, unknown>) {
+    return this.nextbotService.notImplemented('verify_receipt_nighttime');
+  }
+
+  @Post('purchase-certificate')
+  @ApiOperation({ summary: 'purchase_certificate' })
+  @ApiBody({ required: false })
+  @ApiResponse({ status: 501 })
+  purchaseCertificate(@Body() _body?: Record<string, unknown>) {
+    return this.nextbotService.notImplemented('purchase_certificate');
+  }
+
+  @Post('validate-certificate-code')
+  @ApiOperation({ summary: 'validate_certificate_code' })
+  @ApiBody({ required: false })
+  @ApiResponse({ status: 501 })
+  validateCertificateCode(@Body() _body?: Record<string, unknown>) {
+    return this.nextbotService.notImplemented('validate_certificate_code');
+  }
+
+  @Post('create-escalation-ticket')
+  @ApiOperation({ summary: 'create_escalation_ticket' })
+  @ApiBody({ required: false })
+  @ApiResponse({ status: 501 })
+  createEscalationTicket(@Body() _body?: Record<string, unknown>) {
+    return this.nextbotService.notImplemented('create_escalation_ticket');
+  }
+
+  @Post('dev-error-report')
+  @ApiOperation({ summary: 'dev_error_report' })
+  @ApiBody({ required: false })
+  @ApiResponse({ status: 501 })
+  devErrorReport(@Body() _body?: Record<string, unknown>) {
+    return this.nextbotService.notImplemented('dev_error_report');
   }
 }
