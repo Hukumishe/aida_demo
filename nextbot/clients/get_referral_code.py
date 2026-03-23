@@ -1,17 +1,18 @@
 from typing import Any, Dict
 
-from ..config import AidaConfig
-from .verify_client_status import verify_client_status
+import requests
+
+from ..config import AidaConfig, build_headers, nextbot_api_root
 
 
 def get_referral_code(cfg: AidaConfig, user_contact: str) -> Dict[str, Any]:
-  status = verify_client_status(cfg, user_contact)
-  if not status["found"]:
-    return {"found": False, "clientId": None, "referralCode": None, "rawClient": None}
-  client = status["client"]
-  return {
-    "found": True,
-    "clientId": client.get("id"),
-    "referralCode": client.get("referralCode"),
-    "rawClient": client,
-  }
+  """GET /nextbot/studios/:studioId/clients/referral?q= — тот же формат, что в backend."""
+  url = f"{nextbot_api_root(cfg)}/studios/{cfg.studio_id}/clients/referral"
+  resp = requests.get(
+    url,
+    headers=build_headers(cfg),
+    params={"q": user_contact},
+    timeout=10,
+  )
+  resp.raise_for_status()
+  return resp.json()

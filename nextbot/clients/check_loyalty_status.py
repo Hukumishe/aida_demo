@@ -1,26 +1,18 @@
 from typing import Any, Dict
 
-from ..config import AidaConfig
-from .verify_client_status import verify_client_status
+import requests
+
+from ..config import AidaConfig, build_headers, nextbot_api_root
 
 
 def check_loyalty_status(cfg: AidaConfig, user_contact: str) -> Dict[str, Any]:
-  status = verify_client_status(cfg, user_contact)
-  if not status["found"]:
-    return {
-      "found": False,
-      "clientId": None,
-      "level": None,
-      "bonuses": None,
-      "discount": None,
-      "rawClient": None,
-    }
-  client = status["client"]
-  return {
-    "found": True,
-    "clientId": client.get("id"),
-    "level": client.get("level"),
-    "bonuses": client.get("bonuses"),
-    "discount": client.get("discount"),
-    "rawClient": client,
-  }
+  """GET /nextbot/studios/:studioId/clients/loyalty?q= — тот же формат, что в backend."""
+  url = f"{nextbot_api_root(cfg)}/studios/{cfg.studio_id}/clients/loyalty"
+  resp = requests.get(
+    url,
+    headers=build_headers(cfg),
+    params={"q": user_contact},
+    timeout=10,
+  )
+  resp.raise_for_status()
+  return resp.json()

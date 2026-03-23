@@ -138,16 +138,56 @@ export class NextbotController {
 
   // --- check_availability ---
   @Get('studios/:studioId/availability-raw')
-  @ApiOperation({ summary: 'check_availability' })
-  @ApiQuery({ name: 'date', required: true })
+  @ApiOperation({
+    summary: 'check_availability',
+    description:
+      'Свободные слоты (freeSlots) и текст промпта для ИИ (поле check_availability). Опционально serviceId для длительности услуги.',
+  })
+  @ApiQuery({ name: 'date', required: true, description: 'YYYY-MM-DD' })
   @ApiQuery({ name: 'staffUserId', required: false })
+  @ApiQuery({
+    name: 'serviceId',
+    required: false,
+    description: 'Услуга студии — длительность слота из CRM (и override мастера)',
+  })
+  @ApiQuery({
+    name: 'durationMinutes',
+    required: false,
+    description: 'Если нет serviceId — длительность слота (по умолчанию 60)',
+  })
+  @ApiQuery({
+    name: 'slotStepMinutes',
+    required: false,
+    description: 'Шаг сетки слотов в минутах (по умолчанию 15, мин 5, макс 120)',
+  })
   availabilityRaw(
     @Param('studioId') studioId: string,
     @Query('date') date: string,
     @Query('staffUserId') staffUserId: string | undefined,
+    @Query('serviceId') serviceId: string | undefined,
+    @Query('durationMinutes') durationMinutesRaw: string | undefined,
+    @Query('slotStepMinutes') slotStepMinutesRaw: string | undefined,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.nextbotService.availabilityRaw(studioId, date, staffUserId, user);
+    const durationMinutes =
+      durationMinutesRaw !== undefined && durationMinutesRaw !== ''
+        ? parseInt(durationMinutesRaw, 10)
+        : undefined;
+    const slotStepMinutes =
+      slotStepMinutesRaw !== undefined && slotStepMinutesRaw !== ''
+        ? parseInt(slotStepMinutesRaw, 10)
+        : undefined;
+    return this.nextbotService.availabilityRaw(studioId, date, staffUserId, user, {
+      serviceId,
+      durationMinutes:
+        durationMinutes !== undefined && !Number.isNaN(durationMinutes)
+          ? durationMinutes
+          : undefined,
+      slotStepMinutes:
+        slotStepMinutes !== undefined && !Number.isNaN(slotStepMinutes)
+          ? slotStepMinutes
+          : undefined,
+    });
   }
 
   // --- create_booking_request ---

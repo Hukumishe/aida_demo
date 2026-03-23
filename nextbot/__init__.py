@@ -7,6 +7,7 @@ HTTP-эндпоинты префикса /nextbot — см. docs/NEXTBOT_XMIND_A
 Пример:
   from nextbot import AidaConfig, verify_client_status, register_new_client
   cfg = AidaConfig(base_url="https://api.example.com", api_key="...", studio_id="stu_...")
+  # base_url — без суффикса /nextbot; пути собираются как {base_url}/nextbot/...
 """
 
 from nextbot.config import AidaConfig

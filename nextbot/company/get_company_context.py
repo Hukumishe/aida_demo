@@ -2,17 +2,18 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from ..config import AidaConfig, build_headers
+from ..config import AidaConfig, build_headers, nextbot_api_root
 
 
 def get_company_context(cfg: AidaConfig) -> Dict[str, Any]:
   """
-  GET /studios — список студий и текущая по cfg.studio_id.
+  GET /nextbot/context — список студий (как в панели) и текущая по cfg.studio_id.
   """
-  url = f"{cfg.base_url}/studios"
+  url = f"{nextbot_api_root(cfg)}/context"
   resp = requests.get(url, headers=build_headers(cfg), timeout=10)
   resp.raise_for_status()
-  studios: List[Dict[str, Any]] = resp.json()
+  raw = resp.json()
+  studios: List[Dict[str, Any]] = raw if isinstance(raw, list) else []
 
   current_studio: Optional[Dict[str, Any]] = None
   if cfg.studio_id:

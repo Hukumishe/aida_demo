@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from ..config import AidaConfig, build_headers
+from ..config import AidaConfig, build_headers, nextbot_api_root
 
 
 def register_new_client(
@@ -18,11 +18,11 @@ def register_new_client(
   balance: Optional[int] = None,
 ) -> Dict[str, Any]:
   """
-  POST /studios/:studioId/clients — то же создание клиента, что в панели.
+  POST /nextbot/studios/:studioId/clients/register — то же создание клиента, что в панели.
 
   birth_date: YYYY-MM-DD (как в CreateClientDto).
   """
-  url = f"{cfg.base_url}/studios/{cfg.studio_id}/clients"
+  url = f"{nextbot_api_root(cfg)}/studios/{cfg.studio_id}/clients/register"
   payload: Dict[str, Any] = {
     "firstName": first_name,
     "phone": phone,

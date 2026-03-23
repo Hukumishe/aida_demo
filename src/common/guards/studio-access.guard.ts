@@ -24,17 +24,27 @@ export class StudioAccessGuard implements CanActivate {
       return true;
     }
 
-    // Документация использует {studioId}; Nextbot иногда шлёт строку буквально без подстановки переменной
+    // Документация использует {studioId}; Nextbot иногда шлёт шаблон буквально (подстановка не сработала)
+    let decodedStudioParam = studioId;
+    try {
+      if (studioId.includes('%')) decodedStudioParam = decodeURIComponent(studioId);
+    } catch {
+      /* ignore */
+    }
+    const literalDoubleBrace = /^\{\{[^{}]+\}\}$/.test(decodedStudioParam);
     if (
       studioId.includes('{') ||
       studioId.includes('}') ||
       /^STUDIO_ID$/i.test(studioId) ||
       /^your[_-]?studio/i.test(studioId)
     ) {
+      const templateHint = literalDoubleBrace
+        ? ' В запрос ушло буквально «{{…}}»: переменная Nextbot не подставилась (пустое значение, другое имя переменной или в этой версии Nextbot другой синтаксис в URL — см. справку платформы). Заполните переменную до вызова или используйте способ подстановки, который реально обрабатывает ваш конструктор.'
+        : '';
       throw new BadRequestException(
-        'В URL попал плейсхолдер вместо реального id студии (например "{studioId}"). ' +
-          'Сначала вызовите GET /nextbot/context, возьмите поле id нужной студии и подставьте в путь. ' +
-          'В Nextbot Custom API используйте переменную сценария (часто {{название}}), а не текст из примера.',
+        'В URL попал плейсхолдер вместо реального id студии (например "{studioId}" или "{{studioId}}"). ' +
+          'Сначала вызовите GET /nextbot/context, возьмите поле id нужной студии и подставьте в путь.' +
+          templateHint,
       );
     }
 

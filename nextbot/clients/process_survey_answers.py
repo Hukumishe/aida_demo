@@ -1,10 +1,8 @@
-import json
 from typing import Any, Dict
 
 import requests
 
-from ..config import AidaConfig, build_headers
-from .get_client_profile import get_client_profile
+from ..config import AidaConfig, build_headers, nextbot_api_root
 
 
 def process_survey_answers(
@@ -16,24 +14,18 @@ def process_survey_answers(
   survey_prefix: str = "[NEXTBOT_SURVEY]",
 ) -> Dict[str, Any]:
   """
-  Фиксация ответов анкеты через PATCH /clients/:id (поле notes).
-
-  В API нет отдельной сущности «анкета» — ответы сериализуются в notes.
-  При merge_into_notes=True дописывает блок к существующим notes.
+  POST /nextbot/clients/:clientId/survey — сервер сам мержит блок в notes (NextbotSurveyDto).
   """
-  block = f"{survey_prefix} {json.dumps(answers, ensure_ascii=False)}"
-  if merge_into_notes:
-    existing = get_client_profile(cfg, client_id)
-    old = (existing.get("notes") or "").strip()
-    new_notes = f"{old}\n\n{block}".strip() if old else block
-  else:
-    new_notes = block
-
-  url = f"{cfg.base_url}/clients/{client_id}"
-  resp = requests.patch(
+  url = f"{nextbot_api_root(cfg)}/clients/{client_id}/survey"
+  payload: Dict[str, Any] = {
+    "answers": answers,
+    "mergeIntoNotes": merge_into_notes,
+    "surveyPrefix": survey_prefix,
+  }
+  resp = requests.post(
     url,
     headers=build_headers(cfg),
-    json={"notes": new_notes},
+    json=payload,
     timeout=10,
   )
   resp.raise_for_status()

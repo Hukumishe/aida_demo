@@ -27,7 +27,7 @@
 | `get_active_promotions` | GET | `/nextbot/studios/:studioId/landing/promotions` |
 | `check_loyalty_status` | GET | `/nextbot/studios/:studioId/clients/loyalty?q=` |
 | `get_referral_code` | GET | `/nextbot/studios/:studioId/clients/referral?q=` |
-| `check_availability` | GET | `/nextbot/studios/:studioId/availability-raw?date=YYYY-MM-DD&staffUserId=` |
+| `check_availability` | GET | `/nextbot/studios/:studioId/availability-raw?date=YYYY-MM-DD&staffUserId=&serviceId=&durationMinutes=&slotStepMinutes=` → **`freeSlots`** + **`check_availability`** (промпт для ИИ) |
 | `create_booking_request` | POST | `/nextbot/studios/:studioId/appointments` |
 | `modify_booking` | POST | `/nextbot/appointments/:id/update` |
 

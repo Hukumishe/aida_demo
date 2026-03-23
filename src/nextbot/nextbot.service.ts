@@ -11,6 +11,8 @@ import { CreateAppointmentDto } from '../appointments/dto/create-appointment.dto
 import { UpdateAppointmentDto } from '../appointments/dto/update-appointment.dto';
 import { NextbotSurveyDto } from './dto/nextbot-survey.dto';
 import { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { AvailabilityService } from '../availability/availability.service';
+import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 
 /** Имена функций из системного промпта xmind (aida_xmind.pdf). */
 export type NextbotXmindFunction =
@@ -34,6 +36,7 @@ export class NextbotService {
     private readonly scheduleService: ScheduleService,
     private readonly busySlotsService: BusySlotsService,
     private readonly appointmentsService: AppointmentsService,
+    private readonly availabilityService: AvailabilityService,
   ) {}
 
   /** Заглушка: функция из xmind, в CRM ещё нет реализации. */
@@ -159,37 +162,40 @@ export class NextbotService {
     return this.landingService.getPromotions(studioId);
   }
 
-  /** check_availability */
+  /**
+   * check_availability — только свободные слоты + текст промпта для ИИ (`check_availability`).
+   * Сырые расписания/записи не отдаются.
+   */
   async availabilityRaw(
     studioId: string,
     date: string,
     staffUserId: string | undefined,
     user: CurrentUserPayload,
+    options?: {
+      serviceId?: string;
+      durationMinutes?: number;
+      slotStepMinutes?: number;
+    },
   ) {
-    const [scheduleDays, busySlots, appointments] = await Promise.all([
-      this.scheduleService.findAll(studioId, date, user.role, user.studioId),
-      this.busySlotsService.findAll(
-        studioId,
-        date,
-        user.role,
-        user.studioId,
-        user.userId,
-      ),
-      this.appointmentsService.findAll(
-        studioId,
-        date,
-        user.role,
-        user.studioId,
-        user.userId,
-      ),
-    ]);
+    if (
+      !isOwnerLevelRole(user.role) &&
+      user.role !== UserRole.MANAGER &&
+      user.studioId !== studioId
+    ) {
+      throw new HttpException('Access denied to this studio', HttpStatus.FORBIDDEN);
+    }
+    if (user.role === UserRole.MASTER && staffUserId && staffUserId !== user.userId) {
+      throw new HttpException('MASTER can only query own availability', HttpStatus.FORBIDDEN);
+    }
+    const effectiveStaffId =
+      user.role === UserRole.MASTER ? user.userId : staffUserId;
 
-    return {
-      scheduleDays,
-      busySlots,
-      appointments,
-      staffUserIdHint: staffUserId ?? null,
-    };
+    return this.availabilityService.computeNextbotFreeSlots(studioId, date, {
+      staffUserId: effectiveStaffId ?? undefined,
+      serviceId: options?.serviceId,
+      durationMinutes: options?.durationMinutes,
+      slotStepMinutes: options?.slotStepMinutes,
+    });
   }
 
   /** create_booking_request */

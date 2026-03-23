@@ -53,3 +53,6 @@ nextbot/__pycache__/
 tmp_xmind/
 tmp_xmind.zip
 .tmp_*.json
+tmp_title.txt
+tmp_xmind_*.txt
+tmp_xmind_functions.json

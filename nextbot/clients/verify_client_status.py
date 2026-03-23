@@ -1,16 +1,16 @@
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import requests
 
-from ..config import AidaConfig, build_headers
-from .get_client_profile import get_client_profile
+from ..config import AidaConfig, build_headers, nextbot_api_root
 
 
 def verify_client_status(cfg: AidaConfig, user_contact: str) -> Dict[str, Any]:
   """
-  GET /studios/:studioId/clients?q=...
+  GET /nextbot/studios/:studioId/clients/verify?q=...
+  Один запрос: backend возвращает { found, client } с полным профилем при найденном клиенте.
   """
-  url = f"{cfg.base_url}/studios/{cfg.studio_id}/clients"
+  url = f"{nextbot_api_root(cfg)}/studios/{cfg.studio_id}/clients/verify"
   resp = requests.get(
     url,
     headers=build_headers(cfg),
@@ -18,11 +18,4 @@ def verify_client_status(cfg: AidaConfig, user_contact: str) -> Dict[str, Any]:
     timeout=10,
   )
   resp.raise_for_status()
-  clients: List[Dict[str, Any]] = resp.json()
-
-  if not clients:
-    return {"found": False, "client": None}
-
-  client_id = clients[0]["id"]
-  profile = get_client_profile(cfg, client_id)
-  return {"found": True, "client": profile}
+  return resp.json()

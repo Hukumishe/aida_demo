@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from ..config import AidaConfig, build_headers
+from ..config import AidaConfig, build_headers, nextbot_api_root
 
 
 def create_booking_request(
@@ -14,7 +14,7 @@ def create_booking_request(
   start_at_iso: str,
   prepayment_amount: Optional[int] = None,
 ) -> Dict[str, Any]:
-  """POST /studios/:studioId/appointments"""
+  """POST /nextbot/studios/:studioId/appointments"""
   payload: Dict[str, Any] = {
     "staffUserId": staff_user_id,
     "clientId": client_id,
@@ -24,7 +24,7 @@ def create_booking_request(
   if prepayment_amount is not None:
     payload["prepaymentAmount"] = prepayment_amount
 
-  url = f"{cfg.base_url}/studios/{cfg.studio_id}/appointments"
+  url = f"{nextbot_api_root(cfg)}/studios/{cfg.studio_id}/appointments"
   resp = requests.post(url, headers=build_headers(cfg), json=payload, timeout=10)
   resp.raise_for_status()
   return resp.json()
