@@ -42,3 +42,10 @@ export type IdPrefixType = (typeof IdPrefix)[keyof typeof IdPrefix];
 export function generateId(prefix: IdPrefixType): string {
   return `${prefix}_${nanoid()}`;
 }
+
+/** Регулярка для id из generateId: 3 буквы префикса + _ + nanoid(10) */
+export const READABLE_ENTITY_ID_REGEX =
+  /^[a-z]{3}_[23456789abcdefghjkmnpqrstuvwxyz]{10}$/;
+
+export const READABLE_ENTITY_ID_MESSAGE =
+  'must be a readable entity id (e.g. prd_abc12defgh3), not UUID';
