@@ -52,18 +52,20 @@ export class TimezoneInterceptor implements NestInterceptor {
       return data.map((item) => this.transformDates(item, timezone));
     }
 
-    // Если это объект, обрабатываем каждое поле
-    if (typeof data === 'object' && data.constructor === Object) {
+    if (data instanceof Date) {
+      return this.convertToTimezoneISO(data, timezone);
+    }
+
+    // Обычные объекты (в т.ч. Object.create(null)), не полагаемся на data.constructor === Object
+    if (this.isPlainObject(data)) {
       const transformed: any = {};
       for (const key in data) {
-        if (data.hasOwnProperty(key)) {
+        if (Object.prototype.hasOwnProperty.call(data, key)) {
           const value = data[key];
-          
-          // Если это Date объект, конвертируем в ISO строку с таймзоной студии
+
           if (value instanceof Date) {
             transformed[key] = this.convertToTimezoneISO(value, timezone);
           } else if (typeof value === 'object' && value !== null) {
-            // Рекурсивно обрабатываем вложенные объекты
             transformed[key] = this.transformDates(value, timezone);
           } else {
             transformed[key] = value;
@@ -74,6 +76,14 @@ export class TimezoneInterceptor implements NestInterceptor {
     }
 
     return data;
+  }
+
+  private isPlainObject(value: unknown): value is Record<string, unknown> {
+    if (value === null || typeof value !== 'object') return false;
+    if (Array.isArray(value)) return false;
+    if (value instanceof Date) return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === null || proto === Object.prototype;
   }
 
   /**

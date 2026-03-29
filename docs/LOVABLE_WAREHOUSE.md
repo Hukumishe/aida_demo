@@ -213,18 +213,23 @@ GET /studios/:studioId/warehouse
 **Ответ 200:**  
 ```json
 {
-  "id": "uuid-склада-филиала",
+  "id": "whs_…",
   "type": "BRANCH",
-  "studioId": "uuid-студии",
+  "studioId": "stu_…",
   "stocks": [
     {
-      "productId": "uuid-товара",
-      "product": { "id": "...", "name": "...", "description": null, "article": null, "unit": "PCS" },
+      "productId": "prd_…",
+      "product": { "id": "prd_…", "name": "…", "description": null, "article": null, "unit": "PCS" },
       "quantity": 3
     }
+  ],
+  "products": [
+    { "id": "prd_…", "name": "…", "description": null, "article": null, "unit": "KG" }
   ]
 }
 ```
+
+Поле **`products`** — полный каталог товаров (тот же набор, что у `GET .../warehouse/products`). Его можно использовать для выпадающих списков («Перемещение», «Списание»), если отдельный запрос к `/warehouse/products` не вызывается или пустой. Id товаров в API — **читаемые** (`prd_…`), не UUID.
 
 ### Список товаров (для выпадающих списков при приходе/списании/перемещении)
 

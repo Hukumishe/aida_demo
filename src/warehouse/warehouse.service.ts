@@ -88,10 +88,13 @@ export class WarehouseService {
   ) {
     this.ensureBranchAccess(studioId, userRole, userStudioId);
     const warehouse = await this.getOrCreateBranchWarehouse(studioId);
-    const stocks = await this.prisma.stock.findMany({
-      where: { warehouseId: warehouse.id },
-      include: { product: true },
-    });
+    const [stocks, products] = await Promise.all([
+      this.prisma.stock.findMany({
+        where: { warehouseId: warehouse.id },
+        include: { product: true },
+      }),
+      this.prisma.product.findMany({ orderBy: { name: 'asc' } }),
+    ]);
     return {
       id: warehouse.id,
       type: warehouse.type,
@@ -101,6 +104,8 @@ export class WarehouseService {
         product: s.product,
         quantity: s.quantity,
       })),
+      /** Полный каталог (как GET .../warehouse/products) — для селектов «перемещение / списание» без второго запроса */
+      products,
     };
   }
 
