@@ -388,6 +388,20 @@ export class WarehouseService {
       );
     }
 
+    const master = await this.prisma.user.findFirst({
+      where: {
+        id: dto.forStaffUserId,
+        studioId,
+        role: UserRole.MASTER,
+        isActive: true,
+      },
+    });
+    if (!master) {
+      throw new BadRequestException(
+        'Укажите активного мастера этого филиала (forStaffUserId)',
+      );
+    }
+
     await this.prisma.$transaction(async (tx) => {
       await tx.stock.update({
         where: {
@@ -403,6 +417,7 @@ export class WarehouseService {
           quantityDelta: -dto.quantity,
           type: StockMovementType.WRITE_OFF,
           createdByUserId: userId,
+          forStaffUserId: dto.forStaffUserId,
         },
       });
     });
@@ -521,6 +536,7 @@ export class WarehouseService {
         include: {
           product: true,
           createdBy: { select: { id: true, staffProfile: true } },
+          forStaff: { select: { id: true, staffProfile: true } },
         },
       }),
     ]);
@@ -536,6 +552,8 @@ export class WarehouseService {
       createdByName: t.createdBy.staffProfile
         ? `${t.createdBy.staffProfile.firstName} ${t.createdBy.staffProfile.lastName || ''}`.trim()
         : null,
+      forStaffUserId: null as string | null,
+      forStaffName: null as string | null,
     }));
 
     const movementEntries = movements.map((m) => ({
@@ -548,6 +566,10 @@ export class WarehouseService {
       createdByUserId: m.createdByUserId,
       createdByName: m.createdBy.staffProfile
         ? `${m.createdBy.staffProfile.firstName} ${m.createdBy.staffProfile.lastName || ''}`.trim()
+        : null,
+      forStaffUserId: m.forStaffUserId ?? null,
+      forStaffName: m.forStaff?.staffProfile
+        ? `${m.forStaff.staffProfile.firstName} ${m.forStaff.staffProfile.lastName || ''}`.trim()
         : null,
     }));
 
