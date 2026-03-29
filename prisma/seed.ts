@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, ServiceAudience } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { generateId, IdPrefix } from '../src/common/id-generator';
 
@@ -120,16 +120,29 @@ async function main() {
 
   console.log('Created client:', client.id);
 
+  const serviceCategory = await prisma.serviceCategory.create({
+    data: {
+      id: generateId(IdPrefix.ServiceCategory),
+      studioId: studio.id,
+      name: 'Стрижка и уход',
+      sortOrder: 0,
+    },
+  });
+
+  console.log('Created service category:', serviceCategory.id);
+
   // Create service
   const service = await prisma.service.create({
     data: {
       id: generateId(IdPrefix.Service),
       studioId: studio.id,
+      categoryId: serviceCategory.id,
       name: 'Haircut',
       defaultDurationMin: 60,
       defaultPrice: 2000,
       requiredStaffCount: 1,
       isActive: true,
+      audience: ServiceAudience.WOMEN,
     },
   });
 

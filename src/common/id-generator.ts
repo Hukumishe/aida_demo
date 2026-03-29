@@ -13,6 +13,7 @@ export const IdPrefix = {
   WorkScheduleDay: 'wsd',
   BusySlot: 'bsy',
   Service: 'srv',
+  ServiceCategory: 'sca',
   LandingPromotion: 'lpr',
   LandingPromotionService: 'lps',
   LandingPromotionCode: 'lpc',

@@ -225,11 +225,21 @@ GET /studios/:studioId/warehouse
   ],
   "products": [
     { "id": "prd_…", "name": "…", "description": null, "article": null, "unit": "KG" }
+  ],
+  "transferFromCentralOptions": [
+    {
+      "productId": "prd_…",
+      "product": { "id": "prd_…", "name": "…", "unit": "KG" },
+      "quantityOnCentral": 12
+    }
   ]
 }
 ```
 
-Поле **`products`** — полный каталог товаров (тот же набор, что у `GET .../warehouse/products`). Его можно использовать для выпадающих списков («Перемещение», «Списание»), если отдельный запрос к `/warehouse/products` не вызывается или пустой. Id товаров в API — **читаемые** (`prd_…`), не UUID.
+- **`products`** — полный каталог (как `GET .../warehouse/products`). Удобно для **списания** и форм, где нужны все позиции.
+- **`transferFromCentralOptions`** — только товары с **остатком на центре больше нуля** + поле **`quantityOnCentral`**. Это основной источник для выпадающего списка модалки **«Перемещение с центрального склада»** на экране филиала.
+
+**Важно для Lovable:** не подставляйте в этот селект только `stocks` филиала (на филиале пусто, пока не было перемещений). Не вызывайте только `GET /warehouse/central/products`, если у пользователя нет прав на «единый склад» (например MANAGER). Берите **`transferFromCentralOptions`** из ответа **`GET /studios/:studioId/warehouse`** (или дублируйте логику на фронте из `products` + отдельный запрос остатков центра — хуже). Id товаров — **`prd_…`**, не UUID; не фильтруйте список по `IsUUID`.
 
 ### Список товаров (для выпадающих списков при приходе/списании/перемещении)
 

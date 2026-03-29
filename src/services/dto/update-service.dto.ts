@@ -1,5 +1,10 @@
-import { IsString, IsInt, IsOptional, IsBoolean, Min } from 'class-validator';
+import { IsString, IsInt, IsOptional, IsBoolean, Min, IsEnum, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { ServiceAudience } from '@prisma/client';
+import {
+  READABLE_ENTITY_ID_MESSAGE,
+  READABLE_ENTITY_ID_REGEX,
+} from '../../common/id-generator';
 
 export class UpdateServiceDto {
   @ApiProperty({ example: 'Haircut', required: false })
@@ -31,6 +36,20 @@ export class UpdateServiceDto {
   @IsBoolean()
   @IsOptional()
   bonusAccrualEnabled?: boolean;
+
+  @ApiProperty({
+    required: false,
+    description: 'Сменить категорию услуги (другой id категории этой же студии)',
+    example: 'sca_abc12defgh3',
+  })
+  @IsOptional()
+  @Matches(READABLE_ENTITY_ID_REGEX, { message: READABLE_ENTITY_ID_MESSAGE })
+  categoryId?: string;
+
+  @ApiProperty({ enum: ServiceAudience, required: false })
+  @IsEnum(ServiceAudience)
+  @IsOptional()
+  audience?: ServiceAudience;
 }
 
 

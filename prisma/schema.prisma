@@ -78,6 +78,12 @@ enum LandingPromotionType {
   ONE_PLUS_ONE // Акция 1+1 (две услуги по спеццене)
 }
 
+// Аудитория услуги: MEN или WOMEN (одно значение на услугу)
+enum ServiceAudience {
+  MEN
+  WOMEN
+}
+
 model Studio {
   id        String   @id
   name      String
@@ -103,6 +109,7 @@ model Studio {
   landingPromotions     LandingPromotion[]
   landingMasters        LandingMaster[]
   landingServiceCards   LandingServiceCard[]
+  serviceCategories     ServiceCategory[]
 
   @@map("studios")
 }
@@ -245,6 +252,22 @@ model BusySlot {
   @@map("busy_slots")
 }
 
+model ServiceCategory {
+  id        String   @id
+  studioId  String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  studio   Studio    @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  services Service[]
+
+  @@unique([studioId, name])
+  @@index([studioId])
+  @@map("service_categories")
+}
+
 model Service {
   id                 String   @id
   studioId           String
@@ -254,10 +277,13 @@ model Service {
   requiredStaffCount Int      @default(1)
   isActive           Boolean  @default(true)
   bonusAccrualEnabled Boolean @default(true) // Начислять ли кэшбэк за эту услугу
+  categoryId         String
+  audience           ServiceAudience @default(WOMEN)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   studio             Studio                 @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  category           ServiceCategory        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   staffServices      StaffService[]
   staffOverrides     StaffServiceOverride[]
   appointments       Appointment[]

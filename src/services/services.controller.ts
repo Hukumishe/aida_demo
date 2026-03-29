@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Patch,
+  Delete,
   Param,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +17,8 @@ import {
 import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
+import { CreateServiceCategoryDto } from './dto/create-service-category.dto';
+import { UpdateServiceCategoryDto } from './dto/update-service-category.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
@@ -75,6 +78,68 @@ export class ServicesController {
     @CurrentUser() user?: any,
   ) {
     return this.servicesService.update(studioId, id, updateServiceDto, user?.role, user?.studioId);
+  }
+
+  // --- Категории услуг ---
+
+  @Get('studios/:studioId/service-categories')
+  @ApiOperation({ summary: 'Список категорий услуг студии' })
+  @ApiResponse({ status: 200 })
+  listCategories(
+    @Param('studioId') studioId: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.findCategories(studioId, user?.role, user?.studioId);
+  }
+
+  @Post('studios/:studioId/service-categories')
+  @ApiOperation({ summary: 'Создать категорию услуг' })
+  @ApiResponse({ status: 201 })
+  createCategory(
+    @Param('studioId') studioId: string,
+    @Body() dto: CreateServiceCategoryDto,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.createCategory(studioId, dto, user?.role, user?.studioId);
+  }
+
+  @Patch('studios/:studioId/service-categories/:categoryId')
+  @ApiOperation({ summary: 'Изменить категорию услуг' })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 404 })
+  updateCategory(
+    @Param('studioId') studioId: string,
+    @Param('categoryId') categoryId: string,
+    @Body() dto: UpdateServiceCategoryDto,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.updateCategory(
+      studioId,
+      categoryId,
+      dto,
+      user?.role,
+      user?.studioId,
+    );
+  }
+
+  @Delete('studios/:studioId/service-categories/:categoryId')
+  @ApiOperation({
+    summary: 'Удалить категорию',
+    description: 'У услуг с этой категорией поле categoryId станет null',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 404 })
+  deleteCategory(
+    @Param('studioId') studioId: string,
+    @Param('categoryId') categoryId: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.deleteCategory(
+      studioId,
+      categoryId,
+      user?.role,
+      user?.studioId,
+    );
   }
 }
 

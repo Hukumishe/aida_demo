@@ -88,13 +88,21 @@ export class WarehouseService {
   ) {
     this.ensureBranchAccess(studioId, userRole, userStudioId);
     const warehouse = await this.getOrCreateBranchWarehouse(studioId);
-    const [stocks, products] = await Promise.all([
+    const central = await this.getOrCreateCentralWarehouse();
+    const [stocks, products, centralStocksPositive] = await Promise.all([
       this.prisma.stock.findMany({
         where: { warehouseId: warehouse.id },
         include: { product: true },
       }),
       this.prisma.product.findMany({ orderBy: { name: 'asc' } }),
+      this.prisma.stock.findMany({
+        where: { warehouseId: central.id, quantity: { gt: 0 } },
+        include: { product: true },
+      }),
     ]);
+    centralStocksPositive.sort((a, b) =>
+      a.product.name.localeCompare(b.product.name, 'ru', { sensitivity: 'base' }),
+    );
     return {
       id: warehouse.id,
       type: warehouse.type,
@@ -104,8 +112,17 @@ export class WarehouseService {
         product: s.product,
         quantity: s.quantity,
       })),
-      /** Полный каталог (как GET .../warehouse/products) — для селектов «перемещение / списание» без второго запроса */
+      /** Полный каталог (как GET .../warehouse/products) — селекты «списание» и т.п. */
       products,
+      /**
+       * Товары с ненулевым остатком на центральном складе — для модалки «Перемещение с центра».
+       * Не требует отдельного вызова GET /warehouse/central/* (у MANAGER на него нет прав).
+       */
+      transferFromCentralOptions: centralStocksPositive.map((s) => ({
+        productId: s.productId,
+        product: s.product,
+        quantityOnCentral: s.quantity,
+      })),
     };
   }
 
