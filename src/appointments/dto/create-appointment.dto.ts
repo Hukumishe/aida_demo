@@ -37,6 +37,16 @@ export class CreateAppointmentDto {
   @IsOptional()
   @Min(0)
   prepaymentAmount?: number;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Реферальный код другого клиента, если у нового клиента ещё не указан пригласивший и это первая запись в системе. Не промокод лендинга.',
+    example: 'ABC123',
+  })
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
 }
 
 

@@ -46,6 +46,16 @@ export class CreateClientDto {
   @Min(0)
   @IsOptional()
   balance?: number;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Реферальный код другого клиента (не промокод лендинга). После привязки в профиле отображается пригласивший.',
+    example: 'ABC123',
+  })
+  @IsOptional()
+  @IsString()
+  referrerCode?: string;
 }
 
 

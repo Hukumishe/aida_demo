@@ -17,6 +17,13 @@ import {
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AppointmentStatus, ClientLevel } from '@prisma/client';
+import {
+  assertReferralCodeIsNotLandingPromo,
+  findReferrerByClientReferralCode,
+  normalizeReferralCodeInput,
+  REFERRAL_FIRST_VISIT_DISCOUNT_PERCENT,
+  REFERRAL_REFERRER_BONUS_PERCENT,
+} from '../common/referral-code.util';
 
 @Injectable()
 export class AppointmentsService {
@@ -187,6 +194,39 @@ export class AppointmentsService {
 
     // Create appointment in transaction
     return this.prisma.$transaction(async (tx) => {
+      const clientRow = await tx.client.findUnique({
+        where: { id: createAppointmentDto.clientId },
+      });
+      if (!clientRow) {
+        throw new NotFoundException('Client not found');
+      }
+      if (clientRow.isBlacklisted) {
+        throw new BadRequestException('Cannot create appointment for a blacklisted client');
+      }
+
+      const normalizedReferral = normalizeReferralCodeInput(createAppointmentDto.referralCode);
+      if (normalizedReferral && !clientRow.referredByClientId) {
+        const apptCount = await tx.appointment.count({
+          where: { clientId: clientRow.id },
+        });
+        if (apptCount > 0) {
+          throw new BadRequestException(
+            'Реферальный код можно указать только при первой записи клиента',
+          );
+        }
+        await assertReferralCodeIsNotLandingPromo(tx, normalizedReferral);
+        const referrer = await findReferrerByClientReferralCode(tx, normalizedReferral);
+        if (!referrer || referrer.id === clientRow.id) {
+          throw new BadRequestException(
+            'Неверный реферальный код или нельзя использовать свой код',
+          );
+        }
+        await tx.client.update({
+          where: { id: clientRow.id },
+          data: { referredByClientId: referrer.id },
+        });
+      }
+
       // Double-check availability within transaction
       await this.availabilityService.checkAppointmentAvailability(
         studioId,
@@ -633,7 +673,19 @@ export class AppointmentsService {
     const prepayment = existingAppointment.prepaymentAmount ?? 0;
     const baseAmount = service.defaultPrice ?? 0;
     const upsellsSum = upsells.reduce((s, u) => s + u.totalAmount, 0);
-    const total = baseAmount + upsellsSum;
+    const grossTotal = baseAmount + upsellsSum;
+
+    const doneBefore = await this.prisma.appointment.count({
+      where: { clientId: client.id, status: AppointmentStatus.DONE },
+    });
+    const applyReferralFirstVisit =
+      !!client.referredByClientId &&
+      doneBefore === 0 &&
+      !client.referralFirstVisitBonusCredited;
+
+    const total = applyReferralFirstVisit
+      ? Math.round((grossTotal * (100 - REFERRAL_FIRST_VISIT_DISCOUNT_PERCENT)) / 100)
+      : grossTotal;
 
     const limitPercent = studio.globalBonusPaymentLimitPercent ?? 30;
     const maxBonusesAllowed = Math.floor((total * limitPercent) / 100);
@@ -660,35 +712,17 @@ export class AppointmentsService {
       ? client.level
       : getLevelFromTotalPaid(newTotalPaidForLevel);
 
-    // Реферальная программа: только на первую запись в системе; 10% пригласившему, 20% новому клиенту
+    // Рефералка привязана при создании клиента/первой записи; 10% пригласившему — только после DONE; новому — скидка 20% на сумму визита (не бонусы)
     let referrer: { id: string; bonuses: number } | null = null;
     let referrerBonus = 0;
-    let newClientReferralBonus = 0;
-    const referralCodeRaw = dto?.referralCode?.trim();
-    if (referralCodeRaw && totalMoneyPaid > 0) {
-      const clientAppointmentsCount = await this.prisma.appointment.count({
-        where: { clientId: client.id },
-      });
-      if (clientAppointmentsCount > 1) {
-        throw new BadRequestException(
-          'Реферальный код можно использовать только при первой записи в системе',
-        );
-      }
-      if (!(client as any).referralFirstVisitBonusCredited) {
+    if (applyReferralFirstVisit && totalMoneyPaid > 0 && client.referredByClientId) {
       const ref = await this.prisma.client.findUnique({
-        where: { referralCode: referralCodeRaw.toUpperCase() },
+        where: { id: client.referredByClientId },
         select: { id: true, bonuses: true },
       });
-        if (ref && ref.id !== client.id) {
-          referrer = ref;
-          referrerBonus = Math.round((totalMoneyPaid * 10) / 100);
-          newClientReferralBonus = Math.round((totalMoneyPaid * 20) / 100);
-          newBonuses += newClientReferralBonus;
-        } else {
-          throw new BadRequestException(
-            'Неверный реферальный код или нельзя использовать свой код',
-          );
-        }
+      if (ref && ref.id !== client.id) {
+        referrer = ref;
+        referrerBonus = Math.round((totalMoneyPaid * REFERRAL_REFERRER_BONUS_PERCENT) / 100);
       }
     }
 
@@ -700,6 +734,10 @@ export class AppointmentsService {
       math: {
         baseAmount: `${baseAmount} ₸`,
         upsellsSum: `${upsellsSum} ₸`,
+        grossTotal: `${grossTotal} ₸`,
+        referralFirstVisitDiscount: applyReferralFirstVisit
+          ? `${REFERRAL_FIRST_VISIT_DISCOUNT_PERCENT}%`
+          : '—',
         total: `${total} ₸`,
         prepayment: `${prepayment} ₸`,
         limitPercent: `${limitPercent}%`,
@@ -736,7 +774,6 @@ export class AppointmentsService {
         bonuses: number;
         totalPaidForLevel: number;
         level?: ClientLevel;
-        referredByClientId?: string;
         referralFirstVisitBonusCredited?: boolean;
       } = {
         bonuses: newBonuses,
@@ -745,8 +782,7 @@ export class AppointmentsService {
       if (!client.levelSetManually) {
         updateData.level = newLevel as ClientLevel;
       }
-      if (referrer) {
-        updateData.referredByClientId = referrer.id;
+      if (applyReferralFirstVisit) {
         updateData.referralFirstVisitBonusCredited = true;
       }
       await tx.client.update({
@@ -754,7 +790,7 @@ export class AppointmentsService {
         data: updateData,
       });
 
-      if (referrer) {
+      if (referrer && referrerBonus > 0) {
         await tx.client.update({
           where: { id: referrer.id },
           data: { bonuses: referrer.bonuses + referrerBonus },
@@ -767,18 +803,7 @@ export class AppointmentsService {
             amount: referrerBonus,
             type: 'REFERRAL_REFERRER',
             appointmentId: id,
-            comment: '10% от чека приведённой подруги',
-          },
-        });
-        await tx.bonusHistoryEntry.create({
-          data: {
-            id: generateId(IdPrefix.BonusHistoryEntry),
-            clientId: client.id,
-            studioId: studio.id,
-            amount: newClientReferralBonus,
-            type: 'REFERRAL_NEW_CLIENT',
-            appointmentId: id,
-            comment: '20% за первый визит по реферальному коду',
+            comment: '10% от чека приведённой подруги (после завершения записи)',
           },
         });
       }

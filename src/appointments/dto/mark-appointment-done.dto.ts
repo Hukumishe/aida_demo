@@ -15,7 +15,8 @@ export class MarkAppointmentDoneDto {
   bonusesUsed?: number;
 
   @ApiPropertyOptional({
-    description: 'Реферальный код «приведи подругу»: при первом визите новому клиенту начисляется 20% от чека бонусами, пригласившему — 10%',
+    description:
+      'Устарело: реферальный код задаётся при создании клиента или первой записи. Поле игнорируется.',
     example: 'ABC123',
     maxLength: 20,
   })

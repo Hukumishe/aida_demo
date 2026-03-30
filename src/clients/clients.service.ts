@@ -16,6 +16,11 @@ import {
 } from './constants/levels.constants';
 import { ClientLevel } from '@prisma/client';
 import * as crypto from 'crypto';
+import {
+  assertReferralCodeIsNotLandingPromo,
+  findReferrerByClientReferralCode,
+  normalizeReferralCodeInput,
+} from '../common/referral-code.util';
 
 const REFERRAL_CODE_LENGTH = 6;
 const REFERRAL_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -224,6 +229,17 @@ export class ClientsService {
       throw new BadRequestException('Клиент с таким номером телефона уже существует');
     }
 
+    const normalizedReferrer = normalizeReferralCodeInput(createClientDto.referrerCode);
+    let referredByClientId: string | undefined;
+    if (normalizedReferrer) {
+      await assertReferralCodeIsNotLandingPromo(this.prisma, normalizedReferrer);
+      const referrer = await findReferrerByClientReferralCode(this.prisma, normalizedReferrer);
+      if (!referrer) {
+        throw new BadRequestException('Реферальный код не найден');
+      }
+      referredByClientId = referrer.id;
+    }
+
     const referralCode = await this.generateReferralCode();
     try {
       return await this.prisma.client.create({
@@ -238,6 +254,7 @@ export class ClientsService {
           discount: createClientDto.discount ?? 0,
           balance: createClientDto.balance ?? 0,
           referralCode,
+          referredByClientId,
         },
       });
     } catch (error: any) {
@@ -254,6 +271,15 @@ export class ClientsService {
       include: {
         _count: {
           select: { referredClients: true },
+        },
+        referredByClient: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            referralCode: true,
+            phone: true,
+          },
         },
       },
     });
@@ -296,6 +322,13 @@ export class ClientsService {
     const totalPaidForLevel = (client as any).totalPaidForLevel ?? 0;
     const { _count, ...clientData } = client as any;
 
+    const completedVisits = await this.prisma.appointment.count({
+      where: { clientId: id, status: 'DONE' },
+    });
+    const referralCodeInputDisabled = !!(client as any).referredByClientId;
+    const referralFirstVisitDiscountApplies =
+      !!(client as any).referredByClientId && completedVisits === 0;
+
     let referredList: { clientId: string; firstName: string; lastName: string; usedAt: string }[] = [];
     if (referredCount > 0) {
       const referred = await this.prisma.client.findMany({
@@ -303,20 +336,33 @@ export class ClientsService {
         select: { id: true, firstName: true, lastName: true },
       });
       const referredIds = referred.map((c) => c.id);
-      const dates = await this.prisma.bonusHistoryEntry.findMany({
+      const firstDoneRows = await this.prisma.appointment.findMany({
+        where: { clientId: { in: referredIds }, status: 'DONE' },
+        select: { clientId: true, startAt: true },
+        orderBy: { startAt: 'asc' },
+      });
+      const firstDoneAtByClient = new Map<string, Date>();
+      for (const row of firstDoneRows) {
+        if (!firstDoneAtByClient.has(row.clientId)) {
+          firstDoneAtByClient.set(row.clientId, row.startAt);
+        }
+      }
+      const legacyBonusDates = await this.prisma.bonusHistoryEntry.findMany({
         where: {
           clientId: { in: referredIds },
           type: 'REFERRAL_NEW_CLIENT',
         },
         select: { clientId: true, createdAt: true },
       });
-      const usedAtByClientId = new Map<string, Date>();
-      for (const d of dates) {
-        const existing = usedAtByClientId.get(d.clientId);
-        if (!existing || d.createdAt < existing) usedAtByClientId.set(d.clientId, d.createdAt);
+      const legacyAtByClient = new Map<string, Date>();
+      for (const d of legacyBonusDates) {
+        const existing = legacyAtByClient.get(d.clientId);
+        if (!existing || d.createdAt < existing) legacyAtByClient.set(d.clientId, d.createdAt);
       }
       referredList = referred.map((c) => {
-        const usedAt = usedAtByClientId.get(c.id);
+        const fromDone = firstDoneAtByClient.get(c.id);
+        const fromLegacy = legacyAtByClient.get(c.id);
+        const usedAt = fromDone ?? fromLegacy;
         return {
           clientId: c.id,
           firstName: c.firstName,
@@ -333,6 +379,8 @@ export class ClientsService {
       referredList,
       cashbackPercent: getCashbackPercent(level),
       levelProgress: getLevelProgress(totalPaidForLevel, level),
+      referralCodeInputDisabled,
+      referralFirstVisitDiscountApplies,
     };
   }
 
