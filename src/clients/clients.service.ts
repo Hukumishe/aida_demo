@@ -14,7 +14,11 @@ import {
   getLevelProgress,
   getLevelFromTotalPaid,
 } from './constants/levels.constants';
-import { ClientLevel } from '@prisma/client';
+import {
+  nextMilestoneProgress,
+  resolveAutoTierForTotalPaid,
+} from '../common/loyalty/studio-loyalty.util';
+import { ClientLevel, StudioLoyaltyMode } from '@prisma/client';
 import * as crypto from 'crypto';
 import {
   assertReferralCodeIsNotLandingPromo,
@@ -425,16 +429,163 @@ export class ClientsService {
       referredList.sort((a, b) => (b.usedAt || '').localeCompare(a.usedAt || ''));
     }
 
+    let cashbackPercent = getCashbackPercent(level);
+    let levelProgress = getLevelProgress(totalPaidForLevel, level);
+    let studioLoyalty: Record<string, unknown> | null = null;
+
+    if (studioIdForReferral) {
+      const stLoyalty = await this.prisma.studio.findUnique({
+        where: { id: studioIdForReferral },
+        select: { loyaltyMode: true },
+      });
+      if (stLoyalty?.loyaltyMode === StudioLoyaltyMode.CUSTOM) {
+        const [loyaltyTiers, loyaltyMilestones, csl] = await Promise.all([
+          this.prisma.studioLoyaltyTier.findMany({
+            where: { studioId: studioIdForReferral },
+            orderBy: { sortOrder: 'asc' },
+          }),
+          this.prisma.studioLoyaltyMilestone.findMany({
+            where: { studioId: studioIdForReferral },
+            orderBy: { minTotalPaid: 'asc' },
+          }),
+          this.prisma.clientStudioLoyalty.findUnique({
+            where: {
+              clientId_studioId: { clientId: client.id, studioId: studioIdForReferral },
+            },
+            include: { currentTier: true },
+          }),
+        ]);
+        if (loyaltyTiers.length > 0 && loyaltyMilestones.length > 0) {
+          const tierLikes = loyaltyTiers.map((ct) => ({
+            id: ct.id,
+            sortOrder: ct.sortOrder,
+            name: ct.name,
+            cashbackPercent: ct.cashbackPercent,
+            manualOnly: ct.manualOnly,
+          }));
+          const milestoneLikes = loyaltyMilestones.map((m) => ({
+            minTotalPaid: m.minTotalPaid,
+            targetSortOrder: m.targetSortOrder,
+          }));
+          const paid = csl?.totalPaid ?? 0;
+          const currentTierResolved =
+            csl?.levelSetManually && csl.currentTier
+              ? {
+                  id: csl.currentTier.id,
+                  sortOrder: csl.currentTier.sortOrder,
+                  name: csl.currentTier.name,
+                  cashbackPercent: csl.currentTier.cashbackPercent,
+                  manualOnly: csl.currentTier.manualOnly,
+                }
+              : resolveAutoTierForTotalPaid(tierLikes, milestoneLikes, paid) ??
+                resolveAutoTierForTotalPaid(tierLikes, milestoneLikes, 0);
+          const prog = nextMilestoneProgress(milestoneLikes, tierLikes, paid);
+          cashbackPercent = currentTierResolved?.cashbackPercent ?? 0;
+          levelProgress = {
+            currentTotalPaid: paid,
+            nextLevel:
+              prog.nextTargetSortOrder != null ? `tier_${prog.nextTargetSortOrder}` : null,
+            nextLevelThreshold: prog.nextMilestoneMinPaid,
+            remainingToNext: prog.remainingToNext,
+          };
+          studioLoyalty = {
+            studioId: studioIdForReferral,
+            loyaltyMode: StudioLoyaltyMode.CUSTOM,
+            totalPaidForStudio: paid,
+            currentTier: currentTierResolved,
+            levelSetManually: csl?.levelSetManually ?? false,
+            milestones: loyaltyMilestones,
+            nextStep: {
+              minTotalPaid: prog.nextMilestoneMinPaid,
+              targetSortOrder: prog.nextTargetSortOrder,
+              targetTierName: prog.nextTierName,
+              remaining: prog.remainingToNext,
+            },
+          };
+        }
+      }
+    }
+
     return {
       ...clientData,
       referredCount,
       referredList,
-      cashbackPercent: getCashbackPercent(level),
-      levelProgress: getLevelProgress(totalPaidForLevel, level),
+      cashbackPercent,
+      levelProgress,
+      studioLoyalty,
       referralCodeInputDisabled,
       referralFirstVisitDiscountApplies,
       referralFirstVisitBonusApplies,
     };
+  }
+
+  private async applyCustomLoyaltyPatch(
+    clientId: string,
+    studioId: string,
+    tierId?: string,
+    clearManual?: boolean,
+  ) {
+    const studio = await this.prisma.studio.findUnique({ where: { id: studioId } });
+    if (!studio || studio.loyaltyMode !== StudioLoyaltyMode.CUSTOM) {
+      throw new BadRequestException('Студия не в режиме кастомной лояльности (CUSTOM)');
+    }
+    const [tiers, milestones] = await Promise.all([
+      this.prisma.studioLoyaltyTier.findMany({ where: { studioId } }),
+      this.prisma.studioLoyaltyMilestone.findMany({ where: { studioId } }),
+    ]);
+    if (tiers.length === 0 || milestones.length === 0) {
+      throw new BadRequestException('У студии не настроены уровни лояльности');
+    }
+    const tierLikes = tiers.map((ct) => ({
+      id: ct.id,
+      sortOrder: ct.sortOrder,
+      name: ct.name,
+      cashbackPercent: ct.cashbackPercent,
+      manualOnly: ct.manualOnly,
+    }));
+    const milestoneLikes = milestones.map((m) => ({
+      minTotalPaid: m.minTotalPaid,
+      targetSortOrder: m.targetSortOrder,
+    }));
+
+    if (clearManual) {
+      const csl = await this.prisma.clientStudioLoyalty.findUnique({
+        where: { clientId_studioId: { clientId, studioId } },
+      });
+      if (!csl) {
+        throw new BadRequestException('Нет учёта лояльности клиента в этой студии');
+      }
+      const resolved = resolveAutoTierForTotalPaid(tierLikes, milestoneLikes, csl.totalPaid);
+      await this.prisma.clientStudioLoyalty.update({
+        where: { id: csl.id },
+        data: {
+          levelSetManually: false,
+          currentTierId: resolved?.id ?? null,
+        },
+      });
+    }
+
+    if (tierId) {
+      const tier = tiers.find((t) => t.id === tierId);
+      if (!tier) {
+        throw new BadRequestException('Уровень не найден в этой студии');
+      }
+      await this.prisma.clientStudioLoyalty.upsert({
+        where: { clientId_studioId: { clientId, studioId } },
+        create: {
+          id: generateId(IdPrefix.ClientStudioLoyalty),
+          clientId,
+          studioId,
+          totalPaid: 0,
+          levelSetManually: true,
+          currentTierId: tier.id,
+        },
+        update: {
+          levelSetManually: true,
+          currentTierId: tier.id,
+        },
+      });
+    }
   }
 
   async update(
@@ -443,6 +594,13 @@ export class ClientsService {
     userRole?: string,
     userStudioId?: string,
   ) {
+    const {
+      customLoyaltyStudioId,
+      customLoyaltyTierId,
+      customLoyaltyClearManual,
+      ...patchDto
+    } = updateClientDto;
+
     const client = await this.prisma.client.findUnique({
       where: { id },
     });
@@ -461,10 +619,34 @@ export class ClientsService {
       }
     }
 
+    if (
+      customLoyaltyStudioId != null ||
+      customLoyaltyTierId != null ||
+      customLoyaltyClearManual === true
+    ) {
+      if (!customLoyaltyStudioId) {
+        throw new BadRequestException('Для кастомной лояльности укажите customLoyaltyStudioId');
+      }
+      if (!isOwnerLevelRole(userRole)) {
+        throw new ForbiddenException('Only owner level role can change custom loyalty tier');
+      }
+      if (customLoyaltyTierId == null && customLoyaltyClearManual !== true) {
+        throw new BadRequestException(
+          'Передайте customLoyaltyTierId (назначить уровень) и/или customLoyaltyClearManual: true',
+        );
+      }
+      await this.applyCustomLoyaltyPatch(
+        client.id,
+        customLoyaltyStudioId,
+        customLoyaltyTierId ?? undefined,
+        customLoyaltyClearManual === true,
+      );
+    }
+
     // Check phone uniqueness globally if phone is being updated
-    if (updateClientDto.phone && updateClientDto.phone !== client.phone) {
+    if (patchDto.phone && patchDto.phone !== client.phone) {
       const existingClient = await this.prisma.client.findUnique({
-        where: { phone: updateClientDto.phone },
+        where: { phone: patchDto.phone },
       });
       if (existingClient) {
         throw new BadRequestException('Клиент с таким номером телефона уже существует');
@@ -473,27 +655,27 @@ export class ClientsService {
 
     // Только Owner и Deputy могут назначать или снимать DIAMOND
     const assigningDiamond =
-      updateClientDto.level === ClientLevel.DIAMOND || updateClientDto.levelSetManually === true;
+      patchDto.level === ClientLevel.DIAMOND || patchDto.levelSetManually === true;
     const removingDiamond =
       (client as any).level === ClientLevel.DIAMOND &&
-      (updateClientDto.levelSetManually === false ||
-        (updateClientDto.level !== undefined && updateClientDto.level !== ClientLevel.DIAMOND));
+      (patchDto.levelSetManually === false ||
+        (patchDto.level !== undefined && patchDto.level !== ClientLevel.DIAMOND));
     if (assigningDiamond || removingDiamond) {
       if (!isOwnerLevelRole(userRole)) {
         throw new ForbiddenException('Only owner or deputy owner can assign or remove DIAMOND level');
       }
     }
 
-    if (updateClientDto.level !== undefined && updateClientDto.level !== ClientLevel.DIAMOND) {
-      (updateClientDto as any).levelSetManually = false;
+    if (patchDto.level !== undefined && patchDto.level !== ClientLevel.DIAMOND) {
+      (patchDto as any).levelSetManually = false;
     }
 
     // Снять DIAMOND: передали levelSetManually: false — пересчитать уровень по totalPaidForLevel
-    const data: any = { ...updateClientDto };
+    const data: any = { ...patchDto };
     if (
-      updateClientDto.levelSetManually === false &&
+      patchDto.levelSetManually === false &&
       (client as any).level === ClientLevel.DIAMOND &&
-      updateClientDto.level === undefined
+      patchDto.level === undefined
     ) {
       const totalPaid = (client as any).totalPaidForLevel ?? 0;
       data.level = getLevelFromTotalPaid(totalPaid);
@@ -501,10 +683,14 @@ export class ClientsService {
     if (data.birthDate !== undefined) {
       data.birthDate = data.birthDate ? new Date(data.birthDate) : null;
     }
-    return this.prisma.client.update({
-      where: { id },
-      data,
-    });
+    const hasUpdates = Object.keys(data).length > 0;
+    if (hasUpdates) {
+      return this.prisma.client.update({
+        where: { id },
+        data,
+      });
+    }
+    return this.prisma.client.findUnique({ where: { id } });
   }
 
   /**

@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsInt, Min, Max, Matches, ValidateIf, IsEnum, IsBoolean } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ClientLevel } from '@prisma/client';
 
 export class UpdateClientDto {
@@ -58,6 +58,28 @@ export class UpdateClientDto {
   @Min(0)
   @IsOptional()
   balance?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Режим CUSTOM у студии: id студии для ручного уровня или сброса (вместе с customLoyaltyTierId или customLoyaltyClearManual)',
+  })
+  @IsOptional()
+  @IsString()
+  customLoyaltyStudioId?: string;
+
+  @ApiPropertyOptional({
+    description: 'ID записи StudioLoyaltyTier — зафиксировать этот уровень вручную в указанной студии',
+  })
+  @IsOptional()
+  @IsString()
+  customLoyaltyTierId?: string;
+
+  @ApiPropertyOptional({
+    description: 'С customLoyaltyStudioId: снять ручной уровень и пересчитать по сумме оплат в студии',
+  })
+  @IsOptional()
+  @IsBoolean()
+  customLoyaltyClearManual?: boolean;
 }
 
 

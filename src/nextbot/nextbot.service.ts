@@ -72,6 +72,7 @@ export class NextbotService {
       list[0].id,
       user.role,
       user.studioId,
+      studioId,
     );
     return { found: true, client: profile };
   }
@@ -90,10 +91,13 @@ export class NextbotService {
       };
     }
     const c = status.client as Record<string, unknown>;
+    const sl = c['studioLoyalty'] as { currentTier?: { name?: string } } | null | undefined;
+    const loyaltyTierName = sl?.currentTier?.name ?? null;
     return {
       found: true,
       clientId: c['id'],
       level: c['level'] ?? null,
+      loyaltyTierName,
       bonuses: c['bonuses'] ?? null,
       discount: c['discount'] ?? null,
       rawClient: status.client,

@@ -79,6 +79,12 @@ enum LandingPromotionType {
   SERVICE_BUNDLE // Набор из N услуг (1+1+1+…): одна общая цена, состав в landing_promotion_services
 }
 
+/// Лояльность: классический пресет (BRONZE/SILVER/GOLD/DIAMOND из кода) или свои уровни по студии
+enum StudioLoyaltyMode {
+  PRESET
+  CUSTOM
+}
+
 // «Приведи друга»: награда приглашённому на первом визите
 enum ReferFriendInviteeRewardType {
   DISCOUNT_PERCENT // скидка % на сумму визита (услуга + апсейлы)
@@ -109,6 +115,7 @@ model Studio {
   referFriendInviteeValue        Int? // 0–100 для DISCOUNT_PERCENT / BONUS_PERCENT
   referFriendReferrerRewardType  ReferFriendReferrerRewardType?
   referFriendReferrerValue       Int? // 0–100 для PERCENT_OF_PAYMENT; иначе фикс в ₸ (мин. ед.)
+  loyaltyMode       StudioLoyaltyMode @default(PRESET)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -129,8 +136,59 @@ model Studio {
   landingMasters        LandingMaster[]
   landingServiceCards   LandingServiceCard[]
   serviceCategories     ServiceCategory[]
+  loyaltyTiers          StudioLoyaltyTier[]
+  loyaltyMilestones     StudioLoyaltyMilestone[]
+  clientStudioLoyalties ClientStudioLoyalty[]
 
   @@map("studios")
+}
+
+/// Уровень лояльности студии (CUSTOM): порядок, имя, % кэшбэка; manualOnly — только назначение вручную (аналог DIAMOND)
+model StudioLoyaltyTier {
+  id              String   @id
+  studioId        String
+  sortOrder       Int
+  name            String
+  cashbackPercent Int
+  manualOnly      Boolean  @default(false)
+
+  studio            Studio                @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  clientAssignments ClientStudioLoyalty[] @relation("ClientStudioCurrentTier")
+
+  @@unique([studioId, sortOrder])
+  @@index([studioId])
+  @@map("studio_loyalty_tiers")
+}
+
+/// Порог суммы оплат в студии → целевой sortOrder (можно «перепрыгнуть» уровень, задав несколько вех)
+model StudioLoyaltyMilestone {
+  id              String @id
+  studioId        String
+  minTotalPaid    Int
+  targetSortOrder Int
+
+  studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+
+  @@index([studioId])
+  @@map("studio_loyalty_milestones")
+}
+
+/// Учёт лояльности клиента в конкретной студии (только при loyaltyMode = CUSTOM)
+model ClientStudioLoyalty {
+  id               String  @id
+  clientId         String
+  studioId         String
+  currentTierId    String?
+  totalPaid        Int     @default(0) // Сумма оплаченных деньгами по DONE только в этой студии
+  levelSetManually Boolean @default(false)
+
+  client      Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  studio      Studio             @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  currentTier StudioLoyaltyTier? @relation("ClientStudioCurrentTier", fields: [currentTierId], references: [id], onDelete: SetNull)
+
+  @@unique([clientId, studioId])
+  @@index([studioId])
+  @@map("client_studio_loyalties")
 }
 
 model Prompt {
@@ -206,8 +264,8 @@ model Client {
   notes            String?
   birthDate        DateTime?  @db.Date // День рождения клиента
   level            ClientLevel @default(BRONZE)
-  levelSetManually Boolean    @default(false) // true если DIAMOND назначен вручную
-  totalPaidForLevel Int       @default(0) // Сумма оплаченных деньгами по DONE (для расчёта уровня)
+  levelSetManually Boolean    @default(false) // true если DIAMOND назначен вручную (только режим PRESET)
+  totalPaidForLevel Int       @default(0) // Сумма оплаченных деньгами по DONE (для расчёта уровня в PRESET; глобально по клиенту)
   bonuses          Int        @default(0) // Бонусные баллы (1 балл = 1 ₸)
   discount         Int        @default(0) // Скидка в процентах (0-100)
   balance         Int        @default(0) // Баланс в тенге (историческое поле)
@@ -225,6 +283,7 @@ model Client {
   noShowIncomes     NoShowIncome[]
   blacklistRequests BlacklistRequest[]
   bonusHistory      BonusHistoryEntry[]
+  studioLoyalties   ClientStudioLoyalty[]
 
   @@unique([phone])
   @@unique([referralCode])

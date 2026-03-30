@@ -14,6 +14,7 @@ import {
   getCashbackPercent,
   getLevelFromTotalPaid,
 } from '../clients/constants/levels.constants';
+import { resolveAutoTierForTotalPaid } from '../common/loyalty/studio-loyalty.util';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AppointmentStatus, ClientLevel } from '@prisma/client';
@@ -707,16 +708,90 @@ export class AppointmentsService {
     // Сколько клиент доплачивает при расчёте (на кассе сейчас)
     const moneyPaidNow = Math.max(0, totalMoneyPaid - prepayment);
 
-    const cashbackPercent = getCashbackPercent(client.level);
-    const cashback =
-      service.bonusAccrualEnabled && totalMoneyPaid > 0
-        ? Math.round((totalMoneyPaid * cashbackPercent) / 100)
-        : 0;
+    const useCustomLoyalty = studio.loyaltyMode === 'CUSTOM';
+
+    let cashbackPercent: number;
+    let cashback: number;
+    let newTotalPaidForLevel: number;
+    let newLevel: string;
+    let customLoyaltyUpsert: {
+      newCslTotalPaid: number;
+      newCurrentTierId: string | null;
+      cslLevelSetManually: boolean;
+    } | null = null;
+
+    if (useCustomLoyalty) {
+      const [loyaltyTiers, loyaltyMilestones] = await Promise.all([
+        this.prisma.studioLoyaltyTier.findMany({
+          where: { studioId: studio.id },
+          orderBy: { sortOrder: 'asc' },
+        }),
+        this.prisma.studioLoyaltyMilestone.findMany({
+          where: { studioId: studio.id },
+        }),
+      ]);
+      if (loyaltyTiers.length === 0 || loyaltyMilestones.length === 0) {
+        throw new BadRequestException(
+          'Студия в режиме CUSTOM-лояльности, но уровни не заданы. Настройте PUT /studios/:studioId/loyalty',
+        );
+      }
+      const tierLikes = loyaltyTiers.map((ct) => ({
+        id: ct.id,
+        sortOrder: ct.sortOrder,
+        name: ct.name,
+        cashbackPercent: ct.cashbackPercent,
+        manualOnly: ct.manualOnly,
+      }));
+      const milestoneLikes = loyaltyMilestones.map((m) => ({
+        minTotalPaid: m.minTotalPaid,
+        targetSortOrder: m.targetSortOrder,
+      }));
+
+      const cslRow = await this.prisma.clientStudioLoyalty.findUnique({
+        where: {
+          clientId_studioId: { clientId: client.id, studioId: studio.id },
+        },
+        include: { currentTier: true },
+      });
+      const paidBefore = cslRow?.totalPaid ?? 0;
+      const tierForCashback =
+        cslRow?.levelSetManually && cslRow.currentTier
+          ? cslRow.currentTier
+          : resolveAutoTierForTotalPaid(tierLikes, milestoneLikes, paidBefore) ??
+            resolveAutoTierForTotalPaid(tierLikes, milestoneLikes, 0);
+
+      cashbackPercent = tierForCashback?.cashbackPercent ?? 0;
+      cashback =
+        service.bonusAccrualEnabled && totalMoneyPaid > 0
+          ? Math.round((totalMoneyPaid * cashbackPercent) / 100)
+          : 0;
+      newTotalPaidForLevel = client.totalPaidForLevel;
+      newLevel = client.level;
+      const newCslTotalPaid = paidBefore + totalMoneyPaid;
+      const newAutoTier = cslRow?.levelSetManually
+        ? null
+        : resolveAutoTierForTotalPaid(tierLikes, milestoneLikes, newCslTotalPaid);
+      const newCurrentTierId = cslRow?.levelSetManually
+        ? cslRow.currentTierId
+        : newAutoTier?.id ?? null;
+      customLoyaltyUpsert = {
+        newCslTotalPaid,
+        newCurrentTierId,
+        cslLevelSetManually: !!cslRow?.levelSetManually,
+      };
+    } else {
+      cashbackPercent = getCashbackPercent(client.level);
+      cashback =
+        service.bonusAccrualEnabled && totalMoneyPaid > 0
+          ? Math.round((totalMoneyPaid * cashbackPercent) / 100)
+          : 0;
+      newTotalPaidForLevel = client.totalPaidForLevel + totalMoneyPaid;
+      newLevel = client.levelSetManually
+        ? client.level
+        : getLevelFromTotalPaid(newTotalPaidForLevel);
+    }
+
     let newBonuses = Math.max(0, client.bonuses - bonusesUsed + cashback);
-    const newTotalPaidForLevel = client.totalPaidForLevel + totalMoneyPaid;
-    const newLevel = client.levelSetManually
-      ? client.level
-      : getLevelFromTotalPaid(newTotalPaidForLevel);
 
     let inviteeReferralBonus = 0;
     if (
@@ -787,6 +862,8 @@ export class AppointmentsService {
         newTotalPaidForLevel,
         levelSetManually: client.levelSetManually,
         newLevel,
+        loyaltyMode: studio.loyaltyMode,
+        customLoyalty: customLoyaltyUpsert,
         bonusesAfter: `${client.bonuses} - ${bonusesUsed} + ${cashback} = ${newBonuses}`,
       },
     });
@@ -801,25 +878,58 @@ export class AppointmentsService {
         },
       });
 
-      const updateData: {
-        bonuses: number;
-        totalPaidForLevel: number;
-        level?: ClientLevel;
-        referralFirstVisitBonusCredited?: boolean;
-      } = {
-        bonuses: newBonuses,
-        totalPaidForLevel: newTotalPaidForLevel,
-      };
-      if (!client.levelSetManually) {
-        updateData.level = newLevel as ClientLevel;
+      if (useCustomLoyalty && customLoyaltyUpsert) {
+        await tx.clientStudioLoyalty.upsert({
+          where: {
+            clientId_studioId: { clientId: client.id, studioId: studio.id },
+          },
+          create: {
+            id: generateId(IdPrefix.ClientStudioLoyalty),
+            clientId: client.id,
+            studioId: studio.id,
+            totalPaid: customLoyaltyUpsert.newCslTotalPaid,
+            levelSetManually: customLoyaltyUpsert.cslLevelSetManually,
+            currentTierId: customLoyaltyUpsert.newCurrentTierId,
+          },
+          update: {
+            totalPaid: customLoyaltyUpsert.newCslTotalPaid,
+            ...(customLoyaltyUpsert.cslLevelSetManually
+              ? {}
+              : { currentTierId: customLoyaltyUpsert.newCurrentTierId }),
+          },
+        });
+        const presetData: {
+          bonuses: number;
+          referralFirstVisitBonusCredited?: boolean;
+        } = { bonuses: newBonuses };
+        if (eligibleFirstVisitReferral) {
+          presetData.referralFirstVisitBonusCredited = true;
+        }
+        await tx.client.update({
+          where: { id: client.id },
+          data: presetData,
+        });
+      } else {
+        const updateData: {
+          bonuses: number;
+          totalPaidForLevel: number;
+          level?: ClientLevel;
+          referralFirstVisitBonusCredited?: boolean;
+        } = {
+          bonuses: newBonuses,
+          totalPaidForLevel: newTotalPaidForLevel,
+        };
+        if (!client.levelSetManually) {
+          updateData.level = newLevel as ClientLevel;
+        }
+        if (eligibleFirstVisitReferral) {
+          updateData.referralFirstVisitBonusCredited = true;
+        }
+        await tx.client.update({
+          where: { id: client.id },
+          data: updateData,
+        });
       }
-      if (eligibleFirstVisitReferral) {
-        updateData.referralFirstVisitBonusCredited = true;
-      }
-      await tx.client.update({
-        where: { id: client.id },
-        data: updateData,
-      });
 
       if (referrer && referrerBonus > 0) {
         await tx.client.update({

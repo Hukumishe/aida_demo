@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Body,
   Patch,
   Param,
@@ -16,6 +17,7 @@ import {
 import { StudiosService } from './studios.service';
 import { CreateStudioDto } from './dto/create-studio.dto';
 import { UpdateStudioSettingsDto } from './dto/update-studio-settings.dto';
+import { UpdateStudioLoyaltyDto } from './dto/update-studio-loyalty.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
@@ -82,6 +84,31 @@ export class StudiosController {
     @CurrentUser() user: any,
   ) {
     return this.studiosService.updateSettings(studioId, dto, user.role);
+  }
+
+  @Get(':studioId/loyalty')
+  @ApiOperation({
+    summary:
+      'Уровни лояльности студии: PRESET (классика из кода) или CUSTOM (свои названия, % и вехи перехода)',
+  })
+  @ApiResponse({ status: 200 })
+  async getLoyalty(@Param('studioId') studioId: string, @CurrentUser() user: any) {
+    return this.studiosService.getLoyalty(studioId, user.role, user.studioId);
+  }
+
+  @Put(':studioId/loyalty')
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @ApiOperation({
+    summary:
+      'Задать режим лояльности: PRESET или полная замена CUSTOM (tiers + milestones). Только уровень владельца.',
+  })
+  @ApiResponse({ status: 200 })
+  async updateLoyalty(
+    @Param('studioId') studioId: string,
+    @Body() dto: UpdateStudioLoyaltyDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.studiosService.updateLoyalty(studioId, dto, user.role);
   }
 }
 

@@ -32,6 +32,9 @@ export const IdPrefix = {
   Product: 'prd',
   Transfer: 'trf',
   StockMovement: 'stm',
+  StudioLoyaltyTier: 'slt',
+  StudioLoyaltyMilestone: 'slm',
+  ClientStudioLoyalty: 'csl',
 } as const;
 
 export type IdPrefixType = (typeof IdPrefix)[keyof typeof IdPrefix];

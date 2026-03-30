@@ -59,6 +59,10 @@ export class LandingService {
     if (!codeRow.isActive || !codeRow.promotion.isActive) {
       throw new BadRequestException('Promo code is inactive');
     }
+    const now = new Date();
+    if (codeRow.promotion.validUntil && codeRow.promotion.validUntil <= now) {
+      throw new BadRequestException('Promotion has ended');
+    }
     if (codeRow.expiresAt && codeRow.expiresAt < now) {
       throw new BadRequestException('Promo code has expired');
     }
