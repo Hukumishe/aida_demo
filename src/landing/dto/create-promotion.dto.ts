@@ -13,7 +13,10 @@ import {
 import { LandingPromotionType } from '@prisma/client';
 
 export class CreateLandingPromotionDto {
-  @ApiProperty({ enum: LandingPromotionType, description: 'Тип акции: скидка или 1+1' })
+  @ApiProperty({
+    enum: LandingPromotionType,
+    description: 'Тип акции: скидка, 1+1 (две услуги) или набор из N услуг (SERVICE_BUNDLE)',
+  })
   @IsEnum(LandingPromotionType)
   type: LandingPromotionType;
 
@@ -36,7 +39,9 @@ export class CreateLandingPromotionDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  @ValidateIf((o) => o.type === LandingPromotionType.DISCOUNT)
+  @ValidateIf(
+    (o) => o.type === LandingPromotionType.DISCOUNT || o.type === LandingPromotionType.SERVICE_BUNDLE,
+  )
   serviceIds?: string[];
 
   @ApiPropertyOptional({
@@ -70,11 +75,15 @@ export class CreateLandingPromotionDto {
   serviceIdB?: string;
 
   @ApiPropertyOptional({
-    description: 'Для типа ONE_PLUS_ONE: общая цена за две услуги',
+    description: 'Для ONE_PLUS_ONE и SERVICE_BUNDLE: одна общая цена за весь набор услуг',
     minimum: 0,
   })
   @IsOptional()
-  @ValidateIf((o) => o.type === LandingPromotionType.ONE_PLUS_ONE)
+  @ValidateIf(
+    (o) =>
+      o.type === LandingPromotionType.ONE_PLUS_ONE ||
+      o.type === LandingPromotionType.SERVICE_BUNDLE,
+  )
   @IsInt()
   @Min(0)
   bundlePrice?: number;

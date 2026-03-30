@@ -46,6 +46,15 @@ export class LandingService {
         throw new BadRequestException('ONE_PLUS_ONE promotion must have serviceIdA, serviceIdB and bundlePrice');
       }
     }
+    if (dto.type === 'SERVICE_BUNDLE') {
+      const ids = dto.serviceIds ?? [];
+      const unique = [...new Set(ids)];
+      if (unique.length < 2 || dto.bundlePrice == null) {
+        throw new BadRequestException(
+          'SERVICE_BUNDLE promotion must have at least 2 distinct serviceIds and bundlePrice',
+        );
+      }
+    }
 
     const promotion = await this.prisma.landingPromotion.create({
       data: {
@@ -58,11 +67,14 @@ export class LandingService {
         discountPercent: dto.type === 'DISCOUNT' ? dto.discountPercent ?? null : null,
         serviceIdA: dto.type === 'ONE_PLUS_ONE' ? dto.serviceIdA ?? null : null,
         serviceIdB: dto.type === 'ONE_PLUS_ONE' ? dto.serviceIdB ?? null : null,
-        bundlePrice: dto.type === 'ONE_PLUS_ONE' ? dto.bundlePrice ?? null : null,
+        bundlePrice:
+          dto.type === 'ONE_PLUS_ONE' || dto.type === 'SERVICE_BUNDLE'
+            ? dto.bundlePrice ?? null
+            : null,
         services:
-          dto.type === 'DISCOUNT' && dto.serviceIds
+          (dto.type === 'DISCOUNT' || dto.type === 'SERVICE_BUNDLE') && dto.serviceIds?.length
             ? {
-                create: dto.serviceIds.map((serviceId) => ({
+                create: [...new Set(dto.serviceIds)].map((serviceId) => ({
                   id: generateId(IdPrefix.LandingPromotionService),
                   serviceId,
                 })),
@@ -108,13 +120,19 @@ export class LandingService {
       throw new NotFoundException('Promotion not found');
     }
 
-    // Обновление связей услуг для DISCOUNT
-    if (existing.type === 'DISCOUNT' && dto.serviceIds) {
+    // Обновление связей услуг для DISCOUNT и SERVICE_BUNDLE
+    if ((existing.type === 'DISCOUNT' || existing.type === 'SERVICE_BUNDLE') && dto.serviceIds) {
+      if (existing.type === 'SERVICE_BUNDLE') {
+        const unique = [...new Set(dto.serviceIds)];
+        if (unique.length < 2) {
+          throw new BadRequestException('SERVICE_BUNDLE must have at least 2 distinct serviceIds');
+        }
+      }
       await this.prisma.$transaction([
         this.prisma.landingPromotionService.deleteMany({
           where: { promotionId: id },
         }),
-        ...dto.serviceIds.map((serviceId) =>
+        ...[...new Set(dto.serviceIds)].map((serviceId) =>
           this.prisma.landingPromotionService.create({
             data: {
               id: generateId(IdPrefix.LandingPromotionService),
@@ -139,7 +157,9 @@ export class LandingService {
         serviceIdB:
           existing.type === 'ONE_PLUS_ONE' ? dto.serviceIdB ?? existing.serviceIdB : existing.serviceIdB,
         bundlePrice:
-          existing.type === 'ONE_PLUS_ONE' ? dto.bundlePrice ?? existing.bundlePrice : existing.bundlePrice,
+          existing.type === 'ONE_PLUS_ONE' || existing.type === 'SERVICE_BUNDLE'
+            ? dto.bundlePrice ?? existing.bundlePrice
+            : existing.bundlePrice,
       },
       include: {
         services: {

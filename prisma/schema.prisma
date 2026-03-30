@@ -76,6 +76,7 @@ enum StockMovementType {
 enum LandingPromotionType {
   DISCOUNT   // Скидка на одну или несколько услуг
   ONE_PLUS_ONE // Акция 1+1 (две услуги по спеццене)
+  SERVICE_BUNDLE // Набор из N услуг (1+1+1+…): одна общая цена, состав в landing_promotion_services
 }
 
 // Аудитория услуги: MEN или WOMEN (одно значение на услугу)
@@ -309,7 +310,7 @@ model LandingPromotion {
   discountPercent Int?              // Для DISCOUNT: % скидки 0–100
   serviceIdA  String?               // Для ONE_PLUS_ONE: первая услуга
   serviceIdB  String?               // Для ONE_PLUS_ONE: вторая услуга
-  bundlePrice Int?                  // Для ONE_PLUS_ONE: общая цена набора
+  bundlePrice Int?                  // Для ONE_PLUS_ONE и SERVICE_BUNDLE: общая цена набора
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
 
