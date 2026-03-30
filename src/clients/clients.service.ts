@@ -268,6 +268,16 @@ export class ClientsService {
           referralCode,
           referredByClientId,
         },
+        include: {
+          referredByClient: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              referralCode: true,
+            },
+          },
+        },
       });
     } catch (error: any) {
       if (error.code === 'P2002') {
