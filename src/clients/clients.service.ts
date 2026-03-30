@@ -287,7 +287,12 @@ export class ClientsService {
     }
   }
 
-  async findOne(id: string, userRole?: string, userStudioId?: string) {
+  async findOne(
+    id: string,
+    userRole?: string,
+    userStudioId?: string,
+    studioIdForReferral?: string,
+  ) {
     const client = await this.prisma.client.findUnique({
       where: { id },
       include: {
@@ -348,8 +353,31 @@ export class ClientsService {
       where: { clientId: id, status: 'DONE' },
     });
     const referralCodeInputDisabled = !!(client as any).referredByClientId;
-    const referralFirstVisitDiscountApplies =
-      !!(client as any).referredByClientId && completedVisits === 0;
+    const hasReferrer = !!(client as any).referredByClientId;
+    const firstVisitReferralPending =
+      hasReferrer &&
+      completedVisits === 0 &&
+      !(client as any).referralFirstVisitBonusCredited;
+
+    let referralFirstVisitDiscountApplies = false;
+    let referralFirstVisitBonusApplies = false;
+    if (studioIdForReferral) {
+      const st = await this.prisma.studio.findUnique({
+        where: { id: studioIdForReferral },
+        select: {
+          referFriendEnabled: true,
+          referFriendInviteeRewardType: true,
+        },
+      });
+      if (st?.referFriendEnabled && firstVisitReferralPending) {
+        referralFirstVisitDiscountApplies =
+          st.referFriendInviteeRewardType === 'DISCOUNT_PERCENT';
+        referralFirstVisitBonusApplies =
+          st.referFriendInviteeRewardType === 'BONUS_PERCENT';
+      }
+    } else {
+      referralFirstVisitDiscountApplies = firstVisitReferralPending;
+    }
 
     let referredList: { clientId: string; firstName: string; lastName: string; usedAt: string }[] = [];
     if (referredCount > 0) {
@@ -403,6 +431,7 @@ export class ClientsService {
       levelProgress: getLevelProgress(totalPaidForLevel, level),
       referralCodeInputDisabled,
       referralFirstVisitDiscountApplies,
+      referralFirstVisitBonusApplies,
     };
   }
 

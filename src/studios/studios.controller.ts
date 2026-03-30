@@ -58,7 +58,7 @@ export class StudiosController {
   }
 
   @Get(':studioId/settings')
-  @ApiOperation({ summary: 'Get studio settings (bonus limit)' })
+  @ApiOperation({ summary: 'Get studio settings (лимит бонусов, «приведи друга»)' })
   @ApiResponse({ status: 200, description: 'Settings' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getSettings(
@@ -69,8 +69,11 @@ export class StudiosController {
   }
 
   @Patch(':studioId/settings')
-  @Roles(UserRole.OWNER)
-  @ApiOperation({ summary: 'Update studio settings (global bonus limit, Owner only)' })
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @ApiOperation({
+    summary:
+      'Update studio settings: лимит бонусов, маркетинг «приведи друга» (уровень владельца)',
+  })
   @ApiResponse({ status: 200, description: 'Studio updated' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async updateSettings(

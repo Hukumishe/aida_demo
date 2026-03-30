@@ -21,8 +21,6 @@ import {
   assertReferralCodeIsNotLandingPromo,
   findReferrerByClientReferralCode,
   normalizeReferralCodeInput,
-  REFERRAL_FIRST_VISIT_DISCOUNT_PERCENT,
-  REFERRAL_REFERRER_BONUS_PERCENT,
 } from '../common/referral-code.util';
 
 @Injectable()
@@ -678,14 +676,22 @@ export class AppointmentsService {
     const doneBefore = await this.prisma.appointment.count({
       where: { clientId: client.id, status: AppointmentStatus.DONE },
     });
-    const applyReferralFirstVisit =
+    const referProgramOn = studio.referFriendEnabled === true;
+    const eligibleFirstVisitReferral =
       !!client.referredByClientId &&
       doneBefore === 0 &&
       !client.referralFirstVisitBonusCredited;
+    const applyReferFriendRewards = referProgramOn && eligibleFirstVisitReferral;
 
-    const total = applyReferralFirstVisit
-      ? Math.round((grossTotal * (100 - REFERRAL_FIRST_VISIT_DISCOUNT_PERCENT)) / 100)
-      : grossTotal;
+    let total = grossTotal;
+    if (
+      applyReferFriendRewards &&
+      studio.referFriendInviteeRewardType === 'DISCOUNT_PERCENT' &&
+      studio.referFriendInviteeValue != null
+    ) {
+      const p = Math.min(100, Math.max(0, studio.referFriendInviteeValue));
+      total = Math.round((grossTotal * (100 - p)) / 100);
+    }
 
     const limitPercent = studio.globalBonusPaymentLimitPercent ?? 30;
     const maxBonusesAllowed = Math.floor((total * limitPercent) / 100);
@@ -712,17 +718,40 @@ export class AppointmentsService {
       ? client.level
       : getLevelFromTotalPaid(newTotalPaidForLevel);
 
-    // Рефералка привязана при создании клиента/первой записи; 10% пригласившему — только после DONE; новому — скидка 20% на сумму визита (не бонусы)
+    let inviteeReferralBonus = 0;
+    if (
+      applyReferFriendRewards &&
+      studio.referFriendInviteeRewardType === 'BONUS_PERCENT' &&
+      studio.referFriendInviteeValue != null &&
+      totalMoneyPaid > 0
+    ) {
+      const p = Math.min(100, Math.max(0, studio.referFriendInviteeValue));
+      inviteeReferralBonus = Math.round((totalMoneyPaid * p) / 100);
+      newBonuses += inviteeReferralBonus;
+    }
+
+    // Пригласивший: из настроек студии (процент от оплаты или фикс)
     let referrer: { id: string; bonuses: number } | null = null;
     let referrerBonus = 0;
-    if (applyReferralFirstVisit && totalMoneyPaid > 0 && client.referredByClientId) {
+    if (applyReferFriendRewards && totalMoneyPaid > 0 && client.referredByClientId) {
       const ref = await this.prisma.client.findUnique({
         where: { id: client.referredByClientId },
         select: { id: true, bonuses: true },
       });
       if (ref && ref.id !== client.id) {
         referrer = ref;
-        referrerBonus = Math.round((totalMoneyPaid * REFERRAL_REFERRER_BONUS_PERCENT) / 100);
+        if (
+          studio.referFriendReferrerRewardType === 'PERCENT_OF_PAYMENT' &&
+          studio.referFriendReferrerValue != null
+        ) {
+          const p = Math.min(100, Math.max(0, studio.referFriendReferrerValue));
+          referrerBonus = Math.round((totalMoneyPaid * p) / 100);
+        } else if (
+          studio.referFriendReferrerRewardType === 'FIXED_AMOUNT' &&
+          studio.referFriendReferrerValue != null
+        ) {
+          referrerBonus = Math.max(0, studio.referFriendReferrerValue);
+        }
       }
     }
 
@@ -735,9 +764,11 @@ export class AppointmentsService {
         baseAmount: `${baseAmount} ₸`,
         upsellsSum: `${upsellsSum} ₸`,
         grossTotal: `${grossTotal} ₸`,
-        referralFirstVisitDiscount: applyReferralFirstVisit
-          ? `${REFERRAL_FIRST_VISIT_DISCOUNT_PERCENT}%`
-          : '—',
+        referFriendProgramOn: referProgramOn,
+        referralFirstVisitDiscount:
+          applyReferFriendRewards && studio.referFriendInviteeRewardType === 'DISCOUNT_PERCENT'
+            ? `${studio.referFriendInviteeValue}%`
+            : '—',
         total: `${total} ₸`,
         prepayment: `${prepayment} ₸`,
         limitPercent: `${limitPercent}%`,
@@ -782,7 +813,7 @@ export class AppointmentsService {
       if (!client.levelSetManually) {
         updateData.level = newLevel as ClientLevel;
       }
-      if (applyReferralFirstVisit) {
+      if (eligibleFirstVisitReferral) {
         updateData.referralFirstVisitBonusCredited = true;
       }
       await tx.client.update({
@@ -803,7 +834,24 @@ export class AppointmentsService {
             amount: referrerBonus,
             type: 'REFERRAL_REFERRER',
             appointmentId: id,
-            comment: '10% от чека приведённой подруги (после завершения записи)',
+            comment:
+              studio.referFriendReferrerRewardType === 'PERCENT_OF_PAYMENT'
+                ? `Вознаграждение «приведи друга»: ${studio.referFriendReferrerValue}% от оплаты деньгами приглашённого`
+                : `Вознаграждение «приведи друга»: фикс ${studio.referFriendReferrerValue} (после завершения записи)`,
+          },
+        });
+      }
+
+      if (inviteeReferralBonus > 0) {
+        await tx.bonusHistoryEntry.create({
+          data: {
+            id: generateId(IdPrefix.BonusHistoryEntry),
+            clientId: client.id,
+            studioId: studio.id,
+            amount: inviteeReferralBonus,
+            type: 'REFERRAL_NEW_CLIENT',
+            appointmentId: id,
+            comment: `Бонус «приведи друга» приглашённому: ${studio.referFriendInviteeValue}% от оплаты деньгами`,
           },
         });
       }

@@ -94,11 +94,18 @@ export class ClientsController {
   @ApiResponse({ status: 200, description: 'Client details' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
+  @ApiQuery({
+    name: 'studioId',
+    required: false,
+    description:
+      'Для корректных флагов рефералки (скидка/бонус на первый визит) по настройкам студии «приведи друга»',
+  })
   async findOne(
     @Param('id') id: string,
+    @Query('studioId') studioId: string | undefined,
     @CurrentUser() user?: any,
   ) {
-    return this.clientsService.findOne(id, user?.role, user?.studioId);
+    return this.clientsService.findOne(id, user?.role, user?.studioId, studioId);
   }
 
   @Patch('clients/:id')

@@ -3,11 +3,6 @@ import { PrismaClient } from '@prisma/client';
 
 type Db = Pick<PrismaClient, 'landingPromotionCode' | 'client'>;
 
-/** Скидка новому клиенту по рефералке на первом завершённом визите (на сумму услуг), вместо начисления 20% бонусами. */
-export const REFERRAL_FIRST_VISIT_DISCOUNT_PERCENT = 20;
-/** Доля от оплаты деньгами, начисляемая пригласившему после DONE. */
-export const REFERRAL_REFERRER_BONUS_PERCENT = 10;
-
 export function normalizeReferralCodeInput(raw: string | undefined | null): string | null {
   const t = raw?.trim();
   if (!t) return null;

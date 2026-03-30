@@ -79,6 +79,18 @@ enum LandingPromotionType {
   SERVICE_BUNDLE // Набор из N услуг (1+1+1+…): одна общая цена, состав в landing_promotion_services
 }
 
+// «Приведи друга»: награда приглашённому на первом визите
+enum ReferFriendInviteeRewardType {
+  DISCOUNT_PERCENT // скидка % на сумму визита (услуга + апсейлы)
+  BONUS_PERCENT    // бонусы % от суммы оплаты деньгами за визит
+}
+
+// «Приведи друга»: вознаграждение пригласившему после завершения записи приглашённого
+enum ReferFriendReferrerRewardType {
+  PERCENT_OF_PAYMENT // % от суммы оплаты деньгами приглашённого
+  FIXED_AMOUNT       // фиксированная сумма в мин. денежных единицах
+}
+
 // Аудитория услуги: MEN или WOMEN (одно значение на услугу)
 enum ServiceAudience {
   MEN
@@ -91,6 +103,12 @@ model Studio {
   address   String?
   timezone  String   @default("Asia/Almaty")
   globalBonusPaymentLimitPercent Int @default(30) // 0–100, лимит оплаты бонусами (только Owner)
+  /// Маркетинг: акция «приведи друга» (глобально для студии)
+  referFriendEnabled             Boolean                      @default(false)
+  referFriendInviteeRewardType   ReferFriendInviteeRewardType?
+  referFriendInviteeValue        Int? // 0–100 для DISCOUNT_PERCENT / BONUS_PERCENT
+  referFriendReferrerRewardType  ReferFriendReferrerRewardType?
+  referFriendReferrerValue       Int? // 0–100 для PERCENT_OF_PAYMENT; иначе фикс в ₸ (мин. ед.)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
