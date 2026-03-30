@@ -6,7 +6,7 @@ import {
   IsOptional,
   Min,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateAppointmentDto {
   @ApiProperty({ example: 'user-uuid' })
@@ -47,6 +47,15 @@ export class CreateAppointmentDto {
   @IsOptional()
   @IsString()
   referralCode?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Промокод акции с лендинга (передаётся с фронта после resolve-code; бэкенд принимает поле, чтобы не падала валидация). Хранение в записи — при появлении поля в модели.',
+    example: 'NV2MHFM8',
+  })
+  @IsOptional()
+  @IsString()
+  promoCode?: string;
 }
 
 
