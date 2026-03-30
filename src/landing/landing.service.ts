@@ -63,7 +63,7 @@ export class LandingService {
         type: dto.type,
         title: dto.title,
         description: dto.description,
-        isActive: true,
+        isActive: dto.isActive ?? true,
         discountPercent: dto.type === 'DISCOUNT' ? dto.discountPercent ?? null : null,
         serviceIdA: dto.type === 'ONE_PLUS_ONE' ? dto.serviceIdA ?? null : null,
         serviceIdB: dto.type === 'ONE_PLUS_ONE' ? dto.serviceIdB ?? null : null,
@@ -149,8 +149,8 @@ export class LandingService {
       data: {
         title: dto.title ?? undefined,
         description: dto.description ?? undefined,
-        // isActive можно будет добавить в DTO при необходимости
-        discountPercent:
+        isActive: dto.isActive ?? undefined,
+                discountPercent:
           existing.type === 'DISCOUNT' ? dto.discountPercent ?? existing.discountPercent : existing.discountPercent,
         serviceIdA:
           existing.type === 'ONE_PLUS_ONE' ? dto.serviceIdA ?? existing.serviceIdA : existing.serviceIdA,

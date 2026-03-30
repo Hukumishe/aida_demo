@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -29,6 +30,11 @@ export class CreateLandingPromotionDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({ description: 'Включена ли акция (on/off). По умолчанию true' })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 
   // --- DISCOUNT ---
 

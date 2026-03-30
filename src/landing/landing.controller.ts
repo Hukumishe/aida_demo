@@ -50,7 +50,7 @@ export class LandingController {
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
   @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
-  @ApiOperation({ summary: 'Создать акцию для лендинга (скидка или 1+1)' })
+  @ApiOperation({ summary: 'Создать акцию для лендинга (скидка / 1+1 / bundle, с on/off)' })
   @ApiResponse({ status: 201, description: 'Акция создана' })
   async createPromotion(
     @Param('studioId') studioId: string,
@@ -69,7 +69,7 @@ export class LandingController {
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
   @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
-  @ApiOperation({ summary: 'Обновить акцию' })
+  @ApiOperation({ summary: 'Обновить акцию (в т.ч. on/off через isActive)' })
   @ApiResponse({ status: 200, description: 'Акция обновлена' })
   async updatePromotion(
     @Param('studioId') studioId: string,
