@@ -75,6 +75,16 @@ export class ClientsService {
         { lastName: 'asc' },
         { firstName: 'asc' },
       ],
+      include: {
+        referredByClient: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            referralCode: true,
+          },
+        },
+      },
     });
 
     if (clients.length === 0) return clients;
