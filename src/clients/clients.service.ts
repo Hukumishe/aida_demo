@@ -352,12 +352,14 @@ export class ClientsService {
     const completedVisits = await this.prisma.appointment.count({
       where: { clientId: id, status: 'DONE' },
     });
-    const referralCodeInputDisabled = !!(client as any).referredByClientId;
     const hasReferrer = !!(client as any).referredByClientId;
     const firstVisitReferralPending =
       hasReferrer &&
       completedVisits === 0 &&
       !(client as any).referralFirstVisitBonusCredited;
+    // Блокируем ввод только до первого успешно завершённого визита по рефералке.
+    // После первого DONE поле снова доступно для обычных промокодов акций.
+    const referralCodeInputDisabled = firstVisitReferralPending;
 
     let referralFirstVisitDiscountApplies = false;
     let referralFirstVisitBonusApplies = false;
