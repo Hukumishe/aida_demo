@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -35,6 +36,15 @@ export class CreateLandingPromotionDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Дата и время окончания действия акции (ISO 8601). После этого промокод и акция не должны применяться на лендинге.',
+    example: '2026-12-31T23:59:59+06:00',
+  })
+  @IsOptional()
+  @IsDateString()
+  validUntil?: string;
 
   // --- DISCOUNT ---
 

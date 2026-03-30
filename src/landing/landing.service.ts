@@ -16,8 +16,12 @@ export class LandingService {
   // --- Promotions ---
 
   async getPromotions(studioId: string) {
+    const now = new Date();
     return this.prisma.landingPromotion.findMany({
-      where: { studioId },
+      where: {
+        studioId,
+        OR: [{ validUntil: null }, { validUntil: { gt: now } }],
+      },
       include: {
         services: {
           include: { service: true },
@@ -55,7 +59,7 @@ export class LandingService {
     if (!codeRow.isActive || !codeRow.promotion.isActive) {
       throw new BadRequestException('Promo code is inactive');
     }
-    if (codeRow.expiresAt && codeRow.expiresAt < new Date()) {
+    if (codeRow.expiresAt && codeRow.expiresAt < now) {
       throw new BadRequestException('Promo code has expired');
     }
     if (codeRow.usageLimit != null && codeRow.usedCount >= codeRow.usageLimit) {
@@ -187,6 +191,7 @@ export class LandingService {
         title: dto.title,
         description: dto.description,
         isActive: dto.isActive ?? true,
+        validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
         discountPercent: dto.type === 'DISCOUNT' ? dto.discountPercent ?? null : null,
         serviceIdA: dto.type === 'ONE_PLUS_ONE' ? dto.serviceIdA ?? null : null,
         serviceIdB: dto.type === 'ONE_PLUS_ONE' ? dto.serviceIdB ?? null : null,
@@ -273,7 +278,13 @@ export class LandingService {
         title: dto.title ?? undefined,
         description: dto.description ?? undefined,
         isActive: dto.isActive ?? undefined,
-                discountPercent:
+        validUntil:
+          dto.validUntil === undefined
+            ? undefined
+            : dto.validUntil === null
+              ? null
+              : new Date(dto.validUntil),
+        discountPercent:
           existing.type === 'DISCOUNT' ? dto.discountPercent ?? existing.discountPercent : existing.discountPercent,
         serviceIdA:
           existing.type === 'ONE_PLUS_ONE' ? dto.serviceIdA ?? existing.serviceIdA : existing.serviceIdA,

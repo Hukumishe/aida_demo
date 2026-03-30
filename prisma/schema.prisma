@@ -329,6 +329,7 @@ model LandingPromotion {
   serviceIdA  String?               // Для ONE_PLUS_ONE: первая услуга
   serviceIdB  String?               // Для ONE_PLUS_ONE: вторая услуга
   bundlePrice Int?                  // Для ONE_PLUS_ONE и SERVICE_BUNDLE: общая цена набора
+  validUntil  DateTime?             // Акция действует до (включительно до конца дня UTC — задайте время с фронта)
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
 
