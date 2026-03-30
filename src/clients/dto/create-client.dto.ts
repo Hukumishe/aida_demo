@@ -56,6 +56,16 @@ export class CreateClientDto {
   @IsOptional()
   @IsString()
   referrerCode?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Алиас для `referrerCode` (некоторые фронты используют имя `referralCode`). Реферальный код другого клиента, не промокод лендинга.',
+    example: 'ABC123',
+  })
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
 }
 
 

@@ -229,7 +229,9 @@ export class ClientsService {
       throw new BadRequestException('Клиент с таким номером телефона уже существует');
     }
 
-    const normalizedReferrer = normalizeReferralCodeInput(createClientDto.referrerCode);
+    const normalizedReferrer = normalizeReferralCodeInput(
+      createClientDto.referrerCode ?? createClientDto.referralCode,
+    );
     let referredByClientId: string | undefined;
     if (normalizedReferrer) {
       await assertReferralCodeIsNotLandingPromo(this.prisma, normalizedReferrer);
