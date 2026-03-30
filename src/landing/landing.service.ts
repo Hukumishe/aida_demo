@@ -28,6 +28,129 @@ export class LandingService {
     });
   }
 
+  async resolvePromotionCode(studioId: string, rawCode: string) {
+    const code = rawCode?.trim().toUpperCase();
+    if (!code) {
+      throw new BadRequestException('Promo code is required');
+    }
+
+    const codeRow = await this.prisma.landingPromotionCode.findUnique({
+      where: { code },
+      include: {
+        promotion: {
+          include: {
+            services: {
+              include: {
+                service: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!codeRow || codeRow.promotion.studioId !== studioId) {
+      throw new NotFoundException('Promo code not found');
+    }
+    if (!codeRow.isActive || !codeRow.promotion.isActive) {
+      throw new BadRequestException('Promo code is inactive');
+    }
+    if (codeRow.expiresAt && codeRow.expiresAt < new Date()) {
+      throw new BadRequestException('Promo code has expired');
+    }
+    if (codeRow.usageLimit != null && codeRow.usedCount >= codeRow.usageLimit) {
+      throw new BadRequestException('Promo code usage limit reached');
+    }
+
+    const promotion = codeRow.promotion;
+    if (promotion.type === 'ONE_PLUS_ONE') {
+      if (!promotion.serviceIdA || !promotion.serviceIdB || promotion.bundlePrice == null) {
+        throw new BadRequestException('ONE_PLUS_ONE promotion is misconfigured');
+      }
+      const services = await this.prisma.service.findMany({
+        where: {
+          studioId,
+          isActive: true,
+          id: { in: [promotion.serviceIdA, promotion.serviceIdB] },
+        },
+        select: {
+          id: true,
+          name: true,
+          defaultPrice: true,
+          defaultDurationMin: true,
+        },
+      });
+      return {
+        code,
+        promotionId: promotion.id,
+        type: promotion.type,
+        title: promotion.title,
+        description: promotion.description,
+        autoFill: {
+          mode: 'ONE_PLUS_ONE',
+          serviceIds: [promotion.serviceIdA, promotion.serviceIdB],
+          services,
+          finalPrice: promotion.bundlePrice,
+        },
+      };
+    }
+
+    if (promotion.type === 'SERVICE_BUNDLE') {
+      const services = promotion.services
+        .map((x) => x.service)
+        .filter((s) => s.studioId === studioId && s.isActive)
+        .map((s) => ({
+          id: s.id,
+          name: s.name,
+          defaultPrice: s.defaultPrice,
+          defaultDurationMin: s.defaultDurationMin,
+        }));
+      return {
+        code,
+        promotionId: promotion.id,
+        type: promotion.type,
+        title: promotion.title,
+        description: promotion.description,
+        autoFill: {
+          mode: 'SERVICE_BUNDLE',
+          serviceIds: services.map((s) => s.id),
+          services,
+          finalPrice: promotion.bundlePrice,
+        },
+      };
+    }
+
+    if (promotion.type === 'DISCOUNT') {
+      const discountPercent = promotion.discountPercent ?? 0;
+      const services = promotion.services
+        .map((x) => x.service)
+        .filter((s) => s.studioId === studioId && s.isActive)
+        .map((s) => ({
+          id: s.id,
+          name: s.name,
+          defaultPrice: s.defaultPrice ?? 0,
+          defaultDurationMin: s.defaultDurationMin,
+          discountedPrice: Math.round(((s.defaultPrice ?? 0) * (100 - discountPercent)) / 100),
+        }));
+      return {
+        code,
+        promotionId: promotion.id,
+        type: promotion.type,
+        title: promotion.title,
+        description: promotion.description,
+        autoFill: {
+          mode: 'DISCOUNT',
+          discountPercent,
+          serviceIds: services.map((s) => s.id),
+          defaultServiceId: services[0]?.id ?? null,
+          services,
+        },
+      };
+    }
+
+    throw new BadRequestException('Unsupported promotion type');
+  }
+
   async createPromotion(
     studioId: string,
     dto: CreateLandingPromotionDto,

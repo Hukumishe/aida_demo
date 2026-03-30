@@ -27,6 +27,7 @@ import { UpdateLandingMastersDto } from './dto/update-masters.dto';
 import { CreateLandingServiceCardDto } from './dto/create-service-card.dto';
 import { UpdateLandingServiceCardDto } from './dto/update-service-card.dto';
 import { ReorderLandingServiceCardsDto } from './dto/reorder-service-cards.dto';
+import { ResolvePromotionCodeDto } from './dto/resolve-promotion-code.dto';
 
 @ApiTags('landing')
 @Controller()
@@ -63,6 +64,18 @@ export class LandingController {
       user?.role,
       user?.studioId,
     );
+  }
+
+  @Post('studios/:studioId/landing/promotions/resolve-code')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Проверить промокод и получить автоподстановку услуг/цены для записи' })
+  @ApiResponse({ status: 200, description: 'Данные акции для автозаполнения формы записи' })
+  async resolvePromotionCode(
+    @Param('studioId') studioId: string,
+    @Body() dto: ResolvePromotionCodeDto,
+  ) {
+    return this.landingService.resolvePromotionCode(studioId, dto.code);
   }
 
   @Patch('studios/:studioId/landing/promotions/:id')
