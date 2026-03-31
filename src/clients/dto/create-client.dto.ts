@@ -66,6 +66,15 @@ export class CreateClientDto {
   @IsOptional()
   @IsString()
   referralCode?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Id маркетинговой реферальной ссылки филиала (из URL ?ref= / GET .../referral-links/resolve/...). Заполняет поле «Источник» у клиента.',
+  })
+  @IsOptional()
+  @IsString()
+  referralLinkId?: string;
 }
 
 

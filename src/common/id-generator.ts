@@ -37,6 +37,7 @@ export const IdPrefix = {
   ClientStudioLoyalty: 'csl',
   StudioTask: 'stk',
   StudioTaskController: 'stc',
+  StudioReferralLink: 'srl',
 } as const;
 
 export type IdPrefixType = (typeof IdPrefix)[keyof typeof IdPrefix];

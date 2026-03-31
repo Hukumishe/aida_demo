@@ -805,6 +805,28 @@ export class AppointmentsService {
       newBonuses += inviteeReferralBonus;
     }
 
+    let referralLinkCashback = 0;
+    let referralLinkRowId: string | null = null;
+    const marketingLinkId = client.studioReferralLinkId;
+    if (marketingLinkId && totalMoneyPaid > 0 && service.bonusAccrualEnabled) {
+      const mLink = await this.prisma.studioReferralLink.findFirst({
+        where: {
+          id: marketingLinkId,
+          studioId: studio.id,
+          isActive: true,
+          cashbackEnabled: true,
+        },
+      });
+      if (mLink?.cashbackPercent != null && mLink.cashbackPercent > 0) {
+        const p = Math.min(100, Math.max(0, mLink.cashbackPercent));
+        referralLinkCashback = Math.round((totalMoneyPaid * p) / 100);
+        if (referralLinkCashback > 0) {
+          referralLinkRowId = mLink.id;
+          newBonuses += referralLinkCashback;
+        }
+      }
+    }
+
     // Пригласивший: из настроек студии (процент от оплаты или фикс)
     let referrer: { id: string; bonuses: number } | null = null;
     let referrerBonus = 0;
@@ -987,6 +1009,26 @@ export class AppointmentsService {
             amount: cashback,
             type: 'CASHBACK',
             appointmentId: id,
+          },
+        });
+      }
+
+      if (referralLinkCashback > 0 && referralLinkRowId) {
+        await tx.studioReferralLink.update({
+          where: { id: referralLinkRowId },
+          data: {
+            totalCashbackAccumulated: { increment: referralLinkCashback },
+          },
+        });
+        await tx.bonusHistoryEntry.create({
+          data: {
+            id: generateId(IdPrefix.BonusHistoryEntry),
+            clientId: client.id,
+            studioId: studio.id,
+            amount: referralLinkCashback,
+            type: 'REFERRAL_LINK_CASHBACK',
+            appointmentId: id,
+            comment: 'Кэшбэк по маркетинговой реферальной ссылке',
           },
         });
       }

@@ -257,31 +257,65 @@ export class ClientsService {
     }
 
     const referralCode = await this.generateReferralCode();
+
+    let registrationSource: string | undefined;
+    let studioReferralLinkId: string | undefined;
+    const rawMarketingLinkId = createClientDto.referralLinkId?.trim();
+    if (rawMarketingLinkId) {
+      const mLink = await this.prisma.studioReferralLink.findFirst({
+        where: { id: rawMarketingLinkId, studioId },
+      });
+      if (!mLink) {
+        throw new BadRequestException('Маркетинговая реферальная ссылка не найдена');
+      }
+      if (!mLink.isActive) {
+        throw new BadRequestException('Реферальная ссылка отключена');
+      }
+      registrationSource = mLink.sourceName;
+      studioReferralLinkId = mLink.id;
+    }
+
     try {
-      return await this.prisma.client.create({
-        data: {
-          id: generateId(IdPrefix.Client),
-          firstName: createClientDto.firstName,
-          lastName: createClientDto.lastName,
-          phone: createClientDto.phone,
-          birthDate: createClientDto.birthDate ? new Date(createClientDto.birthDate) : undefined,
-          notes: createClientDto.notes,
-          bonuses: createClientDto.bonuses ?? 0,
-          discount: createClientDto.discount ?? 0,
-          balance: createClientDto.balance ?? 0,
-          referralCode,
-          referredByClientId,
-        },
-        include: {
-          referredByClient: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              referralCode: true,
+      return await this.prisma.$transaction(async (tx) => {
+        const created = await tx.client.create({
+          data: {
+            id: generateId(IdPrefix.Client),
+            firstName: createClientDto.firstName,
+            lastName: createClientDto.lastName,
+            phone: createClientDto.phone,
+            birthDate: createClientDto.birthDate ? new Date(createClientDto.birthDate) : undefined,
+            notes: createClientDto.notes,
+            bonuses: createClientDto.bonuses ?? 0,
+            discount: createClientDto.discount ?? 0,
+            balance: createClientDto.balance ?? 0,
+            referralCode,
+            referredByClientId,
+            registrationSource,
+            studioReferralLinkId,
+          },
+          include: {
+            referredByClient: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                referralCode: true,
+              },
             },
           },
-        },
+        });
+
+        if (studioReferralLinkId) {
+          await tx.studioReferralLink.update({
+            where: { id: studioReferralLinkId },
+            data: {
+              registrationsCount: { increment: 1 },
+              lastActivityAt: new Date(),
+            },
+          });
+        }
+
+        return created;
       });
     } catch (error: any) {
       if (error.code === 'P2002') {

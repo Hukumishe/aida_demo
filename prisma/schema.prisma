@@ -148,6 +148,7 @@ model Studio {
   loyaltyMilestones     StudioLoyaltyMilestone[]
   clientStudioLoyalties ClientStudioLoyalty[]
   studioTasks         StudioTask[]
+  referralLinks       StudioReferralLink[]
 
   @@map("studios")
 }
@@ -284,6 +285,10 @@ model Client {
   isBlacklisted   Boolean     @default(false) // Флаг черного списка
   blacklistReason String?     // Причина добавления в черный список
   referralCode    String?     // Уникальный код «приведи подругу» (общая база)
+  /// Источник регистрации (название из маркетинговой реферальной ссылки)
+  registrationSource   String?
+  /// Регистрация по ссылке филиала (маркетинг)
+  studioReferralLinkId String?
   referredByClientId String?  // Кто привёл этого клиента (заполняется при первом визите с кодом)
   referralFirstVisitBonusCredited Boolean @default(false) // 20% за первый визит уже начислены
   createdAt       DateTime   @default(now())
@@ -291,6 +296,7 @@ model Client {
 
   referredByClient  Client?            @relation("Referrer", fields: [referredByClientId], references: [id], onDelete: SetNull)
   referredClients   Client[]           @relation("Referrer")
+  studioReferralLink StudioReferralLink? @relation(fields: [studioReferralLinkId], references: [id], onDelete: SetNull)
   appointments      Appointment[]
   noShowIncomes     NoShowIncome[]
   blacklistRequests BlacklistRequest[]
@@ -300,7 +306,30 @@ model Client {
   @@unique([phone])
   @@unique([referralCode])
   @@index([isBlacklisted])
+  @@index([studioReferralLinkId])
   @@map("clients")
+}
+
+/// Маркетинговая реферальная ссылка филиала (источник + опциональный кэшбэк %)
+model StudioReferralLink {
+  id                       String    @id
+  studioId                 String
+  sourceName               String
+  cashbackEnabled          Boolean   @default(false)
+  cashbackPercent          Int? // 0–100 при cashbackEnabled
+  isActive                 Boolean   @default(true)
+  lastActivityAt           DateTime?
+  registrationsCount       Int       @default(0)
+  totalCashbackAccumulated Int       @default(0) // Сумма начисленного кэшбэка по этой ссылке
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  studio  Studio   @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  clients Client[]
+
+  @@index([studioId])
+  @@index([studioId, isActive])
+  @@map("studio_referral_links")
 }
 
 model WorkScheduleDay {
