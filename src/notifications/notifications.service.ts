@@ -232,5 +232,55 @@ export class NotificationsService {
 
     return notifications;
   }
+
+  /** Исполнитель: новая задача в колокольчике */
+  async createNewTaskNotification(
+    studioId: string,
+    taskId: string,
+    assigneeUserId: string,
+    title: string,
+    deadlineAt: Date,
+  ) {
+    const deadlineFormatted = new Date(deadlineAt).toLocaleString('ru-RU', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+    return this.prisma.notification.create({
+      data: {
+        id: generateId(IdPrefix.Notification),
+        userId: assigneeUserId,
+        studioId,
+        type: NotificationType.NEW_TASK,
+        title: 'Новая задача',
+        message: `Вам назначена задача: «${title}». Срок: ${deadlineFormatted}`,
+        data: JSON.stringify({ taskId, title, deadlineAt: deadlineAt.toISOString() }),
+      },
+    });
+  }
+
+  /** Напоминание о дедлайне (исполнителю и контролёрам) */
+  async createTaskDeadlineApproachingNotification(
+    studioId: string,
+    userId: string,
+    taskId: string,
+    title: string,
+    deadlineAt: Date,
+  ) {
+    const deadlineFormatted = new Date(deadlineAt).toLocaleString('ru-RU', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+    return this.prisma.notification.create({
+      data: {
+        id: generateId(IdPrefix.Notification),
+        userId,
+        studioId,
+        type: NotificationType.TASK_DEADLINE_APPROACHING,
+        title: 'Срок задачи',
+        message: `Скоро дедлайн по задаче «${title}» (${deadlineFormatted})`,
+        data: JSON.stringify({ taskId, title, deadlineAt: deadlineAt.toISOString() }),
+      },
+    });
+  }
 }
 

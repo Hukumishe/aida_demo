@@ -35,6 +35,8 @@ export const IdPrefix = {
   StudioLoyaltyTier: 'slt',
   StudioLoyaltyMilestone: 'slm',
   ClientStudioLoyalty: 'csl',
+  StudioTask: 'stk',
+  StudioTaskController: 'stc',
 } as const;
 
 export type IdPrefixType = (typeof IdPrefix)[keyof typeof IdPrefix];

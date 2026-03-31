@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule as NestScheduleModule } from '@nestjs/schedule';
 import { CommonModule } from './common/common.module';
 import { AuthModule } from './auth/auth.module';
 import { StudiosModule } from './studios/studios.module';
@@ -19,6 +20,7 @@ import { WarehouseModule } from './warehouse/warehouse.module';
 import { PromptsModule } from './prompts/prompts.module';
 import { LandingModule } from './landing/landing.module';
 import { NextbotModule } from './nextbot/nextbot.module';
+import { TasksModule } from './tasks/tasks.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -27,6 +29,7 @@ import { AppController } from './app.controller';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    NestScheduleModule.forRoot(),
     CommonModule,
     LoggingModule,
     AuthModule,
@@ -46,6 +49,7 @@ import { AppController } from './app.controller';
     PromptsModule,
     LandingModule,
     NextbotModule,
+    TasksModule,
   ],
   controllers: [AppController],
 })
