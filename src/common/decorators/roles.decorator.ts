@@ -1,6 +1,7 @@
 import { SetMetadata } from '@nestjs/common';
 
 export enum UserRole {
+  DEVELOPER = 'DEVELOPER', // Платформа: организации, полный доступ
   OWNER = 'OWNER',
   DEPUTY_OWNER = 'DEPUTY_OWNER',
   SERVICE = 'SERVICE', // Те же права что у владельца; доступ к панели промптов
@@ -17,10 +18,16 @@ export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
  */
 export function isOwnerLevelRole(role: string | undefined): boolean {
   return (
+    role === UserRole.DEVELOPER ||
     role === UserRole.OWNER ||
     role === UserRole.DEPUTY_OWNER ||
     role === UserRole.SERVICE
   );
+}
+
+/** Платформенная роль: доступ ко всем организациям и создание организаций */
+export function isDeveloperRole(role: string | undefined): boolean {
+  return role === UserRole.DEVELOPER;
 }
 
 /**
@@ -28,7 +35,7 @@ export function isOwnerLevelRole(role: string | undefined): boolean {
  * Только OWNER может управлять владельцами
  */
 export function canManageOwners(role: string | undefined): boolean {
-  return role === UserRole.OWNER;
+  return role === UserRole.OWNER || role === UserRole.DEVELOPER;
 }
 
 /**
@@ -36,7 +43,7 @@ export function canManageOwners(role: string | undefined): boolean {
  * Только OWNER может управлять заместителями
  */
 export function canManageDeputies(role: string | undefined): boolean {
-  return role === UserRole.OWNER;
+  return role === UserRole.OWNER || role === UserRole.DEVELOPER;
 }
 
 

@@ -129,10 +129,12 @@ export class AppointmentsService {
     // Verify studio exists
     const studio = await this.prisma.studio.findUnique({
       where: { id: studioId },
+      include: { organization: true },
     });
     if (!studio) {
       throw new NotFoundException(`Studio with ID ${studioId} not found`);
     }
+    const org = studio.organization;
 
     // Verify staff user exists and belongs to studio
     const staff = await this.prisma.user.findUnique({
@@ -151,6 +153,9 @@ export class AppointmentsService {
     if (!client) {
       throw new NotFoundException('Client not found');
     }
+    if (client.organizationId !== studio.organizationId) {
+      throw new NotFoundException('Client does not belong to this organization');
+    }
     if (client.isBlacklisted) {
       throw new BadRequestException('Cannot create appointment for a blacklisted client');
     }
@@ -160,8 +165,8 @@ export class AppointmentsService {
       where: { id: createAppointmentDto.serviceId },
     });
 
-    if (!service || service.studioId !== studioId || !service.isActive) {
-      throw new NotFoundException('Service not found, does not belong to this studio, or is inactive');
+    if (!service || service.organizationId !== studio.organizationId || !service.isActive) {
+      throw new NotFoundException('Service not found, does not belong to this organization, or is inactive');
     }
 
     // Get duration (override if exists, otherwise default)
@@ -214,7 +219,11 @@ export class AppointmentsService {
           );
         }
         await assertReferralCodeIsNotLandingPromo(tx, normalizedReferral);
-        const referrer = await findReferrerByClientReferralCode(tx, normalizedReferral);
+        const referrer = await findReferrerByClientReferralCode(
+          tx,
+          normalizedReferral,
+          clientRow.organizationId,
+        );
         if (!referrer || referrer.id === clientRow.id) {
           throw new BadRequestException(
             'Неверный реферальный код или нельзя использовать свой код',
@@ -644,7 +653,7 @@ export class AppointmentsService {
       include: {
         client: true,
         service: true,
-        studio: true,
+        studio: { include: { organization: true } },
         upsells: true,
       },
     });
@@ -669,6 +678,7 @@ export class AppointmentsService {
     }
 
     const { client, service, studio, upsells } = existingAppointment;
+    const org = studio.organization;
     const prepayment = existingAppointment.prepaymentAmount ?? 0;
     const baseAmount = service.defaultPrice ?? 0;
     const upsellsSum = upsells.reduce((s, u) => s + u.totalAmount, 0);
@@ -677,7 +687,7 @@ export class AppointmentsService {
     const doneBefore = await this.prisma.appointment.count({
       where: { clientId: client.id, status: AppointmentStatus.DONE },
     });
-    const referProgramOn = studio.referFriendEnabled === true;
+    const referProgramOn = org.referFriendEnabled === true;
     const eligibleFirstVisitReferral =
       !!client.referredByClientId &&
       doneBefore === 0 &&
@@ -687,14 +697,14 @@ export class AppointmentsService {
     let total = grossTotal;
     if (
       applyReferFriendRewards &&
-      studio.referFriendInviteeRewardType === 'DISCOUNT_PERCENT' &&
-      studio.referFriendInviteeValue != null
+      org.referFriendInviteeRewardType === 'DISCOUNT_PERCENT' &&
+      org.referFriendInviteeValue != null
     ) {
-      const p = Math.min(100, Math.max(0, studio.referFriendInviteeValue));
+      const p = Math.min(100, Math.max(0, org.referFriendInviteeValue));
       total = Math.round((grossTotal * (100 - p)) / 100);
     }
 
-    const limitPercent = studio.globalBonusPaymentLimitPercent ?? 30;
+    const limitPercent = org.globalBonusPaymentLimitPercent ?? 30;
     const maxBonusesAllowed = Math.floor((total * limitPercent) / 100);
     const requestedBonus = Math.max(0, dto?.bonusesUsed ?? 0);
     const bonusesUsed = Math.min(
@@ -708,7 +718,7 @@ export class AppointmentsService {
     // Сколько клиент доплачивает при расчёте (на кассе сейчас)
     const moneyPaidNow = Math.max(0, totalMoneyPaid - prepayment);
 
-    const useCustomLoyalty = studio.loyaltyMode === 'CUSTOM';
+    const useCustomLoyalty = org.loyaltyMode === 'CUSTOM';
 
     let cashbackPercent: number;
     let cashback: number;
@@ -723,11 +733,11 @@ export class AppointmentsService {
     if (useCustomLoyalty) {
       const [loyaltyTiers, loyaltyMilestones] = await Promise.all([
         this.prisma.studioLoyaltyTier.findMany({
-          where: { studioId: studio.id },
+          where: { organizationId: org.id },
           orderBy: { sortOrder: 'asc' },
         }),
         this.prisma.studioLoyaltyMilestone.findMany({
-          where: { studioId: studio.id },
+          where: { organizationId: org.id },
         }),
       ]);
       if (loyaltyTiers.length === 0 || loyaltyMilestones.length === 0) {
@@ -749,7 +759,7 @@ export class AppointmentsService {
 
       const cslRow = await this.prisma.clientStudioLoyalty.findUnique({
         where: {
-          clientId_studioId: { clientId: client.id, studioId: studio.id },
+          clientId_organizationId: { clientId: client.id, organizationId: org.id },
         },
         include: { currentTier: true },
       });
@@ -796,11 +806,11 @@ export class AppointmentsService {
     let inviteeReferralBonus = 0;
     if (
       applyReferFriendRewards &&
-      studio.referFriendInviteeRewardType === 'BONUS_PERCENT' &&
-      studio.referFriendInviteeValue != null &&
+      org.referFriendInviteeRewardType === 'BONUS_PERCENT' &&
+      org.referFriendInviteeValue != null &&
       totalMoneyPaid > 0
     ) {
-      const p = Math.min(100, Math.max(0, studio.referFriendInviteeValue));
+      const p = Math.min(100, Math.max(0, org.referFriendInviteeValue));
       inviteeReferralBonus = Math.round((totalMoneyPaid * p) / 100);
       newBonuses += inviteeReferralBonus;
     }
@@ -812,7 +822,7 @@ export class AppointmentsService {
       const mLink = await this.prisma.studioReferralLink.findFirst({
         where: {
           id: marketingLinkId,
-          studioId: studio.id,
+          organizationId: org.id,
           isActive: true,
           cashbackEnabled: true,
         },
@@ -838,16 +848,16 @@ export class AppointmentsService {
       if (ref && ref.id !== client.id) {
         referrer = ref;
         if (
-          studio.referFriendReferrerRewardType === 'PERCENT_OF_PAYMENT' &&
-          studio.referFriendReferrerValue != null
+          org.referFriendReferrerRewardType === 'PERCENT_OF_PAYMENT' &&
+          org.referFriendReferrerValue != null
         ) {
-          const p = Math.min(100, Math.max(0, studio.referFriendReferrerValue));
+          const p = Math.min(100, Math.max(0, org.referFriendReferrerValue));
           referrerBonus = Math.round((totalMoneyPaid * p) / 100);
         } else if (
-          studio.referFriendReferrerRewardType === 'FIXED_AMOUNT' &&
-          studio.referFriendReferrerValue != null
+          org.referFriendReferrerRewardType === 'FIXED_AMOUNT' &&
+          org.referFriendReferrerValue != null
         ) {
-          referrerBonus = Math.max(0, studio.referFriendReferrerValue);
+          referrerBonus = Math.max(0, org.referFriendReferrerValue);
         }
       }
     }
@@ -863,8 +873,8 @@ export class AppointmentsService {
         grossTotal: `${grossTotal} ₸`,
         referFriendProgramOn: referProgramOn,
         referralFirstVisitDiscount:
-          applyReferFriendRewards && studio.referFriendInviteeRewardType === 'DISCOUNT_PERCENT'
-            ? `${studio.referFriendInviteeValue}%`
+          applyReferFriendRewards && org.referFriendInviteeRewardType === 'DISCOUNT_PERCENT'
+            ? `${org.referFriendInviteeValue}%`
             : '—',
         total: `${total} ₸`,
         prepayment: `${prepayment} ₸`,
@@ -884,7 +894,7 @@ export class AppointmentsService {
         newTotalPaidForLevel,
         levelSetManually: client.levelSetManually,
         newLevel,
-        loyaltyMode: studio.loyaltyMode,
+        loyaltyMode: org.loyaltyMode,
         customLoyalty: customLoyaltyUpsert,
         bonusesAfter: `${client.bonuses} - ${bonusesUsed} + ${cashback} = ${newBonuses}`,
       },
@@ -903,12 +913,12 @@ export class AppointmentsService {
       if (useCustomLoyalty && customLoyaltyUpsert) {
         await tx.clientStudioLoyalty.upsert({
           where: {
-            clientId_studioId: { clientId: client.id, studioId: studio.id },
+            clientId_organizationId: { clientId: client.id, organizationId: org.id },
           },
           create: {
             id: generateId(IdPrefix.ClientStudioLoyalty),
             clientId: client.id,
-            studioId: studio.id,
+            organizationId: org.id,
             totalPaid: customLoyaltyUpsert.newCslTotalPaid,
             levelSetManually: customLoyaltyUpsert.cslLevelSetManually,
             currentTierId: customLoyaltyUpsert.newCurrentTierId,
@@ -962,14 +972,14 @@ export class AppointmentsService {
           data: {
             id: generateId(IdPrefix.BonusHistoryEntry),
             clientId: referrer.id,
-            studioId: studio.id,
+            organizationId: org.id,
             amount: referrerBonus,
             type: 'REFERRAL_REFERRER',
             appointmentId: id,
             comment:
-              studio.referFriendReferrerRewardType === 'PERCENT_OF_PAYMENT'
-                ? `Вознаграждение «приведи друга»: ${studio.referFriendReferrerValue}% от оплаты деньгами приглашённого`
-                : `Вознаграждение «приведи друга»: фикс ${studio.referFriendReferrerValue} (после завершения записи)`,
+              org.referFriendReferrerRewardType === 'PERCENT_OF_PAYMENT'
+                ? `Вознаграждение «приведи друга»: ${org.referFriendReferrerValue}% от оплаты деньгами приглашённого`
+                : `Вознаграждение «приведи друга»: фикс ${org.referFriendReferrerValue} (после завершения записи)`,
           },
         });
       }
@@ -979,11 +989,11 @@ export class AppointmentsService {
           data: {
             id: generateId(IdPrefix.BonusHistoryEntry),
             clientId: client.id,
-            studioId: studio.id,
+            organizationId: org.id,
             amount: inviteeReferralBonus,
             type: 'REFERRAL_NEW_CLIENT',
             appointmentId: id,
-            comment: `Бонус «приведи друга» приглашённому: ${studio.referFriendInviteeValue}% от оплаты деньгами`,
+            comment: `Бонус «приведи друга» приглашённому: ${org.referFriendInviteeValue}% от оплаты деньгами`,
           },
         });
       }
@@ -993,7 +1003,7 @@ export class AppointmentsService {
           data: {
             id: generateId(IdPrefix.BonusHistoryEntry),
             clientId: client.id,
-            studioId: studio.id,
+            organizationId: org.id,
             amount: -bonusesUsed,
             type: 'PAYMENT_USE',
             appointmentId: id,
@@ -1005,7 +1015,7 @@ export class AppointmentsService {
           data: {
             id: generateId(IdPrefix.BonusHistoryEntry),
             clientId: client.id,
-            studioId: studio.id,
+            organizationId: org.id,
             amount: cashback,
             type: 'CASHBACK',
             appointmentId: id,
@@ -1024,7 +1034,7 @@ export class AppointmentsService {
           data: {
             id: generateId(IdPrefix.BonusHistoryEntry),
             clientId: client.id,
-            studioId: studio.id,
+            organizationId: org.id,
             amount: referralLinkCashback,
             type: 'REFERRAL_LINK_CASHBACK',
             appointmentId: id,

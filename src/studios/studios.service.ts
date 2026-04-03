@@ -16,34 +16,44 @@ import {
   StudioLoyaltyMilestoneItemDto,
   StudioLoyaltyTierItemDto,
 } from './dto/update-studio-loyalty.dto';
-import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { UserRole, isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { resolveAutoTierForTotalPaid } from '../common/loyalty/studio-loyalty.util';
 
 @Injectable()
 export class StudiosService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(userRole: string, userStudioId?: string) {
-    if (isOwnerLevelRole(userRole)) {
+  async findAll(userRole: string, userStudioId: string | undefined, organizationId: string) {
+    if (isDeveloperRole(userRole)) {
       return this.prisma.studio.findMany({
         orderBy: { createdAt: 'desc' },
       });
     }
+    if (isOwnerLevelRole(userRole) || userRole === UserRole.MANAGER) {
+      return this.prisma.studio.findMany({
+        where: { organizationId },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
 
-    // MANAGER and MASTER can only see their studio
     if (!userStudioId) {
       return [];
     }
 
     return this.prisma.studio.findMany({
-      where: { id: userStudioId },
+      where: { id: userStudioId, organizationId },
     });
   }
 
-  async create(createStudioDto: CreateStudioDto) {
+  async create(createStudioDto: CreateStudioDto, organizationId: string) {
+    const org = await this.prisma.organization.findUnique({ where: { id: organizationId } });
+    if (!org) {
+      throw new NotFoundException('Organization not found');
+    }
     return this.prisma.studio.create({
       data: {
         id: generateId(IdPrefix.Studio),
+        organizationId,
         name: createStudioDto.name,
         address: createStudioDto.address,
         timezone: createStudioDto.timezone || 'Asia/Almaty',
@@ -51,7 +61,7 @@ export class StudiosService {
     });
   }
 
-  async findOne(id: string, userRole: string, userStudioId?: string) {
+  async findOne(id: string, userRole: string, userStudioId: string | undefined, organizationId: string) {
     const studio = await this.prisma.studio.findUnique({
       where: { id },
     });
@@ -60,12 +70,14 @@ export class StudiosService {
       return null;
     }
 
-    // OWNER and DEPUTY_OWNER can access any studio
-    if (isOwnerLevelRole(userRole)) {
+    if (!isDeveloperRole(userRole) && studio.organizationId !== organizationId) {
+      throw new ForbiddenException('Access denied to this studio');
+    }
+
+    if (isOwnerLevelRole(userRole) || userRole === UserRole.MANAGER) {
       return studio;
     }
 
-    // MANAGER and MASTER can only access their studio
     if (userStudioId !== id) {
       throw new ForbiddenException('Access denied to this studio');
     }
@@ -73,32 +85,38 @@ export class StudiosService {
     return studio;
   }
 
-  async getSettings(studioId: string, userRole: string, userStudioId?: string) {
+  async getSettings(studioId: string, userRole: string, userStudioId: string | undefined) {
     const studio = await this.prisma.studio.findUnique({
       where: { id: studioId },
       select: {
         id: true,
-        loyaltyMode: true,
-        globalBonusPaymentLimitPercent: true,
-        referFriendEnabled: true,
-        referFriendInviteeRewardType: true,
-        referFriendInviteeValue: true,
-        referFriendReferrerRewardType: true,
-        referFriendReferrerValue: true,
+        organizationId: true,
+        organization: {
+          select: {
+            loyaltyMode: true,
+            globalBonusPaymentLimitPercent: true,
+            referFriendEnabled: true,
+            referFriendInviteeRewardType: true,
+            referFriendInviteeValue: true,
+            referFriendReferrerRewardType: true,
+            referFriendReferrerValue: true,
+          },
+        },
       },
     });
     if (!studio) throw new NotFoundException('Studio not found');
     if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
     }
+    const org = studio.organization;
     return {
-      loyaltyMode: studio.loyaltyMode,
-      globalBonusPaymentLimitPercent: studio.globalBonusPaymentLimitPercent ?? 30,
-      referFriendEnabled: studio.referFriendEnabled,
-      referFriendInviteeRewardType: studio.referFriendInviteeRewardType,
-      referFriendInviteeValue: studio.referFriendInviteeValue,
-      referFriendReferrerRewardType: studio.referFriendReferrerRewardType,
-      referFriendReferrerValue: studio.referFriendReferrerValue,
+      loyaltyMode: org.loyaltyMode,
+      globalBonusPaymentLimitPercent: org.globalBonusPaymentLimitPercent ?? 30,
+      referFriendEnabled: org.referFriendEnabled,
+      referFriendInviteeRewardType: org.referFriendInviteeRewardType,
+      referFriendInviteeValue: org.referFriendInviteeValue,
+      referFriendReferrerRewardType: org.referFriendReferrerRewardType,
+      referFriendReferrerValue: org.referFriendReferrerValue,
     };
   }
 
@@ -117,19 +135,27 @@ export class StudiosService {
     if (!isOwnerLevelRole(userRole)) {
       throw new ForbiddenException('Only owner level role can change studio settings');
     }
-    const studio = await this.prisma.studio.findUnique({ where: { id: studioId } });
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { id: true, organizationId: true },
+    });
     if (!studio) throw new NotFoundException('Studio not found');
 
-    const nextEnabled = dto.referFriendEnabled ?? studio.referFriendEnabled;
-    const nextInviteeType = dto.referFriendInviteeRewardType ?? studio.referFriendInviteeRewardType;
+    const org = await this.prisma.organization.findUnique({
+      where: { id: studio.organizationId },
+    });
+    if (!org) throw new NotFoundException('Organization not found');
+
+    const nextEnabled = dto.referFriendEnabled ?? org.referFriendEnabled;
+    const nextInviteeType = dto.referFriendInviteeRewardType ?? org.referFriendInviteeRewardType;
     const nextInviteeValue =
-      dto.referFriendInviteeValue !== undefined ? dto.referFriendInviteeValue : studio.referFriendInviteeValue;
+      dto.referFriendInviteeValue !== undefined ? dto.referFriendInviteeValue : org.referFriendInviteeValue;
     const nextReferrerType =
-      dto.referFriendReferrerRewardType ?? studio.referFriendReferrerRewardType;
+      dto.referFriendReferrerRewardType ?? org.referFriendReferrerRewardType;
     const nextReferrerValue =
       dto.referFriendReferrerValue !== undefined
         ? dto.referFriendReferrerValue
-        : studio.referFriendReferrerValue;
+        : org.referFriendReferrerValue;
 
     if (nextEnabled) {
       if (nextInviteeType == null || nextInviteeValue == null) {
@@ -172,8 +198,8 @@ export class StudiosService {
       data.referFriendReferrerValue = dto.referFriendReferrerValue;
     }
 
-    return this.prisma.studio.update({
-      where: { id: studioId },
+    return this.prisma.organization.update({
+      where: { id: studio.organizationId },
       data: data as any,
     });
   }
@@ -192,7 +218,7 @@ export class StudiosService {
     for (let i = 0; i < sortOrders.length; i++) {
       if (sortOrders[i] !== i) {
         throw new BadRequestException(
-          `Уровни: sortOrder должны идти без пропусков от 0 до ${sortOrders.length - 1}`,
+          `Уровни: sortOrder должны идти без пропусков от 0 до ${tiers.length - 1}`,
         );
       }
     }
@@ -220,26 +246,27 @@ export class StudiosService {
     }
   }
 
-  async getLoyalty(studioId: string, userRole: string, userStudioId?: string) {
+  async getLoyalty(studioId: string, userRole: string, userStudioId: string | undefined) {
     const studio = await this.prisma.studio.findUnique({
       where: { id: studioId },
-      select: { id: true, loyaltyMode: true },
+      select: { id: true, organizationId: true, organization: { select: { loyaltyMode: true } } },
     });
     if (!studio) throw new NotFoundException('Studio not found');
     if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
     }
+    const orgId = studio.organizationId;
     const [tiers, milestones] = await Promise.all([
       this.prisma.studioLoyaltyTier.findMany({
-        where: { studioId },
+        where: { organizationId: orgId },
         orderBy: { sortOrder: 'asc' },
       }),
       this.prisma.studioLoyaltyMilestone.findMany({
-        where: { studioId },
+        where: { organizationId: orgId },
         orderBy: { minTotalPaid: 'asc' },
       }),
     ]);
-    return { loyaltyMode: studio.loyaltyMode, tiers, milestones };
+    return { loyaltyMode: studio.organization.loyaltyMode, tiers, milestones };
   }
 
   async updateLoyalty(
@@ -250,6 +277,7 @@ export class StudiosService {
       milestones?: StudioLoyaltyMilestoneItemDto[];
     },
     userRole: string,
+    userStudioId: string | undefined,
   ) {
     if (!isOwnerLevelRole(userRole)) {
       throw new ForbiddenException('Only owner level role can change loyalty settings');
@@ -257,17 +285,19 @@ export class StudiosService {
     const studio = await this.prisma.studio.findUnique({ where: { id: studioId } });
     if (!studio) throw new NotFoundException('Studio not found');
 
+    const orgId = studio.organizationId;
+
     if (dto.loyaltyMode === StudioLoyaltyMode.PRESET) {
       await this.prisma.$transaction([
-        this.prisma.studioLoyaltyMilestone.deleteMany({ where: { studioId } }),
-        this.prisma.studioLoyaltyTier.deleteMany({ where: { studioId } }),
-        this.prisma.clientStudioLoyalty.deleteMany({ where: { studioId } }),
-        this.prisma.studio.update({
-          where: { id: studioId },
+        this.prisma.studioLoyaltyMilestone.deleteMany({ where: { organizationId: orgId } }),
+        this.prisma.studioLoyaltyTier.deleteMany({ where: { organizationId: orgId } }),
+        this.prisma.clientStudioLoyalty.deleteMany({ where: { organizationId: orgId } }),
+        this.prisma.organization.update({
+          where: { id: orgId },
           data: { loyaltyMode: StudioLoyaltyMode.PRESET },
         }),
       ]);
-      return this.getLoyalty(studioId, userRole, studioId);
+      return this.getLoyalty(studioId, userRole, userStudioId);
     }
 
     const tiers = dto.tiers ?? [];
@@ -278,7 +308,7 @@ export class StudiosService {
     this.validateCustomLoyaltyPayload(tiers, milestones);
 
     const snapshots = await this.prisma.clientStudioLoyalty.findMany({
-      where: { studioId },
+      where: { organizationId: orgId },
       include: { currentTier: true },
     });
     const snapData = snapshots.map((row) => ({
@@ -290,14 +320,14 @@ export class StudiosService {
     }));
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.studioLoyaltyMilestone.deleteMany({ where: { studioId } });
-      await tx.studioLoyaltyTier.deleteMany({ where: { studioId } });
+      await tx.studioLoyaltyMilestone.deleteMany({ where: { organizationId: orgId } });
+      await tx.studioLoyaltyTier.deleteMany({ where: { organizationId: orgId } });
 
       for (const t of tiers) {
         await tx.studioLoyaltyTier.create({
           data: {
             id: generateId(IdPrefix.StudioLoyaltyTier),
-            studioId,
+            organizationId: orgId,
             sortOrder: t.sortOrder,
             name: t.name,
             cashbackPercent: t.cashbackPercent,
@@ -310,20 +340,20 @@ export class StudiosService {
         await tx.studioLoyaltyMilestone.create({
           data: {
             id: generateId(IdPrefix.StudioLoyaltyMilestone),
-            studioId,
+            organizationId: orgId,
             minTotalPaid: m.minTotalPaid,
             targetSortOrder: m.targetSortOrder,
           },
         });
       }
 
-      await tx.studio.update({
-        where: { id: studioId },
+      await tx.organization.update({
+        where: { id: orgId },
         data: { loyaltyMode: StudioLoyaltyMode.CUSTOM },
       });
 
       const createdTiers = await tx.studioLoyaltyTier.findMany({
-        where: { studioId },
+        where: { organizationId: orgId },
         orderBy: { sortOrder: 'asc' },
       });
       const tierLikes = createdTiers.map((ct) => ({
@@ -361,8 +391,6 @@ export class StudiosService {
       }
     });
 
-    return this.getLoyalty(studioId, userRole, studioId);
+    return this.getLoyalty(studioId, userRole, userStudioId);
   }
 }
-
-

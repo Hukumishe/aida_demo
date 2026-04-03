@@ -32,6 +32,7 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
       select: {
         id: true,
         role: true,
+        organizationId: true,
         studioId: true,
         isActive: true,
       },
@@ -44,7 +45,8 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
     return {
       userId: user.id,
       role: user.role,
-      studioId: user.studioId,
+      organizationId: user.organizationId,
+      studioId: user.studioId ?? undefined,
     };
   }
 }

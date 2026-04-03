@@ -26,9 +26,15 @@ export async function assertReferralCodeIsNotLandingPromo(
   }
 }
 
-export async function findReferrerByClientReferralCode(prisma: Db, normalizedCode: string) {
+export async function findReferrerByClientReferralCode(
+  prisma: Db,
+  normalizedCode: string,
+  organizationId: string,
+) {
   return prisma.client.findUnique({
-    where: { referralCode: normalizedCode },
+    where: {
+      organizationId_referralCode: { organizationId, referralCode: normalizedCode },
+    },
     select: { id: true, bonuses: true, firstName: true, lastName: true, referralCode: true },
   });
 }

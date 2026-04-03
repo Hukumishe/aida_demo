@@ -24,7 +24,7 @@ import { Roles, UserRole } from '../common/decorators/roles.decorator';
 @ApiTags('prompts')
 @Controller('prompts')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.SERVICE)
+@Roles(UserRole.DEVELOPER, UserRole.SERVICE)
 @ApiBearerAuth()
 export class PromptsController {
   constructor(private readonly promptsService: PromptsService) {}

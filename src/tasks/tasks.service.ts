@@ -7,13 +7,14 @@ import {
 } from '@nestjs/common';
 import { TaskStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { getOrganizationIdForStudio } from '../common/organization-scope';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateStudioTaskDto } from './dto/create-task.dto';
 import { UpdateStudioTaskDto } from './dto/update-task.dto';
 
-const CONTROLLER_ROLES: UserRole[] = [UserRole.MANAGER, UserRole.ADMIN];
+const CONTROLLER_ROLES: UserRole[] = [UserRole.MANAGER, UserRole.ADMIN, UserRole.DEVELOPER];
 
 @Injectable()
 export class TasksService {
@@ -85,7 +86,9 @@ export class TasksService {
   async findAll(studioId: string, userRole: string, userId: string, userStudioId?: string) {
     this.assertStudioScope(studioId, userRole, userStudioId);
 
-    const where: { studioId: string; assigneeUserId?: string } = { studioId };
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
+    const where: { organizationId: string; assigneeUserId?: string } = { organizationId };
     if (userRole === UserRole.MASTER) {
       where.assigneeUserId = userId;
     }
@@ -124,6 +127,8 @@ export class TasksService {
     await this.assertUserIsStudioStaff(studioId, dto.assigneeUserId);
     await this.assertControllersAreManagers(studioId, dto.controllerUserIds ?? []);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const deadlineAt = new Date(dto.deadlineAt);
     if (Number.isNaN(deadlineAt.getTime())) {
       throw new BadRequestException('Некорректная дата deadlineAt');
@@ -132,7 +137,7 @@ export class TasksService {
     const task = await this.prisma.studioTask.create({
       data: {
         id: generateId(IdPrefix.StudioTask),
-        studioId,
+        organizationId,
         title: dto.title.trim(),
         description: dto.description?.trim() || null,
         assigneeUserId: dto.assigneeUserId,
@@ -173,8 +178,10 @@ export class TasksService {
   ) {
     this.assertStudioScope(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const task = await this.prisma.studioTask.findFirst({
-      where: { id: taskId, studioId },
+      where: { id: taskId, organizationId },
       include: this.taskInclude(),
     });
     if (!task) throw new NotFoundException('Задача не найдена');
@@ -198,8 +205,10 @@ export class TasksService {
   ) {
     this.assertStudioScope(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const task = await this.prisma.studioTask.findFirst({
-      where: { id: taskId, studioId },
+      where: { id: taskId, organizationId },
       include: { controllers: true },
     });
     if (!task) throw new NotFoundException('Задача не найдена');
@@ -282,8 +291,10 @@ export class TasksService {
     }
     this.assertStudioScope(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const task = await this.prisma.studioTask.findFirst({
-      where: { id: taskId, studioId },
+      where: { id: taskId, organizationId },
     });
     if (!task) throw new NotFoundException('Задача не найдена');
 
@@ -315,7 +326,7 @@ export class TasksService {
       for (const uid of recipients) {
         try {
           await this.notifications.createTaskDeadlineApproachingNotification(
-            task.studioId,
+            task.organizationId,
             uid,
             task.id,
             task.title,

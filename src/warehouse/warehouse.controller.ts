@@ -34,40 +34,40 @@ export class WarehouseController {
 
   // ---------- Центральный склад (только OWNER, DEPUTY_OWNER) ----------
   @Get('warehouse/central')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Get central warehouse and stock' })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403 })
   getCentral(@CurrentUser() user?: any) {
-    return this.warehouseService.getCentralWarehouse(user?.role);
+    return this.warehouseService.getCentralWarehouse(user?.role, user?.organizationId);
   }
 
   @Get('warehouse/central/branches')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'List branch warehouses (for transfer destination)' })
   @ApiResponse({ status: 200 })
   listBranches(@CurrentUser() user?: any) {
-    return this.warehouseService.listBranchWarehouses(user?.role);
+    return this.warehouseService.listBranchWarehouses(user?.role, user?.organizationId);
   }
 
   @Get('warehouse/central/history')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Movement history: all transfers from central warehouse' })
   @ApiResponse({ status: 200 })
   getCentralHistory(@CurrentUser() user?: any) {
-    return this.warehouseService.getCentralMovementHistory(user?.role);
+    return this.warehouseService.getCentralMovementHistory(user?.role, user?.organizationId);
   }
 
   @Get('warehouse/central/products')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'List all products (catalog)' })
   @ApiResponse({ status: 200 })
   listProducts(@CurrentUser() user?: any) {
-    return this.warehouseService.listProducts(user?.role);
+    return this.warehouseService.listProducts(user?.role, user?.organizationId);
   }
 
   @Post('warehouse/central/products')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Add product (optional initial quantity on central)' })
   @ApiResponse({ status: 201 })
   @ApiResponse({ status: 403 })
@@ -75,7 +75,7 @@ export class WarehouseController {
     @Body() dto: CreateProductDto,
     @CurrentUser() user?: any,
   ) {
-    const central = await this.warehouseService.getCentralWarehouse(user?.role);
+    const central = await this.warehouseService.getCentralWarehouse(user?.role, user?.organizationId);
     return this.warehouseService.createProduct(
       dto,
       central.id,
@@ -85,7 +85,7 @@ export class WarehouseController {
   }
 
   @Patch('warehouse/central/products/:id')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Update product' })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 404 })
@@ -94,11 +94,11 @@ export class WarehouseController {
     @Body() dto: UpdateProductDto,
     @CurrentUser() user?: any,
   ) {
-    return this.warehouseService.updateProduct(id, dto, user?.role, user?.studioId);
+    return this.warehouseService.updateProduct(id, dto, user?.role, user?.studioId, user?.organizationId);
   }
 
   @Delete('warehouse/central/products/:id')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Delete product (only if no stock anywhere)' })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 400 })
@@ -107,11 +107,11 @@ export class WarehouseController {
     @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
-    return this.warehouseService.deleteProduct(id, user?.role);
+    return this.warehouseService.deleteProduct(id, user?.role, user?.organizationId);
   }
 
   @Post('warehouse/central/transfer')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Transfer from central to branch warehouse' })
   @ApiResponse({ status: 201 })
   @ApiResponse({ status: 400 })
@@ -125,11 +125,12 @@ export class WarehouseController {
       user?.role,
       user?.studioId,
       user?.userId,
+      user?.organizationId,
     );
   }
 
   @Post('warehouse/central/receipt')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Record receipt (приход) on central warehouse only' })
   @ApiResponse({ status: 201 })
   @ApiResponse({ status: 404 })
@@ -141,6 +142,7 @@ export class WarehouseController {
       dto,
       user?.role,
       user?.userId,
+      user?.organizationId,
     );
   }
 

@@ -12,18 +12,23 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { CreateTransferDto } from './dto/create-transfer.dto';
 import { CreateReceiptDto, CreateWriteOffDto } from './dto/create-movement.dto';
 import { WarehouseType, ProductUnit, StockMovementType } from '@prisma/client';
+import { getOrganizationIdForStudio } from '../common/organization-scope';
 
 @Injectable()
 export class WarehouseService {
   constructor(private prisma: PrismaService) {}
 
-  private async getOrCreateCentralWarehouse() {
+  private async getOrCreateCentralWarehouse(organizationId: string) {
     let wh = await this.prisma.warehouse.findFirst({
-      where: { type: WarehouseType.CENTRAL },
+      where: { type: WarehouseType.CENTRAL, organizationId },
     });
     if (!wh) {
       wh = await this.prisma.warehouse.create({
-        data: { id: generateId(IdPrefix.Warehouse), type: WarehouseType.CENTRAL },
+        data: {
+          id: generateId(IdPrefix.Warehouse),
+          type: WarehouseType.CENTRAL,
+          organizationId,
+        },
       });
     }
     return wh;
@@ -37,7 +42,12 @@ export class WarehouseService {
     if (!studio) throw new NotFoundException('Studio not found');
     if (studio.warehouse) return studio.warehouse;
     return this.prisma.warehouse.create({
-      data: { id: generateId(IdPrefix.Warehouse), type: WarehouseType.BRANCH, studioId },
+      data: {
+        id: generateId(IdPrefix.Warehouse),
+        type: WarehouseType.BRANCH,
+        studioId,
+        organizationId: studio.organizationId,
+      },
     });
   }
 
@@ -54,18 +64,20 @@ export class WarehouseService {
     throw new ForbiddenException('Access denied to this warehouse');
   }
 
-  async listBranchWarehouses(userRole?: string) {
+  async listBranchWarehouses(userRole?: string, organizationId?: string) {
     this.ensureCentralAccess(userRole);
+    if (!organizationId) throw new ForbiddenException('Organization required');
     return this.prisma.warehouse.findMany({
-      where: { type: WarehouseType.BRANCH },
+      where: { type: WarehouseType.BRANCH, organizationId },
       include: { studio: { select: { id: true, name: true } } },
       orderBy: { studio: { name: 'asc' } },
     });
   }
 
-  async getCentralWarehouse(userRole?: string) {
+  async getCentralWarehouse(userRole?: string, organizationId?: string) {
     this.ensureCentralAccess(userRole);
-    const warehouse = await this.getOrCreateCentralWarehouse();
+    if (!organizationId) throw new ForbiddenException('Organization required');
+    const warehouse = await this.getOrCreateCentralWarehouse(organizationId);
     const stocks = await this.prisma.stock.findMany({
       where: { warehouseId: warehouse.id },
       include: { product: true },
@@ -87,14 +99,18 @@ export class WarehouseService {
     userStudioId?: string,
   ) {
     this.ensureBranchAccess(studioId, userRole, userStudioId);
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     const warehouse = await this.getOrCreateBranchWarehouse(studioId);
-    const central = await this.getOrCreateCentralWarehouse();
+    const central = await this.getOrCreateCentralWarehouse(organizationId);
     const [stocks, products, centralStocksPositive] = await Promise.all([
       this.prisma.stock.findMany({
         where: { warehouseId: warehouse.id },
         include: { product: true },
       }),
-      this.prisma.product.findMany({ orderBy: { name: 'asc' } }),
+      this.prisma.product.findMany({
+        where: { organizationId },
+        orderBy: { name: 'asc' },
+      }),
       this.prisma.stock.findMany({
         where: { warehouseId: central.id, quantity: { gt: 0 } },
         include: { product: true },
@@ -126,9 +142,13 @@ export class WarehouseService {
     };
   }
 
-  async listProducts(userRole?: string) {
+  async listProducts(userRole?: string, organizationId?: string) {
     this.ensureCentralAccess(userRole);
-    return this.prisma.product.findMany({ orderBy: { name: 'asc' } });
+    if (!organizationId) throw new ForbiddenException('Organization required');
+    return this.prisma.product.findMany({
+      where: { organizationId },
+      orderBy: { name: 'asc' },
+    });
   }
 
   async createProduct(
@@ -149,6 +169,7 @@ export class WarehouseService {
     const product = await this.prisma.product.create({
       data: {
         id: generateId(IdPrefix.Product),
+        organizationId: warehouse.organizationId,
         name: dto.name,
         description: dto.description,
         article: dto.article,
@@ -175,12 +196,16 @@ export class WarehouseService {
     dto: UpdateProductDto,
     userRole?: string,
     userStudioId?: string,
+    organizationId?: string,
   ) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
     });
     if (!product) throw new NotFoundException('Product not found');
     this.ensureCentralAccess(userRole);
+    if (organizationId && product.organizationId !== organizationId) {
+      throw new ForbiddenException('Product belongs to another organization');
+    }
 
     return this.prisma.product.update({
       where: { id: productId },
@@ -196,6 +221,7 @@ export class WarehouseService {
   async deleteProduct(
     productId: string,
     userRole?: string,
+    organizationId?: string,
   ) {
     this.ensureCentralAccess(userRole);
     const product = await this.prisma.product.findUnique({
@@ -203,6 +229,9 @@ export class WarehouseService {
       include: { stocks: true },
     });
     if (!product) throw new NotFoundException('Product not found');
+    if (organizationId && product.organizationId !== organizationId) {
+      throw new ForbiddenException('Product belongs to another organization');
+    }
     const hasStock = product.stocks.some((s) => s.quantity > 0);
     if (hasStock) {
       throw new BadRequestException(
@@ -219,17 +248,22 @@ export class WarehouseService {
     userRole?: string,
     userStudioId?: string,
     userId?: string,
+    organizationId?: string,
   ) {
     this.ensureCentralAccess(userRole);
     if (!userId) throw new ForbiddenException('User required');
+    if (!organizationId) throw new ForbiddenException('Organization required');
 
-    const central = await this.getOrCreateCentralWarehouse();
+    const central = await this.getOrCreateCentralWarehouse(organizationId);
     const toWarehouse = await this.prisma.warehouse.findUnique({
       where: { id: dto.toWarehouseId },
       include: { studio: true },
     });
     if (!toWarehouse || toWarehouse.type !== WarehouseType.BRANCH) {
       throw new BadRequestException('Destination must be a branch warehouse');
+    }
+    if (toWarehouse.organizationId !== organizationId) {
+      throw new BadRequestException('Destination warehouse belongs to another organization');
     }
 
     const product = await this.prisma.product.findUnique({
@@ -288,7 +322,8 @@ export class WarehouseService {
     this.ensureBranchAccess(studioId, userRole, userStudioId);
     if (!userId) throw new ForbiddenException('User required');
 
-    const central = await this.getOrCreateCentralWarehouse();
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const central = await this.getOrCreateCentralWarehouse(organizationId);
     const branch = await this.getOrCreateBranchWarehouse(studioId);
 
     const product = await this.prisma.product.findUnique({
@@ -354,11 +389,13 @@ export class WarehouseService {
     dto: CreateReceiptDto,
     userRole?: string,
     userId?: string,
+    organizationId?: string,
   ) {
     this.ensureCentralAccess(userRole);
     if (!userId) throw new ForbiddenException('User required');
+    if (!organizationId) throw new ForbiddenException('Organization required');
 
-    const warehouse = await this.getOrCreateCentralWarehouse();
+    const warehouse = await this.getOrCreateCentralWarehouse(organizationId);
     const product = await this.prisma.product.findUnique({
       where: { id: dto.productId },
     });
@@ -449,7 +486,11 @@ export class WarehouseService {
 
   async getProductsForBranch(studioId: string, userRole?: string, userStudioId?: string) {
     this.ensureBranchAccess(studioId, userRole, userStudioId);
-    return this.prisma.product.findMany({ orderBy: { name: 'asc' } });
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    return this.prisma.product.findMany({
+      where: { organizationId },
+      orderBy: { name: 'asc' },
+    });
   }
 
   async updateProductAtBranch(
@@ -504,9 +545,10 @@ export class WarehouseService {
   /**
    * История движения с центрального склада: все перемещения (куда ушёл товар).
    */
-  async getCentralMovementHistory(userRole?: string) {
+  async getCentralMovementHistory(userRole?: string, organizationId?: string) {
     this.ensureCentralAccess(userRole);
-    const central = await this.getOrCreateCentralWarehouse();
+    if (!organizationId) throw new ForbiddenException('Organization required');
+    const central = await this.getOrCreateCentralWarehouse(organizationId);
     const transfers = await this.prisma.transfer.findMany({
       where: { fromWarehouseId: central.id },
       orderBy: { createdAt: 'desc' },

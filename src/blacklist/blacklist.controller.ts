@@ -34,7 +34,14 @@ export class BlacklistController {
   constructor(private readonly blacklistService: BlacklistService) {}
 
   @Post('clients/:clientId/blacklist/request')
-  @Roles(UserRole.MANAGER, UserRole.ADMIN, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(
+    UserRole.DEVELOPER,
+    UserRole.MANAGER,
+    UserRole.ADMIN,
+    UserRole.OWNER,
+    UserRole.DEPUTY_OWNER,
+    UserRole.SERVICE,
+  )
   @ApiOperation({ summary: 'Create blacklist request (MANAGER, ADMIN, OWNER, DEPUTY_OWNER). OWNER/DEPUTY_OWNER requests are auto-approved.' })
   @ApiResponse({ status: 201, description: 'Blacklist request created' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -54,7 +61,7 @@ export class BlacklistController {
   }
 
   @Post('clients/:clientId/blacklist/add')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Add client to blacklist directly (OWNER and DEPUTY_OWNER only)' })
   @ApiResponse({ status: 200, description: 'Client added to blacklist' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -92,7 +99,7 @@ export class BlacklistController {
   }
 
   @Patch('blacklist/requests/:requestId/approve')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Approve blacklist request (OWNER and DEPUTY_OWNER only)' })
   @ApiResponse({ status: 200, description: 'Request approved' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -111,7 +118,7 @@ export class BlacklistController {
   }
 
   @Patch('blacklist/requests/:requestId/reject')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Reject blacklist request (OWNER and DEPUTY_OWNER only)' })
   @ApiResponse({ status: 200, description: 'Request rejected' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -146,7 +153,7 @@ export class BlacklistController {
   }
 
   @Patch('clients/:clientId/blacklist/remove')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Remove client from blacklist (OWNER and DEPUTY_OWNER only)' })
   @ApiResponse({ status: 200, description: 'Client removed from blacklist' })
   @ApiResponse({ status: 403, description: 'Forbidden' })

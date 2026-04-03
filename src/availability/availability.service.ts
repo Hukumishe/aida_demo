@@ -289,10 +289,22 @@ export class AvailabilityService {
     const slotStep = Math.min(Math.max(options.slotStepMinutes ?? 15, 5), 120);
     const dateObj = new Date(`${dateStr}T00:00:00.000Z`);
 
+    const studioRow = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { organizationId: true },
+    });
+    if (!studioRow) {
+      throw new NotFoundException('Studio not found');
+    }
+
     let durationMinutes = options.durationMinutes ?? 60;
     if (options.serviceId) {
       const service = await this.prisma.service.findFirst({
-        where: { id: options.serviceId, studioId, isActive: true },
+        where: {
+          id: options.serviceId,
+          organizationId: studioRow.organizationId,
+          isActive: true,
+        },
       });
       if (!service) {
         throw new NotFoundException('Service not found for this studio');

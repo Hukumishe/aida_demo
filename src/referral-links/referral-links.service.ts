@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { generateId, IdPrefix } from '../common/id-generator';
+import { getOrganizationIdForStudio } from '../common/organization-scope';
 import { isOwnerLevelRole, UserRole } from '../common/decorators/roles.decorator';
 import { CreateStudioReferralLinkDto } from './dto/create-referral-link.dto';
 import { UpdateStudioReferralLinkDto } from './dto/update-referral-link.dto';
@@ -15,7 +16,11 @@ export class ReferralLinksService {
   constructor(private readonly prisma: PrismaService) {}
 
   private assertOwnerOrDeputy(userRole: string) {
-    if (userRole !== UserRole.OWNER && userRole !== UserRole.DEPUTY_OWNER) {
+    if (
+      userRole !== UserRole.OWNER &&
+      userRole !== UserRole.DEPUTY_OWNER &&
+      userRole !== UserRole.DEVELOPER
+    ) {
       throw new ForbiddenException('Только владелец или заместитель могут управлять реферальными ссылками');
     }
   }
@@ -30,8 +35,9 @@ export class ReferralLinksService {
 
   async findAll(studioId: string, userRole: string, userStudioId?: string) {
     this.assertStudioRead(studioId, userRole, userStudioId);
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     return this.prisma.studioReferralLink.findMany({
-      where: { studioId },
+      where: { organizationId },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -45,6 +51,8 @@ export class ReferralLinksService {
     this.assertOwnerOrDeputy(userRole);
     this.assertStudioRead(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     if (dto.cashbackEnabled) {
       if (dto.cashbackPercent == null) {
         throw new BadRequestException('Укажите процент кэшбэка при включённом начислении');
@@ -54,7 +62,7 @@ export class ReferralLinksService {
     return this.prisma.studioReferralLink.create({
       data: {
         id: generateId(IdPrefix.StudioReferralLink),
-        studioId,
+        organizationId,
         sourceName: dto.sourceName.trim(),
         cashbackEnabled: dto.cashbackEnabled,
         cashbackPercent: dto.cashbackEnabled ? dto.cashbackPercent! : null,
@@ -72,8 +80,10 @@ export class ReferralLinksService {
     this.assertOwnerOrDeputy(userRole);
     this.assertStudioRead(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const existing = await this.prisma.studioReferralLink.findFirst({
-      where: { id: linkId, studioId },
+      where: { id: linkId, organizationId },
     });
     if (!existing) throw new NotFoundException('Ссылка не найдена');
 
@@ -104,8 +114,9 @@ export class ReferralLinksService {
 
   /** Публичная проверка ссылки для лендинга (до регистрации) */
   async resolveForLanding(studioId: string, linkId: string) {
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     const link = await this.prisma.studioReferralLink.findFirst({
-      where: { id: linkId, studioId },
+      where: { id: linkId, organizationId },
     });
     if (!link || !link.isActive) {
       return { valid: false as const };

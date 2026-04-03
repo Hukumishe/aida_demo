@@ -192,7 +192,14 @@ export class ClientsController {
     @Body() dto: BonusAdjustmentDto,
     @CurrentUser() user?: any,
   ) {
-    return this.clientsService.bonusAdjustment(id, dto, user?.userId, user?.role, user?.studioId);
+    return this.clientsService.bonusAdjustment(
+      id,
+      dto,
+      user?.userId,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+    );
   }
 }
 

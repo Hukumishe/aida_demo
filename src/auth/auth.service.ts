@@ -26,7 +26,15 @@ export class AuthService {
       where: {
         phone: phone,
       },
-      include: {
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+        passwordHash: true,
+        role: true,
+        organizationId: true,
+        studioId: true,
+        isActive: true,
         staffProfile: true,
       },
     });
@@ -43,6 +51,7 @@ export class AuthService {
     const payload: JwtPayload = {
       sub: user.id,
       role: user.role,
+      organizationId: user.organizationId,
       studioId: user.studioId || undefined,
     };
 
@@ -69,6 +78,7 @@ export class AuthService {
         email: user.email,
         phone: user.phone,
         role: user.role,
+        organizationId: user.organizationId,
         studioId: user.studioId,
         staffProfile: user.staffProfile,
       },
@@ -90,6 +100,7 @@ export class AuthService {
         select: {
           id: true,
           role: true,
+          organizationId: true,
           studioId: true,
           isActive: true,
         },
@@ -102,6 +113,7 @@ export class AuthService {
       const jwtPayload: JwtPayload = {
         sub: user.id,
         role: user.role,
+        organizationId: user.organizationId,
         studioId: user.studioId || undefined,
       };
 
@@ -126,11 +138,15 @@ export class AuthService {
         email: true,
         phone: true,
         role: true,
+        organizationId: true,
         studioId: true,
         isActive: true,
         themePreference: true,
         createdAt: true,
         updatedAt: true,
+        organization: {
+          select: { id: true, name: true, slug: true },
+        },
         studio: {
           select: {
             id: true,

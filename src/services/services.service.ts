@@ -5,12 +5,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { getOrganizationIdForStudio } from '../common/organization-scope';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto';
 import { UpdateServiceCategoryDto } from './dto/update-service-category.dto';
-import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { ServiceAudience } from '@prisma/client';
 
 @Injectable()
@@ -23,15 +24,15 @@ export class ServicesService {
     }
   }
 
-  private async assertCategoryBelongsToStudio(
+  private async assertCategoryBelongsToOrganization(
     categoryId: string,
-    studioId: string,
+    organizationId: string,
   ): Promise<void> {
     const cat = await this.prisma.serviceCategory.findUnique({
       where: { id: categoryId },
     });
-    if (!cat || cat.studioId !== studioId) {
-      throw new BadRequestException('Категория не найдена или не принадлежит этой студии');
+    if (!cat || cat.organizationId !== organizationId) {
+      throw new BadRequestException('Категория не найдена или не принадлежит этой организации');
     }
   }
 
@@ -43,8 +44,10 @@ export class ServicesService {
         throw new NotFoundException('Studio ID is required');
       }
 
+      const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
       return await this.prisma.service.findMany({
-        where: { studioId },
+        where: { organizationId },
         include: { category: true },
         orderBy: [{ name: 'asc' }],
       });
@@ -65,21 +68,16 @@ export class ServicesService {
   ) {
     this.assertStudioAccess(studioId, userRole, userStudioId);
 
-    const studio = await this.prisma.studio.findUnique({
-      where: { id: studioId },
-    });
-    if (!studio) {
-      throw new NotFoundException(`Studio with ID ${studioId} not found`);
-    }
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
-    await this.assertCategoryBelongsToStudio(createServiceDto.categoryId, studioId);
+    await this.assertCategoryBelongsToOrganization(createServiceDto.categoryId, organizationId);
 
     const audience = createServiceDto.audience ?? ServiceAudience.WOMEN;
 
     return this.prisma.service.create({
       data: {
         id: generateId(IdPrefix.Service),
-        studioId,
+        organizationId,
         name: createServiceDto.name,
         defaultDurationMin: createServiceDto.defaultDurationMin,
         defaultPrice: createServiceDto.defaultPrice,
@@ -100,6 +98,8 @@ export class ServicesService {
   ) {
     this.assertStudioAccess(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const service = await this.prisma.service.findUnique({
       where: { id },
     });
@@ -108,7 +108,7 @@ export class ServicesService {
       throw new NotFoundException(`Service with ID ${id} not found`);
     }
 
-    if (service.studioId !== studioId) {
+    if (service.organizationId !== organizationId) {
       throw new NotFoundException('Service not found in this studio');
     }
 
@@ -120,7 +120,7 @@ export class ServicesService {
     }
 
     if (categoryId !== undefined) {
-      await this.assertCategoryBelongsToStudio(categoryId, studioId);
+      await this.assertCategoryBelongsToOrganization(categoryId, organizationId);
     }
 
     const data: Record<string, unknown> = { ...rest };
@@ -135,12 +135,11 @@ export class ServicesService {
     });
   }
 
-  // --- Категории услуг ---
-
   async findCategories(studioId: string, userRole?: string, userStudioId?: string) {
     this.assertStudioAccess(studioId, userRole, userStudioId);
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     return this.prisma.serviceCategory.findMany({
-      where: { studioId },
+      where: { organizationId },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
   }
@@ -153,13 +152,12 @@ export class ServicesService {
   ) {
     this.assertStudioAccess(studioId, userRole, userStudioId);
 
-    const studio = await this.prisma.studio.findUnique({ where: { id: studioId } });
-    if (!studio) throw new NotFoundException(`Studio with ID ${studioId} not found`);
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
     return this.prisma.serviceCategory.create({
       data: {
         id: generateId(IdPrefix.ServiceCategory),
-        studioId,
+        organizationId,
         name: dto.name.trim(),
         sortOrder: dto.sortOrder ?? 0,
       },
@@ -175,10 +173,12 @@ export class ServicesService {
   ) {
     this.assertStudioAccess(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const cat = await this.prisma.serviceCategory.findUnique({
       where: { id: categoryId },
     });
-    if (!cat || cat.studioId !== studioId) {
+    if (!cat || cat.organizationId !== organizationId) {
       throw new NotFoundException('Категория не найдена');
     }
 
@@ -199,11 +199,13 @@ export class ServicesService {
   ) {
     this.assertStudioAccess(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const cat = await this.prisma.serviceCategory.findUnique({
       where: { id: categoryId },
       include: { _count: { select: { services: true } } },
     });
-    if (!cat || cat.studioId !== studioId) {
+    if (!cat || cat.organizationId !== organizationId) {
       throw new NotFoundException('Категория не найдена');
     }
     if (cat._count.services > 0) {

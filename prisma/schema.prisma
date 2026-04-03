@@ -13,10 +13,11 @@ datasource db {
 enum UserRole {
   OWNER
   DEPUTY_OWNER
-  SERVICE   // Те же права что у владельца; доступ к панели промптов
+  SERVICE // Те же права что у владельца; доступ к панели промптов
   ADMIN
   MANAGER
   MASTER
+  DEVELOPER // Платформа: создание организаций, полный доступ ко всем тенантам
 }
 
 enum AppointmentStatus {
@@ -27,9 +28,9 @@ enum AppointmentStatus {
 }
 
 enum ClientLevel {
-  BRONZE  // при регистрации, 3%
-  SILVER  // 50 000 ₸ оплачено, 5%
-  GOLD    // 120 000 ₸ оплачено, 10%
+  BRONZE // при регистрации, 3%
+  SILVER // 50 000 ₸ оплачено, 5%
+  GOLD // 120 000 ₸ оплачено, 10%
   DIAMOND // вручную, 30%
 }
 
@@ -71,18 +72,18 @@ enum WarehouseType {
 }
 
 enum ProductUnit {
-  KG   // Кг
-  PCS  // шт
-  ML   // мл
+  KG // Кг
+  PCS // шт
+  ML // мл
 }
 
 enum StockMovementType {
-  RECEIPT   // Приход
+  RECEIPT // Приход
   WRITE_OFF // Списание
 }
 
 enum LandingPromotionType {
-  DISCOUNT   // Скидка на одну или несколько услуг
+  DISCOUNT // Скидка на одну или несколько услуг
   ONE_PLUS_ONE // Акция 1+1 (две услуги по спеццене)
   SERVICE_BUNDLE // Набор из N услуг (1+1+1+…): одна общая цена, состав в landing_promotion_services
 }
@@ -96,13 +97,13 @@ enum StudioLoyaltyMode {
 // «Приведи друга»: награда приглашённому на первом визите
 enum ReferFriendInviteeRewardType {
   DISCOUNT_PERCENT // скидка % на сумму визита (услуга + апсейлы)
-  BONUS_PERCENT    // бонусы % от суммы оплаты деньгами за визит
+  BONUS_PERCENT // бонусы % от суммы оплаты деньгами за визит
 }
 
 // «Приведи друга»: вознаграждение пригласившему после завершения записи приглашённого
 enum ReferFriendReferrerRewardType {
   PERCENT_OF_PAYMENT // % от суммы оплаты деньгами приглашённого
-  FIXED_AMOUNT       // фиксированная сумма в мин. денежных единицах
+  FIXED_AMOUNT // фиксированная сумма в мин. денежных единицах
 }
 
 // Аудитория услуги: MEN или WOMEN (одно значение на услугу)
@@ -111,104 +112,147 @@ enum ServiceAudience {
   WOMEN
 }
 
-model Studio {
-  id        String   @id
-  name      String
-  address   String?
-  timezone  String   @default("Asia/Almaty")
-  globalBonusPaymentLimitPercent Int @default(30) // 0–100, лимит оплаты бонусами (только Owner)
-  /// Маркетинг: акция «приведи друга» (глобально для студии)
-  referFriendEnabled             Boolean                      @default(false)
+/// Тенант: сеть салонов в одной БД. Каталог услуг, CRM, маркетинг, склад, задачи и т.д. — на уровне организации.
+model Organization {
+  id                             String                         @id
+  name                           String
+  slug                           String?                        @unique
+  globalBonusPaymentLimitPercent Int                            @default(30) // 0–100, лимит оплаты бонусами (только Owner)
+  /// Маркетинг: акция «приведи друга»
+  referFriendEnabled             Boolean                        @default(false)
   referFriendInviteeRewardType   ReferFriendInviteeRewardType?
-  referFriendInviteeValue        Int? // 0–100 для DISCOUNT_PERCENT / BONUS_PERCENT
+  referFriendInviteeValue        Int?
   referFriendReferrerRewardType  ReferFriendReferrerRewardType?
-  referFriendReferrerValue       Int? // 0–100 для PERCENT_OF_PAYMENT; иначе фикс в ₸ (мин. ед.)
-  loyaltyMode       StudioLoyaltyMode @default(PRESET)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  referFriendReferrerValue       Int?
+  loyaltyMode                    StudioLoyaltyMode              @default(PRESET)
+  createdAt                      DateTime                       @default(now())
+  updatedAt                      DateTime                       @updatedAt
 
+  studios               Studio[]
+  users                 User[]
+  clients               Client[]
+  serviceCategories     ServiceCategory[]
+  services              Service[]
+  blacklistRequests     BlacklistRequest[]
+  bonusHistory          BonusHistoryEntry[]
+  landingPromotions     LandingPromotion[]
+  landingMasters        LandingMaster[]
+  landingServiceCards   LandingServiceCard[]
+  loyaltyTiers          StudioLoyaltyTier[]
+  loyaltyMilestones     StudioLoyaltyMilestone[]
+  clientStudioLoyalties ClientStudioLoyalty[]
+  studioTasks           StudioTask[]
+  referralLinks         StudioReferralLink[]
+  warehouses            Warehouse[]
+  products              Product[]
+  faqs                  OrganizationFaq[]
+  prompts               Prompt[]
+  notifications         Notification[]
+
+  @@map("organizations")
+}
+
+/// Филиал: расписание, записи, склад филиала, уведомления с контекстом филиала.
+model Studio {
+  id             String   @id
+  organizationId String
+  name           String
+  address        String?
+  timezone       String   @default("Asia/Almaty")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   users                 User[]
   workSchedules         WorkScheduleDay[]
   busySlots             BusySlot[]
-  services              Service[]
   appointments          Appointment[]
   staffServices         StaffService[]
   staffServiceOverrides StaffServiceOverride[]
   noShowIncomes         NoShowIncome[]
   Notification          Notification[]
-  blacklistRequests     BlacklistRequest[]
-  warehouse             Warehouse?  // Склад филиала (один на студию)
-  bonusHistory          BonusHistoryEntry[]
+  warehouse             Warehouse?
 
-  landingPromotions     LandingPromotion[]
-  landingMasters        LandingMaster[]
-  landingServiceCards   LandingServiceCard[]
-  serviceCategories     ServiceCategory[]
-  loyaltyTiers          StudioLoyaltyTier[]
-  loyaltyMilestones     StudioLoyaltyMilestone[]
-  clientStudioLoyalties ClientStudioLoyalty[]
-  studioTasks         StudioTask[]
-  referralLinks       StudioReferralLink[]
-
+  @@index([organizationId])
   @@map("studios")
 }
 
-/// Уровень лояльности студии (CUSTOM): порядок, имя, % кэшбэка; manualOnly — только назначение вручную (аналог DIAMOND)
+/// Уровень лояльности (CUSTOM) на уровне организации
 model StudioLoyaltyTier {
-  id              String   @id
-  studioId        String
+  id              String  @id
+  organizationId  String
   sortOrder       Int
   name            String
   cashbackPercent Int
-  manualOnly      Boolean  @default(false)
+  manualOnly      Boolean @default(false)
 
-  studio            Studio                @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   clientAssignments ClientStudioLoyalty[] @relation("ClientStudioCurrentTier")
 
-  @@unique([studioId, sortOrder])
-  @@index([studioId])
+  @@unique([organizationId, sortOrder])
+  @@index([organizationId])
   @@map("studio_loyalty_tiers")
 }
 
-/// Порог суммы оплат в студии → целевой sortOrder (можно «перепрыгнуть» уровень, задав несколько вех)
+/// Порог суммы оплат по организации → целевой sortOrder
 model StudioLoyaltyMilestone {
   id              String @id
-  studioId        String
+  organizationId  String
   minTotalPaid    Int
   targetSortOrder Int
 
-  studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@index([studioId])
+  @@index([organizationId])
   @@map("studio_loyalty_milestones")
 }
 
-/// Учёт лояльности клиента в конкретной студии (только при loyaltyMode = CUSTOM)
+/// Учёт лояльности клиента в организации (CUSTOM): суммы по DONE по филиалам этой организации
 model ClientStudioLoyalty {
   id               String  @id
   clientId         String
-  studioId         String
+  organizationId   String
   currentTierId    String?
-  totalPaid        Int     @default(0) // Сумма оплаченных деньгами по DONE только в этой студии
+  totalPaid        Int     @default(0)
   levelSetManually Boolean @default(false)
 
-  client      Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  studio      Studio             @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  currentTier StudioLoyaltyTier? @relation("ClientStudioCurrentTier", fields: [currentTierId], references: [id], onDelete: SetNull)
+  client       Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  currentTier  StudioLoyaltyTier? @relation("ClientStudioCurrentTier", fields: [currentTierId], references: [id], onDelete: SetNull)
 
-  @@unique([clientId, studioId])
-  @@index([studioId])
+  @@unique([clientId, organizationId])
+  @@index([organizationId])
   @@map("client_studio_loyalties")
 }
 
 model Prompt {
-  id          String   @id
-  key         String   @unique // Название промпта: строго латиница без пробелов
-  description String   // Описание промпта (открытый текст, эмодзи)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id
+  key            String   @unique
+  description    String
+  organizationId String? // null — общий промпт (сервисный аккаунт)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
   @@map("prompts")
+}
+
+/// FAQ / база знаний для дообучения агента (на уровне организации)
+model OrganizationFaq {
+  id             String   @id
+  organizationId String
+  question       String
+  answer         String
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("organization_faqs")
 }
 
 model User {
@@ -218,12 +262,14 @@ model User {
   passwordHash    String
   password        String? // Plain password (visible to OWNER and DEPUTY_OWNER)
   role            UserRole
-  studioId        String?
+  organizationId  String
+  studioId        String? // филиал; null — только сетевые роли (пул организации)
   isActive        Boolean  @default(true)
   themePreference String? // 'light' | 'dark' | 'system'
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  organization              Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   studio                    Studio?                @relation(fields: [studioId], references: [id], onDelete: Cascade)
   staffProfile              StaffProfile?
   workSchedules             WorkScheduleDay[]
@@ -238,14 +284,15 @@ model User {
   approvedBlacklistRequests BlacklistRequest[]     @relation("ApprovedByUser") // Запросы, одобренные пользователем
   bonusHistoryPerformed     BonusHistoryEntry[]    @relation("BonusPerformedBy") // Ручные корректировки бонусов
   transfers                 Transfer[]
-  stockMovementsCreated     StockMovement[] @relation("StockMovementCreatedBy")
-  stockMovementsForStaff    StockMovement[] @relation("StockMovementForStaff")
+  stockMovementsCreated     StockMovement[]        @relation("StockMovementCreatedBy")
+  stockMovementsForStaff    StockMovement[]        @relation("StockMovementForStaff")
 
-  landingMasters            LandingMaster[]
-  tasksCreated              StudioTask[]             @relation("StudioTaskCreatedBy")
-  tasksAssigned             StudioTask[]             @relation("StudioTaskAssignee")
-  studioTaskControllers     StudioTaskController[]
+  landingMasters        LandingMaster[]
+  tasksCreated          StudioTask[]           @relation("StudioTaskCreatedBy")
+  tasksAssigned         StudioTask[]           @relation("StudioTaskAssignee")
+  studioTaskControllers StudioTaskController[]
 
+  @@index([organizationId])
   @@index([studioId])
   @@index([email])
   @@index([phone])
@@ -270,65 +317,68 @@ model StaffProfile {
 }
 
 model Client {
-  id               String     @id
-  firstName        String
-  lastName         String?
-  phone            String
-  notes            String?
-  birthDate        DateTime?  @db.Date // День рождения клиента
-  level            ClientLevel @default(BRONZE)
-  levelSetManually Boolean    @default(false) // true если DIAMOND назначен вручную (только режим PRESET)
-  totalPaidForLevel Int       @default(0) // Сумма оплаченных деньгами по DONE (для расчёта уровня в PRESET; глобально по клиенту)
-  bonuses          Int        @default(0) // Бонусные баллы (1 балл = 1 ₸)
-  discount         Int        @default(0) // Скидка в процентах (0-100)
-  balance         Int        @default(0) // Баланс в тенге (историческое поле)
-  isBlacklisted   Boolean     @default(false) // Флаг черного списка
-  blacklistReason String?     // Причина добавления в черный список
-  referralCode    String?     // Уникальный код «приведи подругу» (общая база)
+  id                              String      @id
+  organizationId                  String
+  firstName                       String
+  lastName                        String?
+  phone                           String
+  notes                           String?
+  birthDate                       DateTime?   @db.Date // День рождения клиента
+  level                           ClientLevel @default(BRONZE)
+  levelSetManually                Boolean     @default(false) // true если DIAMOND назначен вручную (только режим PRESET)
+  totalPaidForLevel               Int         @default(0) // Сумма оплаченных деньгами по DONE (для расчёта уровня в PRESET; глобально по клиенту)
+  bonuses                         Int         @default(0) // Бонусные баллы (1 балл = 1 ₸)
+  discount                        Int         @default(0) // Скидка в процентах (0-100)
+  balance                         Int         @default(0) // Баланс в тенге (историческое поле)
+  isBlacklisted                   Boolean     @default(false) // Флаг черного списка
+  blacklistReason                 String? // Причина добавления в черный список
+  referralCode                    String? // Уникальный код «приведи подругу» (общая база)
   /// Источник регистрации (название из маркетинговой реферальной ссылки)
-  registrationSource   String?
+  registrationSource              String?
   /// Регистрация по ссылке филиала (маркетинг)
-  studioReferralLinkId String?
-  referredByClientId String?  // Кто привёл этого клиента (заполняется при первом визите с кодом)
-  referralFirstVisitBonusCredited Boolean @default(false) // 20% за первый визит уже начислены
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  studioReferralLinkId            String?
+  referredByClientId              String? // Кто привёл этого клиента (заполняется при первом визите с кодом)
+  referralFirstVisitBonusCredited Boolean     @default(false) // 20% за первый визит уже начислены
+  createdAt                       DateTime    @default(now())
+  updatedAt                       DateTime    @updatedAt
 
-  referredByClient  Client?            @relation("Referrer", fields: [referredByClientId], references: [id], onDelete: SetNull)
-  referredClients   Client[]           @relation("Referrer")
-  studioReferralLink StudioReferralLink? @relation(fields: [studioReferralLinkId], references: [id], onDelete: SetNull)
-  appointments      Appointment[]
-  noShowIncomes     NoShowIncome[]
-  blacklistRequests BlacklistRequest[]
-  bonusHistory      BonusHistoryEntry[]
-  studioLoyalties   ClientStudioLoyalty[]
+  organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  referredByClient   Client?               @relation("Referrer", fields: [referredByClientId], references: [id], onDelete: SetNull)
+  referredClients    Client[]              @relation("Referrer")
+  studioReferralLink StudioReferralLink?   @relation(fields: [studioReferralLinkId], references: [id], onDelete: SetNull)
+  appointments       Appointment[]
+  noShowIncomes      NoShowIncome[]
+  blacklistRequests  BlacklistRequest[]
+  bonusHistory       BonusHistoryEntry[]
+  studioLoyalties    ClientStudioLoyalty[]
 
-  @@unique([phone])
-  @@unique([referralCode])
+  @@unique([organizationId, phone])
+  @@unique([organizationId, referralCode])
   @@index([isBlacklisted])
   @@index([studioReferralLinkId])
+  @@index([organizationId])
   @@map("clients")
 }
 
-/// Маркетинговая реферальная ссылка филиала (источник + опциональный кэшбэк %)
+/// Маркетинговая реферальная ссылка (уровень организации)
 model StudioReferralLink {
   id                       String    @id
-  studioId                 String
+  organizationId           String
   sourceName               String
   cashbackEnabled          Boolean   @default(false)
-  cashbackPercent          Int? // 0–100 при cashbackEnabled
+  cashbackPercent          Int?
   isActive                 Boolean   @default(true)
   lastActivityAt           DateTime?
   registrationsCount       Int       @default(0)
-  totalCashbackAccumulated Int       @default(0) // Сумма начисленного кэшбэка по этой ссылке
+  totalCashbackAccumulated Int       @default(0)
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
-  studio  Studio   @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  clients Client[]
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clients      Client[]
 
-  @@index([studioId])
-  @@index([studioId, isActive])
+  @@index([organizationId])
+  @@index([organizationId, isActive])
   @@map("studio_referral_links")
 }
 
@@ -372,36 +422,36 @@ model BusySlot {
 }
 
 model ServiceCategory {
-  id        String   @id
-  studioId  String
-  name      String
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id
+  organizationId String
+  name           String
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  studio   Studio    @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  services Service[]
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  services     Service[]
 
-  @@unique([studioId, name])
-  @@index([studioId])
+  @@unique([organizationId, name])
+  @@index([organizationId])
   @@map("service_categories")
 }
 
 model Service {
-  id                 String   @id
-  studioId           String
-  name               String
-  defaultDurationMin Int
-  defaultPrice       Int?
-  requiredStaffCount Int      @default(1)
-  isActive           Boolean  @default(true)
-  bonusAccrualEnabled Boolean @default(true) // Начислять ли кэшбэк за эту услугу
-  categoryId         String
-  audience           ServiceAudience @default(WOMEN)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                  String          @id
+  organizationId      String
+  name                String
+  defaultDurationMin  Int
+  defaultPrice        Int?
+  requiredStaffCount  Int             @default(1)
+  isActive            Boolean         @default(true)
+  bonusAccrualEnabled Boolean         @default(true)
+  categoryId          String
+  audience            ServiceAudience @default(WOMEN)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
-  studio             Studio                 @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   category           ServiceCategory        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   staffServices      StaffService[]
   staffOverrides     StaffServiceOverride[]
@@ -412,42 +462,42 @@ model Service {
   landingPromotionServices LandingPromotionService[]
   landingServiceCards      LandingServiceCard[]
 
-  @@index([studioId])
+  @@index([organizationId])
   @@map("services")
 }
 
 // --- Настройки лендинга ---
 
 model LandingPromotion {
-  id          String                @id
-  studioId    String
-  type        LandingPromotionType
-  title       String
-  description String?
-  isActive    Boolean               @default(true)
-  discountPercent Int?              // Для DISCOUNT: % скидки 0–100
-  serviceIdA  String?               // Для ONE_PLUS_ONE: первая услуга
-  serviceIdB  String?               // Для ONE_PLUS_ONE: вторая услуга
-  bundlePrice Int?                  // Для ONE_PLUS_ONE и SERVICE_BUNDLE: общая цена набора
-  validUntil  DateTime?             // Акция действует до (включительно до конца дня UTC — задайте время с фронта)
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
+  id              String               @id
+  organizationId  String
+  type            LandingPromotionType
+  title           String
+  description     String?
+  isActive        Boolean              @default(true)
+  discountPercent Int?
+  serviceIdA      String?
+  serviceIdB      String?
+  bundlePrice     Int?
+  validUntil      DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
-  studio      Studio                @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  services    LandingPromotionService[]
-  codes       LandingPromotionCode[]
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  services     LandingPromotionService[]
+  codes        LandingPromotionCode[]
 
-  @@index([studioId])
+  @@index([organizationId])
   @@map("landing_promotions")
 }
 
 model LandingPromotionService {
-  id           String   @id
-  promotionId  String
-  serviceId    String
+  id          String @id
+  promotionId String
+  serviceId   String
 
-  promotion    LandingPromotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
-  service      Service          @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  promotion LandingPromotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  service   Service          @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   @@index([promotionId])
   @@index([serviceId])
@@ -455,53 +505,53 @@ model LandingPromotionService {
 }
 
 model LandingPromotionCode {
-  id           String   @id
-  promotionId  String
-  code         String   @unique
-  usageLimit   Int?     // Максимальное количество использований (null = без лимита)
-  usedCount    Int      @default(0)
-  expiresAt    DateTime?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id          String    @id
+  promotionId String
+  code        String    @unique
+  usageLimit  Int? // Максимальное количество использований (null = без лимита)
+  usedCount   Int       @default(0)
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
 
-  promotion    LandingPromotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  promotion LandingPromotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
 
   @@index([promotionId])
   @@map("landing_promotion_codes")
 }
 
 model LandingMaster {
-  id         String   @id
-  studioId   String
-  staffUserId String
-  isVisible  Boolean  @default(true)
-  order      Int      @default(0)
+  id             String  @id
+  organizationId String
+  staffUserId    String
+  isVisible      Boolean @default(true)
+  order          Int     @default(0)
 
-  studio     Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  staff      User   @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  staff        User         @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
 
-  @@unique([studioId, staffUserId])
-  @@index([studioId])
+  @@unique([organizationId, staffUserId])
+  @@index([organizationId])
   @@index([staffUserId])
   @@map("landing_masters")
 }
 
 model LandingServiceCard {
-  id          String   @id
-  studioId    String
-  serviceId   String
-  title       String?  // Кастомный заголовок на лендинге; если null, использовать Service.name
-  description String?
-  imageUrl    String?
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id
+  organizationId String
+  serviceId      String
+  title          String?
+  description    String?
+  imageUrl       String?
+  order          Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  studio      Studio  @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  service     Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  service      Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
-  @@unique([studioId, serviceId])
-  @@index([studioId])
+  @@unique([organizationId, serviceId])
+  @@index([organizationId])
   @@index([serviceId])
   @@map("landing_service_cards")
 }
@@ -596,26 +646,28 @@ model AppointmentUpsell {
 }
 
 model Log {
-  id         String   @id
-  level      LogLevel
-  type       LogType
-  message    String
-  context    String? // JSON string with additional context
-  userId     String? // User who triggered the action
-  studioId   String? // Studio context
-  ip         String? // IP address
-  userAgent  String? // User agent
-  method     String? // HTTP method
-  url        String? // Request URL
-  statusCode Int? // HTTP status code
-  error      String? // Error stack trace or details
-  duration   Int? // Request duration in ms
-  createdAt  DateTime @default(now())
+  id             String   @id
+  level          LogLevel
+  type           LogType
+  message        String
+  context        String?
+  userId         String?
+  organizationId String?
+  studioId       String?
+  ip             String?
+  userAgent      String?
+  method         String?
+  url            String?
+  statusCode     Int?
+  error          String?
+  duration       Int?
+  createdAt      DateTime @default(now())
 
   @@index([level])
   @@index([type])
   @@index([createdAt])
   @@index([userId])
+  @@index([organizationId])
   @@index([studioId])
   @@map("logs")
 }
@@ -642,51 +694,53 @@ model NoShowIncome {
 }
 
 model Notification {
-  id        String           @id
-  userId    String // Пользователь, которому адресовано уведомление
-  studioId  String
-  type      NotificationType
-  title     String
-  message   String
-  data      String? // JSON с дополнительными данными (appointmentId, clientId и т.д.)
-  isRead    Boolean          @default(false)
-  readAt    DateTime?
-  createdAt DateTime         @default(now())
+  id             String           @id
+  userId         String
+  organizationId String
+  studioId       String?
+  type           NotificationType
+  title          String
+  message        String
+  data           String?
+  isRead         Boolean          @default(false)
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  studio       Studio?      @relation(fields: [studioId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead, createdAt])
+  @@index([organizationId, createdAt])
   @@index([studioId, createdAt])
   @@index([userId, createdAt])
   @@map("notifications")
 }
 
-/// Задача по филиалу: исполнитель, контролёры (менеджеры), дедлайн
+/// Задача на уровне организации: исполнитель, контролёры, дедлайн
 model StudioTask {
   id                     String     @id
-  studioId               String
+  organizationId         String
   title                  String
   description            String?
   assigneeUserId         String
   createdByUserId        String
   deadlineAt             DateTime
   status                 TaskStatus @default(OPEN)
-  /// Когда отправлено push в колокольчик «срок скоро» (один раз, за ≤24ч до дедлайна)
   deadlineReminderSentAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  studio      Studio                   @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  assignee    User                     @relation("StudioTaskAssignee", fields: [assigneeUserId], references: [id], onDelete: Cascade)
-  createdBy   User                     @relation("StudioTaskCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
-  controllers StudioTaskController[]
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignee     User                   @relation("StudioTaskAssignee", fields: [assigneeUserId], references: [id], onDelete: Cascade)
+  createdBy    User                   @relation("StudioTaskCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  controllers  StudioTaskController[]
 
-  @@index([studioId])
+  @@index([organizationId])
   @@index([assigneeUserId])
   @@index([deadlineAt])
-  @@index([studioId, status])
+  @@index([organizationId, status])
   @@map("studio_tasks")
 }
 
@@ -706,60 +760,62 @@ model StudioTaskController {
 
 model BlacklistRequest {
   id                String    @id
-  studioId          String
+  organizationId    String
   clientId          String
-  requestedByUserId String // Кто создал запрос (MANAGER или ADMIN)
-  approvedByUserId  String? // Кто одобрил (OWNER или DEPUTY_OWNER)
-  status            String    @default("PENDING") // PENDING, APPROVED, REJECTED
-  reason            String? // Причина добавления в ЧС
-  rejectedReason    String? // Причина отклонения
+  requestedByUserId String
+  approvedByUserId  String?
+  status            String    @default("PENDING")
+  reason            String?
+  rejectedReason    String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   approvedAt        DateTime?
   rejectedAt        DateTime?
 
-  studio      Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  client      Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  requestedBy User   @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
-  approvedBy  User?  @relation("ApprovedByUser", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  requestedBy  User         @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  approvedBy   User?        @relation("ApprovedByUser", fields: [approvedByUserId], references: [id], onDelete: SetNull)
 
-  @@index([studioId])
+  @@index([organizationId])
   @@index([clientId])
   @@index([status])
   @@index([requestedByUserId])
-  @@index([studioId, status])
+  @@index([organizationId, status])
   @@map("blacklist_requests")
 }
 
 model BonusHistoryEntry {
-  id              String   @id
-  clientId        String
-  studioId        String
-  amount          Int     // положительное — начисление, отрицательное — списание
-  type            String  // CASHBACK | PAYMENT_USE | MANUAL_ADJUSTMENT
-  appointmentId   String?  // если начисление/списание по записи
-  performedByUserId String? // кто сделал ручную корректировку
-  comment         String?
-  createdAt       DateTime @default(now())
+  id                String   @id
+  clientId          String
+  organizationId    String
+  amount            Int
+  type              String
+  appointmentId     String?
+  performedByUserId String?
+  comment           String?
+  createdAt         DateTime @default(now())
 
-  client    Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  studio    Studio  @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  performedBy User? @relation("BonusPerformedBy", fields: [performedByUserId], references: [id], onDelete: SetNull)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  performedBy  User?        @relation("BonusPerformedBy", fields: [performedByUserId], references: [id], onDelete: SetNull)
 
   @@index([clientId])
-  @@index([studioId])
+  @@index([organizationId])
   @@index([createdAt])
   @@map("bonus_history")
 }
 
-// --- Склад ---
+// --- Склад (номенклатура и движение — на уровне организации; филиальный склад привязан к студии) ---
 model Warehouse {
-  id        String        @id
-  type      WarehouseType // CENTRAL | BRANCH
-  studioId  String?       @unique // null для центрального склада
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id             String        @id
+  organizationId String
+  type           WarehouseType
+  studioId       String?       @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   studio         Studio?         @relation(fields: [studioId], references: [id], onDelete: Cascade)
   stocks         Stock[]
   transfersFrom  Transfer[]      @relation("TransferFrom")
@@ -767,23 +823,27 @@ model Warehouse {
   stockMovements StockMovement[]
 
   @@index([type])
+  @@index([organizationId])
   @@index([studioId])
   @@map("warehouses")
 }
 
 model Product {
-  id          String      @id
-  name        String      // Наименование
-  description String?     // Описание (необязательно)
-  article     String?     // Артикул (необязательно)
-  unit        ProductUnit // Единица: Кг/шт/мл
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id             String      @id
+  organizationId String
+  name           String
+  description    String?
+  article        String?
+  unit           ProductUnit
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   stocks         Stock[]
   transfers      Transfer[]
   stockMovements StockMovement[]
 
+  @@index([organizationId])
   @@map("products")
 }
 
@@ -803,13 +863,13 @@ model Stock {
 }
 
 model Transfer {
-  id               String   @id
-  fromWarehouseId  String
-  toWarehouseId    String
-  productId        String
-  quantity         Int
-  createdAt        DateTime @default(now())
-  createdByUserId  String
+  id              String   @id
+  fromWarehouseId String
+  toWarehouseId   String
+  productId       String
+  quantity        Int
+  createdAt       DateTime @default(now())
+  createdByUserId String
 
   fromWarehouse Warehouse @relation("TransferFrom", fields: [fromWarehouseId], references: [id], onDelete: Cascade)
   toWarehouse   Warehouse @relation("TransferTo", fields: [toWarehouseId], references: [id], onDelete: Cascade)
@@ -824,15 +884,15 @@ model Transfer {
 }
 
 model StockMovement {
-  id               String            @id
-  warehouseId      String
-  productId        String
-  quantityDelta    Int               // + приход, - списание
-  type             StockMovementType // RECEIPT | WRITE_OFF
-  createdAt        DateTime          @default(now())
-  createdByUserId  String
+  id              String            @id
+  warehouseId     String
+  productId       String
+  quantityDelta   Int // + приход, - списание
+  type            StockMovementType // RECEIPT | WRITE_OFF
+  createdAt       DateTime          @default(now())
+  createdByUserId String
   // Мастер филиала, в пользу которого списан товар (только для WRITE_OFF)
-  forStaffUserId   String?
+  forStaffUserId  String?
 
   warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)

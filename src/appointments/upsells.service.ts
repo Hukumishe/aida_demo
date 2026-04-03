@@ -25,6 +25,7 @@ export class UpsellsService {
       where: { id: appointmentId },
       include: {
         service: true,
+        studio: { select: { organizationId: true } },
       },
     });
 
@@ -44,7 +45,7 @@ export class UpsellsService {
       where: { id: createUpsellDto.serviceId },
     });
 
-    if (!service || service.studioId !== appointment.studioId) {
+    if (!service || service.organizationId !== appointment.studio.organizationId) {
       throw new NotFoundException('Service not found or does not belong to this studio');
     }
 

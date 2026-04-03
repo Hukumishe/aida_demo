@@ -63,7 +63,14 @@ export class BlacklistService {
       where: { phone: client.phone },
     });
 
-    const systemRoles = [UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.ADMIN, UserRole.MANAGER, UserRole.MASTER];
+    const systemRoles = [
+      UserRole.OWNER,
+      UserRole.DEPUTY_OWNER,
+      UserRole.DEVELOPER,
+      UserRole.ADMIN,
+      UserRole.MANAGER,
+      UserRole.MASTER,
+    ];
     if (userWithSamePhone?.isActive && systemRoles.includes(userWithSamePhone.role as UserRole)) {
       throw new BadRequestException(
         'Невозможно добавить в ЧС: номер телефона клиента зарегистрирован как аккаунт сотрудника или владельца. Увольте пользователя, если нужно добавить его в чёрный список.',
@@ -94,7 +101,12 @@ export class BlacklistService {
       ? `${requestedBy.staffProfile.firstName} ${requestedBy.staffProfile.lastName || ''}`.trim()
       : requestedBy?.email || requestedBy?.phone || 'Неизвестный';
 
-    const requestStudioId = userStudioId ?? (await this.prisma.studio.findFirst({ select: { id: true } }))?.id;
+    const requestStudioId =
+      userStudioId ??
+      (await this.prisma.studio.findFirst({
+        where: { organizationId: client.organizationId },
+        select: { id: true },
+      }))?.id;
     if (!requestStudioId) {
       throw new BadRequestException('No studio context for blacklist request');
     }
@@ -102,7 +114,7 @@ export class BlacklistService {
     const request = await this.prisma.blacklistRequest.create({
       data: {
         id: generateId(IdPrefix.BlacklistRequest),
-        studioId: requestStudioId,
+        organizationId: client.organizationId,
         clientId,
         requestedByUserId: userId,
         reason: createDto.reason,
@@ -249,7 +261,15 @@ export class BlacklistService {
       }
     }
 
-    const where: any = { studioId };
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { organizationId: true },
+    });
+    if (!studio) {
+      throw new NotFoundException('Studio not found');
+    }
+
+    const where: Record<string, unknown> = { organizationId: studio.organizationId };
     if (status) {
       where.status = status;
     }
@@ -295,7 +315,6 @@ export class BlacklistService {
       where: { id: requestId },
       include: {
         client: true,
-        studio: true,
       },
     });
 

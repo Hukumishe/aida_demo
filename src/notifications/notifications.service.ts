@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { getOrganizationIdForStudio } from '../common/organization-scope';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { NotificationType } from '@prisma/client';
 
@@ -7,9 +8,6 @@ import { NotificationType } from '@prisma/client';
 export class NotificationsService {
   constructor(private prisma: PrismaService) {}
 
-  /**
-   * Создать уведомление для мастера о новой записи
-   */
   async createNewAppointmentNotification(
     studioId: string,
     staffUserId: string,
@@ -18,6 +16,7 @@ export class NotificationsService {
     serviceName: string,
     startAt: Date,
   ) {
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     const startAtFormatted = new Date(startAt).toLocaleString('ru-RU', {
       dateStyle: 'short',
       timeStyle: 'short',
@@ -27,6 +26,7 @@ export class NotificationsService {
       data: {
         id: generateId(IdPrefix.Notification),
         userId: staffUserId,
+        organizationId,
         studioId,
         type: NotificationType.NEW_APPOINTMENT,
         title: 'Новая запись',
@@ -41,9 +41,6 @@ export class NotificationsService {
     });
   }
 
-  /**
-   * Создать уведомление для менеджеров об отмене записи
-   */
   async createCancellationNotification(
     studioId: string,
     appointmentId: string,
@@ -52,7 +49,7 @@ export class NotificationsService {
     staffName: string,
     startAt: Date,
   ) {
-    // Найти всех менеджеров в студии
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     const managers = await this.prisma.user.findMany({
       where: {
         studioId,
@@ -66,13 +63,13 @@ export class NotificationsService {
       timeStyle: 'short',
     });
 
-    // Создать уведомления для всех менеджеров
     const notifications = await Promise.all(
       managers.map((manager) =>
         this.prisma.notification.create({
           data: {
             id: generateId(IdPrefix.Notification),
             userId: manager.id,
+            organizationId,
             studioId,
             type: NotificationType.APPOINTMENT_CANCELLED,
             title: 'Отмена записи',
@@ -92,11 +89,8 @@ export class NotificationsService {
     return notifications;
   }
 
-  /**
-   * Получить все уведомления пользователя
-   */
   async findAll(userId: string, isRead?: boolean) {
-    const where: any = { userId };
+    const where: Record<string, unknown> = { userId };
     if (isRead !== undefined) {
       where.isRead = isRead;
     }
@@ -106,22 +100,15 @@ export class NotificationsService {
       orderBy: {
         createdAt: 'desc',
       },
-      take: 50, // Ограничение на количество уведомлений
+      take: 50,
     });
   }
 
-  /**
-   * Получить непрочитанные уведомления пользователя
-   */
   async findUnread(userId: string) {
     return this.findAll(userId, false);
   }
 
-  /**
-   * Отметить уведомление как прочитанное
-   */
   async markAsRead(notificationId: string, userId: string) {
-    // Проверяем, что уведомление принадлежит пользователю
     const notification = await this.prisma.notification.findUnique({
       where: { id: notificationId },
     });
@@ -139,9 +126,6 @@ export class NotificationsService {
     });
   }
 
-  /**
-   * Отметить все уведомления пользователя как прочитанные
-   */
   async markAllAsRead(userId: string) {
     return this.prisma.notification.updateMany({
       where: {
@@ -155,9 +139,6 @@ export class NotificationsService {
     });
   }
 
-  /**
-   * Получить количество непрочитанных уведомлений
-   */
   async getUnreadCount(userId: string) {
     return this.prisma.notification.count({
       where: {
@@ -167,11 +148,7 @@ export class NotificationsService {
     });
   }
 
-  /**
-   * Удалить уведомление
-   */
   async remove(notificationId: string, userId: string) {
-    // Проверяем, что уведомление принадлежит пользователю
     const notification = await this.prisma.notification.findUnique({
       where: { id: notificationId },
     });
@@ -185,9 +162,6 @@ export class NotificationsService {
     });
   }
 
-  /**
-   * Создать уведомление для владельцев о запросе на добавление в черный список
-   */
   async createBlacklistRequestNotification(
     studioId: string,
     blacklistRequestId: string,
@@ -195,10 +169,10 @@ export class NotificationsService {
     requestedByName: string,
     reason?: string,
   ) {
-    // Найти всех владельцев и заместителей владельцев в студии
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     const owners = await this.prisma.user.findMany({
       where: {
-        studioId,
+        organizationId,
         role: {
           in: ['OWNER', 'DEPUTY_OWNER'],
         },
@@ -208,13 +182,13 @@ export class NotificationsService {
 
     const reasonText = reason ? ` Причина: ${reason}` : '';
 
-    // Создать уведомления для всех владельцев
     const notifications = await Promise.all(
       owners.map((owner) =>
         this.prisma.notification.create({
           data: {
             id: generateId(IdPrefix.Notification),
             userId: owner.id,
+            organizationId,
             studioId,
             type: NotificationType.BLACKLIST_REQUEST,
             title: 'Запрос на добавление в черный список',
@@ -233,7 +207,6 @@ export class NotificationsService {
     return notifications;
   }
 
-  /** Исполнитель: новая задача в колокольчике */
   async createNewTaskNotification(
     studioId: string,
     taskId: string,
@@ -241,6 +214,7 @@ export class NotificationsService {
     title: string,
     deadlineAt: Date,
   ) {
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     const deadlineFormatted = new Date(deadlineAt).toLocaleString('ru-RU', {
       dateStyle: 'short',
       timeStyle: 'short',
@@ -249,6 +223,7 @@ export class NotificationsService {
       data: {
         id: generateId(IdPrefix.Notification),
         userId: assigneeUserId,
+        organizationId,
         studioId,
         type: NotificationType.NEW_TASK,
         title: 'Новая задача',
@@ -258,9 +233,8 @@ export class NotificationsService {
     });
   }
 
-  /** Напоминание о дедлайне (исполнителю и контролёрам) */
   async createTaskDeadlineApproachingNotification(
-    studioId: string,
+    organizationId: string,
     userId: string,
     taskId: string,
     title: string,
@@ -274,7 +248,8 @@ export class NotificationsService {
       data: {
         id: generateId(IdPrefix.Notification),
         userId,
-        studioId,
+        organizationId,
+        studioId: null,
         type: NotificationType.TASK_DEADLINE_APPROACHING,
         title: 'Срок задачи',
         message: `Скоро дедлайн по задаче «${title}» (${deadlineFormatted})`,
@@ -283,4 +258,3 @@ export class NotificationsService {
     });
   }
 }
-

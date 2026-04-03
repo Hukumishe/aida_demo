@@ -97,6 +97,9 @@ export class UsersService {
     if (createStaffDto.role === UserRole.DEPUTY_OWNER && !canManageDeputies(userRole)) {
       throw new BadRequestException('Cannot create DEPUTY_OWNER role via this endpoint');
     }
+    if (createStaffDto.role === UserRole.DEVELOPER && userRole !== UserRole.DEVELOPER) {
+      throw new BadRequestException('Only DEVELOPER can assign DEVELOPER role');
+    }
 
     // Check email/phone uniqueness
     if (createStaffDto.email) {
@@ -119,6 +122,14 @@ export class UsersService {
 
     const passwordHash = await bcrypt.hash(createStaffDto.password, 10);
 
+    const studioRow = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { organizationId: true },
+    });
+    if (!studioRow) {
+      throw new NotFoundException('Studio not found');
+    }
+
     const createdUser = await this.prisma.user.create({
       data: {
         id: generateId(IdPrefix.User),
@@ -127,6 +138,7 @@ export class UsersService {
         passwordHash,
         password: createStaffDto.password, // Store plain password for OWNER/DEPUTY_OWNER visibility
         role: createStaffDto.role,
+        organizationId: studioRow.organizationId,
         studioId,
         staffProfile: {
           create: {
@@ -182,6 +194,9 @@ export class UsersService {
     // Cannot change to DEPUTY_OWNER role (only OWNER can do this)
     if (updateStaffDto.role === UserRole.DEPUTY_OWNER && !canManageDeputies(userRole)) {
       throw new BadRequestException('Cannot change role to DEPUTY_OWNER');
+    }
+    if (updateStaffDto.role === UserRole.DEVELOPER && userRole !== UserRole.DEVELOPER) {
+      throw new BadRequestException('Only DEVELOPER can assign DEVELOPER role');
     }
 
     // Check email/phone uniqueness
@@ -290,8 +305,14 @@ export class UsersService {
       throw new NotFoundException(`Service with ID ${serviceId} not found`);
     }
 
-    if (service.studioId !== staff.studioId) {
-      throw new BadRequestException('Service does not belong to the same studio');
+    const staffBranch = staff.studioId
+      ? await this.prisma.studio.findUnique({
+          where: { id: staff.studioId },
+          select: { organizationId: true },
+        })
+      : null;
+    if (!staffBranch || service.organizationId !== staffBranch.organizationId) {
+      throw new BadRequestException('Service does not belong to the same organization as the staff branch');
     }
 
     // Check if already exists
@@ -630,8 +651,14 @@ export class UsersService {
       throw new NotFoundException(`Service with ID ${serviceId} not found`);
     }
 
-    if (service.studioId !== staff.studioId) {
-      throw new BadRequestException('Service does not belong to the same studio');
+    const staffBranchOverride = staff.studioId
+      ? await this.prisma.studio.findUnique({
+          where: { id: staff.studioId },
+          select: { organizationId: true },
+        })
+      : null;
+    if (!staffBranchOverride || service.organizationId !== staffBranchOverride.organizationId) {
+      throw new BadRequestException('Service does not belong to the same organization as the staff branch');
     }
 
     // Verify that staff service exists (staff must be assigned to this service first)

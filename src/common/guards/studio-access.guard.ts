@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole, isOwnerLevelRole } from '../decorators/roles.decorator';
+import { UserRole, isDeveloperRole, isOwnerLevelRole } from '../decorators/roles.decorator';
 
 @Injectable()
 export class StudioAccessGuard implements CanActivate {
@@ -52,14 +52,29 @@ export class StudioAccessGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
-    if (isOwnerLevelRole(user.role) || user.role === UserRole.MANAGER) {
-      // Verify studio exists
+    // DEVELOPER: любой существующий филиал (кросс-тенантный доступ)
+    if (isDeveloperRole(user.role)) {
       const studio = await this.prisma.studio.findUnique({
         where: { id: studioId },
+        select: { id: true },
       });
       if (!studio) {
         throw new NotFoundException(`Studio with ID ${studioId} not found`);
+      }
+      return true;
+    }
+
+    // OWNER, DEPUTY_OWNER and MANAGER: студии только своей организации
+    if (isOwnerLevelRole(user.role) || user.role === UserRole.MANAGER) {
+      const studio = await this.prisma.studio.findUnique({
+        where: { id: studioId },
+        select: { id: true, organizationId: true },
+      });
+      if (!studio) {
+        throw new NotFoundException(`Studio with ID ${studioId} not found`);
+      }
+      if (studio.organizationId !== user.organizationId) {
+        throw new ForbiddenException('Access denied to this studio');
       }
       return true;
     }
@@ -69,12 +84,15 @@ export class StudioAccessGuard implements CanActivate {
       throw new ForbiddenException('Access denied to this studio');
     }
 
-    // Verify studio exists
     const studio = await this.prisma.studio.findUnique({
       where: { id: studioId },
+      select: { id: true, organizationId: true },
     });
     if (!studio) {
       throw new NotFoundException(`Studio with ID ${studioId} not found`);
+    }
+    if (studio.organizationId !== user.organizationId) {
+      throw new ForbiddenException('Access denied to this studio');
     }
 
     return true;

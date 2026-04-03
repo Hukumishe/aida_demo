@@ -49,7 +49,12 @@ export class TasksController {
   }
 
   @Post('studios/:studioId/tasks')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE, UserRole.MANAGER, UserRole.ADMIN)
+  @Roles(UserRole.DEVELOPER,
+    UserRole.OWNER,
+    UserRole.DEPUTY_OWNER,
+    UserRole.SERVICE,
+    UserRole.MANAGER,
+    UserRole.ADMIN)
   @ApiOperation({ summary: 'Создать задачу (уведомление исполнителю в колокольчик)' })
   async create(
     @Param('studioId') studioId: string,
@@ -81,7 +86,12 @@ export class TasksController {
   }
 
   @Delete('studios/:studioId/tasks/:taskId')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE, UserRole.MANAGER, UserRole.ADMIN)
+  @Roles(UserRole.DEVELOPER,
+    UserRole.OWNER,
+    UserRole.DEPUTY_OWNER,
+    UserRole.SERVICE,
+    UserRole.MANAGER,
+    UserRole.ADMIN)
   @ApiOperation({ summary: 'Удалить задачу' })
   async remove(
     @Param('studioId') studioId: string,

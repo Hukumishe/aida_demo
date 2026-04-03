@@ -33,8 +33,8 @@ const REFERRAL_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export class ClientsService {
   constructor(private prisma: PrismaService) {}
 
-  /** Генерирует уникальный реферальный код (общая база клиентов). */
-  private async generateReferralCode(): Promise<string> {
+  /** Генерирует уникальный реферальный код в пределах организации. */
+  private async generateReferralCode(organizationId: string): Promise<string> {
     for (let attempt = 0; attempt < 50; attempt++) {
       let code = '';
       const bytes = crypto.randomBytes(REFERRAL_CODE_LENGTH);
@@ -42,7 +42,9 @@ export class ClientsService {
         code += REFERRAL_CODE_CHARS[bytes[i]! % REFERRAL_CODE_CHARS.length];
       }
       const existing = await this.prisma.client.findUnique({
-        where: { referralCode: code },
+        where: {
+          organizationId_referralCode: { organizationId, referralCode: code },
+        },
       });
       if (!existing) return code;
     }
@@ -63,7 +65,18 @@ export class ClientsService {
       }
     }
 
-    const where: any = { isBlacklisted: false };
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { organizationId: true },
+    });
+    if (!studio) {
+      throw new NotFoundException(`Studio with ID ${studioId} not found`);
+    }
+
+    const where: Record<string, unknown> = {
+      isBlacklisted: false,
+      organizationId: studio.organizationId,
+    };
 
     if (query) {
       where.OR = [
@@ -138,8 +151,17 @@ export class ClientsService {
       }
     }
 
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { organizationId: true },
+    });
+    if (!studio) {
+      throw new NotFoundException(`Studio with ID ${studioId} not found`);
+    }
+
     const clients = await this.prisma.client.findMany({
       where: {
+        organizationId: studio.organizationId,
         referredByClientId: { not: null },
       },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
@@ -190,8 +212,17 @@ export class ClientsService {
       }
     }
 
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { organizationId: true },
+    });
+    if (!studio) {
+      throw new NotFoundException(`Studio with ID ${studioId} not found`);
+    }
+
     const clients = await this.prisma.client.findMany({
       where: {
+        organizationId: studio.organizationId,
         referredClients: { some: {} },
       },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
@@ -234,9 +265,19 @@ export class ClientsService {
       }
     }
 
-    // Check phone uniqueness globally (одна база клиентов на все салоны)
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { organizationId: true },
+    });
+    if (!studio) {
+      throw new NotFoundException(`Studio with ID ${studioId} not found`);
+    }
+    const organizationId = studio.organizationId;
+
     const existingClient = await this.prisma.client.findUnique({
-      where: { phone: createClientDto.phone },
+      where: {
+        organizationId_phone: { organizationId, phone: createClientDto.phone },
+      },
     });
 
     if (existingClient) {
@@ -249,21 +290,25 @@ export class ClientsService {
     let referredByClientId: string | undefined;
     if (normalizedReferrer) {
       await assertReferralCodeIsNotLandingPromo(this.prisma, normalizedReferrer);
-      const referrer = await findReferrerByClientReferralCode(this.prisma, normalizedReferrer);
+      const referrer = await findReferrerByClientReferralCode(
+        this.prisma,
+        normalizedReferrer,
+        organizationId,
+      );
       if (!referrer) {
         throw new BadRequestException('Реферальный код не найден');
       }
       referredByClientId = referrer.id;
     }
 
-    const referralCode = await this.generateReferralCode();
+    const referralCode = await this.generateReferralCode(organizationId);
 
     let registrationSource: string | undefined;
     let studioReferralLinkId: string | undefined;
     const rawMarketingLinkId = createClientDto.referralLinkId?.trim();
     if (rawMarketingLinkId) {
       const mLink = await this.prisma.studioReferralLink.findFirst({
-        where: { id: rawMarketingLinkId, studioId },
+        where: { id: rawMarketingLinkId, organizationId },
       });
       if (!mLink) {
         throw new BadRequestException('Маркетинговая реферальная ссылка не найдена');
@@ -280,6 +325,7 @@ export class ClientsService {
         const created = await tx.client.create({
           data: {
             id: generateId(IdPrefix.Client),
+            organizationId,
             firstName: createClientDto.firstName,
             lastName: createClientDto.lastName,
             phone: createClientDto.phone,
@@ -365,7 +411,7 @@ export class ClientsService {
 
     // Для старых клиентов без реферального кода — сгенерировать при первом чтении
     if (!client.referralCode) {
-      client.referralCode = await this.generateReferralCode();
+      client.referralCode = await this.generateReferralCode(client.organizationId);
       await this.prisma.client.update({
         where: { id: client.id },
         data: { referralCode: client.referralCode },
@@ -404,16 +450,21 @@ export class ClientsService {
     if (studioIdForReferral) {
       const st = await this.prisma.studio.findUnique({
         where: { id: studioIdForReferral },
-        select: {
-          referFriendEnabled: true,
-          referFriendInviteeRewardType: true,
+        include: {
+          organization: {
+            select: {
+              referFriendEnabled: true,
+              referFriendInviteeRewardType: true,
+            },
+          },
         },
       });
-      if (st?.referFriendEnabled && firstVisitReferralPending) {
+      const orgRef = st?.organization;
+      if (orgRef?.referFriendEnabled && firstVisitReferralPending) {
         referralFirstVisitDiscountApplies =
-          st.referFriendInviteeRewardType === 'DISCOUNT_PERCENT';
+          orgRef.referFriendInviteeRewardType === 'DISCOUNT_PERCENT';
         referralFirstVisitBonusApplies =
-          st.referFriendInviteeRewardType === 'BONUS_PERCENT';
+          orgRef.referFriendInviteeRewardType === 'BONUS_PERCENT';
       }
     } else {
       referralFirstVisitDiscountApplies = firstVisitReferralPending;
@@ -470,21 +521,25 @@ export class ClientsService {
     if (studioIdForReferral) {
       const stLoyalty = await this.prisma.studio.findUnique({
         where: { id: studioIdForReferral },
-        select: { loyaltyMode: true },
+        select: {
+          organizationId: true,
+          organization: { select: { loyaltyMode: true } },
+        },
       });
-      if (stLoyalty?.loyaltyMode === StudioLoyaltyMode.CUSTOM) {
+      if (stLoyalty?.organization.loyaltyMode === StudioLoyaltyMode.CUSTOM) {
+        const orgId = stLoyalty.organizationId;
         const [loyaltyTiers, loyaltyMilestones, csl] = await Promise.all([
           this.prisma.studioLoyaltyTier.findMany({
-            where: { studioId: studioIdForReferral },
+            where: { organizationId: orgId },
             orderBy: { sortOrder: 'asc' },
           }),
           this.prisma.studioLoyaltyMilestone.findMany({
-            where: { studioId: studioIdForReferral },
+            where: { organizationId: orgId },
             orderBy: { minTotalPaid: 'asc' },
           }),
           this.prisma.clientStudioLoyalty.findUnique({
             where: {
-              clientId_studioId: { clientId: client.id, studioId: studioIdForReferral },
+              clientId_organizationId: { clientId: client.id, organizationId: orgId },
             },
             include: { currentTier: true },
           }),
@@ -559,13 +614,17 @@ export class ClientsService {
     tierId?: string,
     clearManual?: boolean,
   ) {
-    const studio = await this.prisma.studio.findUnique({ where: { id: studioId } });
-    if (!studio || studio.loyaltyMode !== StudioLoyaltyMode.CUSTOM) {
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      include: { organization: { select: { loyaltyMode: true } } },
+    });
+    if (!studio || studio.organization.loyaltyMode !== StudioLoyaltyMode.CUSTOM) {
       throw new BadRequestException('Студия не в режиме кастомной лояльности (CUSTOM)');
     }
+    const organizationId = studio.organizationId;
     const [tiers, milestones] = await Promise.all([
-      this.prisma.studioLoyaltyTier.findMany({ where: { studioId } }),
-      this.prisma.studioLoyaltyMilestone.findMany({ where: { studioId } }),
+      this.prisma.studioLoyaltyTier.findMany({ where: { organizationId } }),
+      this.prisma.studioLoyaltyMilestone.findMany({ where: { organizationId } }),
     ]);
     if (tiers.length === 0 || milestones.length === 0) {
       throw new BadRequestException('У студии не настроены уровни лояльности');
@@ -584,7 +643,7 @@ export class ClientsService {
 
     if (clearManual) {
       const csl = await this.prisma.clientStudioLoyalty.findUnique({
-        where: { clientId_studioId: { clientId, studioId } },
+        where: { clientId_organizationId: { clientId, organizationId } },
       });
       if (!csl) {
         throw new BadRequestException('Нет учёта лояльности клиента в этой студии');
@@ -605,11 +664,11 @@ export class ClientsService {
         throw new BadRequestException('Уровень не найден в этой студии');
       }
       await this.prisma.clientStudioLoyalty.upsert({
-        where: { clientId_studioId: { clientId, studioId } },
+        where: { clientId_organizationId: { clientId, organizationId } },
         create: {
           id: generateId(IdPrefix.ClientStudioLoyalty),
           clientId,
-          studioId,
+          organizationId,
           totalPaid: 0,
           levelSetManually: true,
           currentTierId: tier.id,
@@ -677,10 +736,15 @@ export class ClientsService {
       );
     }
 
-    // Check phone uniqueness globally if phone is being updated
+    // Check phone uniqueness within organization if phone is being updated
     if (patchDto.phone && patchDto.phone !== client.phone) {
       const existingClient = await this.prisma.client.findUnique({
-        where: { phone: patchDto.phone },
+        where: {
+          organizationId_phone: {
+            organizationId: client.organizationId,
+            phone: patchDto.phone,
+          },
+        },
       });
       if (existingClient) {
         throw new BadRequestException('Клиент с таким номером телефона уже существует');
@@ -745,6 +809,14 @@ export class ClientsService {
       }
     }
 
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { organizationId: true },
+    });
+    if (!studio) {
+      throw new NotFoundException(`Studio with ID ${studioId} not found`);
+    }
+
     const now = new Date();
     const sevenDaysAgo = new Date(now);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -754,7 +826,7 @@ export class ClientsService {
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
     const clients = await this.prisma.client.findMany({
-      where: { isBlacklisted: false },
+      where: { isBlacklisted: false, organizationId: studio.organizationId },
       select: { id: true, createdAt: true },
     });
     const clientIds = clients.map((c) => c.id);
@@ -960,24 +1032,22 @@ export class ClientsService {
     userId: string,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
     if (!isOwnerLevelRole(userRole)) {
       throw new ForbiddenException('Only owner level role can manually adjust bonus balance');
     }
     const client = await this.prisma.client.findUnique({
       where: { id: clientId },
-      select: { id: true, bonuses: true },
+      select: { id: true, bonuses: true, organizationId: true },
     });
     if (!client) throw new NotFoundException(`Client with ID ${clientId} not found`);
+    if (userOrganizationId && client.organizationId !== userOrganizationId) {
+      throw new ForbiddenException('Access denied to this client');
+    }
     const newBalance = client.bonuses + dto.amount;
     if (newBalance < 0) {
       throw new BadRequestException('Adjustment would result in negative bonus balance');
-    }
-    const studioId =
-      userStudioId ??
-      (await this.prisma.studio.findFirst({ select: { id: true } }))?.id;
-    if (!studioId) {
-      throw new BadRequestException('No studio context for bonus history');
     }
     await this.prisma.$transaction([
       this.prisma.client.update({
@@ -988,7 +1058,7 @@ export class ClientsService {
         data: {
           id: generateId(IdPrefix.BonusHistoryEntry),
           clientId,
-          studioId,
+          organizationId: client.organizationId,
           amount: dto.amount,
           type: 'MANUAL_ADJUSTMENT',
           performedByUserId: userId,

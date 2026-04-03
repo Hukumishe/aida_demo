@@ -54,7 +54,7 @@ export class NextbotService {
 
   /** get_company_context */
   getCompanyContext(user: CurrentUserPayload) {
-    return this.studiosService.findAll(user.role, user.studioId);
+    return this.studiosService.findAll(user.role, user.studioId, user.organizationId);
   }
 
   /** verify_client_status */

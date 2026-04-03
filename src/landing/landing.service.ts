@@ -7,6 +7,7 @@ import { CreateLandingServiceCardDto } from './dto/create-service-card.dto';
 import { UpdateLandingServiceCardDto } from './dto/update-service-card.dto';
 import { ReorderLandingServiceCardsDto } from './dto/reorder-service-cards.dto';
 import { generateId, IdPrefix } from '../common/id-generator';
+import { getOrganizationIdForStudio } from '../common/organization-scope';
 import { isOwnerLevelRole } from '../common/decorators/roles.decorator';
 
 @Injectable()
@@ -16,10 +17,11 @@ export class LandingService {
   // --- Promotions ---
 
   async getPromotions(studioId: string) {
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     const now = new Date();
     return this.prisma.landingPromotion.findMany({
       where: {
-        studioId,
+        organizationId,
         OR: [{ validUntil: null }, { validUntil: { gt: now } }],
       },
       include: {
@@ -33,6 +35,7 @@ export class LandingService {
   }
 
   async resolvePromotionCode(studioId: string, rawCode: string) {
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     const code = rawCode?.trim().toUpperCase();
     if (!code) {
       throw new BadRequestException('Promo code is required');
@@ -53,7 +56,7 @@ export class LandingService {
       },
     });
 
-    if (!codeRow || codeRow.promotion.studioId !== studioId) {
+    if (!codeRow || codeRow.promotion.organizationId !== organizationId) {
       throw new NotFoundException('Promo code not found');
     }
     if (!codeRow.isActive || !codeRow.promotion.isActive) {
@@ -77,7 +80,7 @@ export class LandingService {
       }
       const services = await this.prisma.service.findMany({
         where: {
-          studioId,
+          organizationId,
           isActive: true,
           id: { in: [promotion.serviceIdA, promotion.serviceIdB] },
         },
@@ -106,7 +109,7 @@ export class LandingService {
     if (promotion.type === 'SERVICE_BUNDLE') {
       const services = promotion.services
         .map((x) => x.service)
-        .filter((s) => s.studioId === studioId && s.isActive)
+        .filter((s) => s.organizationId === organizationId && s.isActive)
         .map((s) => ({
           id: s.id,
           name: s.name,
@@ -132,7 +135,7 @@ export class LandingService {
       const discountPercent = promotion.discountPercent ?? 0;
       const services = promotion.services
         .map((x) => x.service)
-        .filter((s) => s.studioId === studioId && s.isActive)
+        .filter((s) => s.organizationId === organizationId && s.isActive)
         .map((s) => ({
           id: s.id,
           name: s.name,
@@ -167,6 +170,8 @@ export class LandingService {
   ) {
     this.ensureStudioAccess(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     if (dto.type === 'DISCOUNT') {
       if (!dto.discountPercent || !dto.serviceIds || dto.serviceIds.length === 0) {
         throw new BadRequestException('DISCOUNT promotion must have discountPercent and serviceIds');
@@ -190,7 +195,7 @@ export class LandingService {
     const promotion = await this.prisma.landingPromotion.create({
       data: {
         id: generateId(IdPrefix.LandingPromotion),
-        studioId,
+        organizationId,
         type: dto.type,
         title: dto.title,
         description: dto.description,
@@ -245,8 +250,10 @@ export class LandingService {
   ) {
     this.ensureStudioAccess(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const existing = await this.prisma.landingPromotion.findFirst({
-      where: { id, studioId },
+      where: { id, organizationId },
     });
     if (!existing) {
       throw new NotFoundException('Promotion not found');
@@ -318,8 +325,10 @@ export class LandingService {
   ) {
     this.ensureStudioAccess(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const existing = await this.prisma.landingPromotion.findFirst({
-      where: { id, studioId },
+      where: { id, organizationId },
     });
     if (!existing) {
       throw new NotFoundException('Promotion not found');
@@ -332,9 +341,10 @@ export class LandingService {
   // --- Masters ---
 
   async getMasters(studioId: string) {
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     const [configs, staff] = await Promise.all([
       this.prisma.landingMaster.findMany({
-        where: { studioId },
+        where: { organizationId },
         orderBy: { order: 'asc' },
       }),
       this.prisma.user.findMany({
@@ -364,6 +374,8 @@ export class LandingService {
   ) {
     this.ensureStudioAccess(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const staffIds = dto.items.map((i) => i.staffUserId);
     const existingStaff = await this.prisma.user.findMany({
       where: { id: { in: staffIds }, studioId },
@@ -374,12 +386,12 @@ export class LandingService {
     const filtered = dto.items.filter((i) => validIds.has(i.staffUserId));
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.landingMaster.deleteMany({ where: { studioId } });
+      await tx.landingMaster.deleteMany({ where: { organizationId } });
       for (const i of filtered) {
         await tx.landingMaster.create({
           data: {
             id: generateId(IdPrefix.LandingMaster),
-            studioId,
+            organizationId,
             staffUserId: i.staffUserId,
             isVisible: i.isVisible,
             order: i.order,
@@ -394,8 +406,9 @@ export class LandingService {
   // --- Services ---
 
   async getServiceCards(studioId: string) {
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     return this.prisma.landingServiceCard.findMany({
-      where: { studioId },
+      where: { organizationId },
       include: {
         service: true,
       },
@@ -411,21 +424,23 @@ export class LandingService {
   ) {
     this.ensureStudioAccess(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const service = await this.prisma.service.findFirst({
-      where: { id: dto.serviceId, studioId },
+      where: { id: dto.serviceId, organizationId },
     });
     if (!service) {
       throw new NotFoundException('Service not found in this studio');
     }
 
     const count = await this.prisma.landingServiceCard.count({
-      where: { studioId },
+      where: { organizationId },
     });
 
     return this.prisma.landingServiceCard.create({
       data: {
         id: generateId(IdPrefix.LandingServiceCard),
-        studioId,
+        organizationId,
         serviceId: dto.serviceId,
         title: dto.title ?? null,
         description: dto.description ?? null,
@@ -445,8 +460,10 @@ export class LandingService {
   ) {
     this.ensureStudioAccess(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const existing = await this.prisma.landingServiceCard.findFirst({
-      where: { id, studioId },
+      where: { id, organizationId },
     });
     if (!existing) {
       throw new NotFoundException('Service card not found');
@@ -471,8 +488,10 @@ export class LandingService {
   ) {
     this.ensureStudioAccess(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const existing = await this.prisma.landingServiceCard.findFirst({
-      where: { id, studioId },
+      where: { id, organizationId },
     });
     if (!existing) {
       throw new NotFoundException('Service card not found');
@@ -490,9 +509,11 @@ export class LandingService {
   ) {
     this.ensureStudioAccess(studioId, userRole, userStudioId);
 
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
     const ids = dto.items.map((i) => i.id);
     const existing = await this.prisma.landingServiceCard.findMany({
-      where: { id: { in: ids }, studioId },
+      where: { id: { in: ids }, organizationId },
       select: { id: true },
     });
     const validIds = new Set(existing.map((c) => c.id));

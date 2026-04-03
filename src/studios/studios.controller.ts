@@ -35,16 +35,25 @@ export class StudiosController {
   @ApiOperation({ summary: 'Get all studios (OWNER sees all, others see only their studio)' })
   @ApiResponse({ status: 200, description: 'List of studios' })
   async findAll(@CurrentUser() user: any) {
-    return this.studiosService.findAll(user.role, user.studioId);
+    return this.studiosService.findAll(user.role, user.studioId, user.organizationId);
   }
 
   @Post()
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
-  @ApiOperation({ summary: 'Create a new studio (OWNER and DEPUTY_OWNER only)' })
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @ApiOperation({
+    summary: 'Create a new studio',
+    description:
+      'OWNER/DEPUTY/SERVICE — филиал в своей организации. DEVELOPER может передать organizationId, чтобы создать филиал в любой организации.',
+  })
   @ApiResponse({ status: 201, description: 'Studio created' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  async create(@Body() createStudioDto: CreateStudioDto) {
-    return this.studiosService.create(createStudioDto);
+  async create(@Body() createStudioDto: CreateStudioDto, @CurrentUser() user: any) {
+    const { organizationId: bodyOrgId, ...dto } = createStudioDto;
+    const orgId =
+      user.role === UserRole.DEVELOPER && bodyOrgId?.trim()
+        ? bodyOrgId.trim()
+        : user.organizationId;
+    return this.studiosService.create(dto, orgId);
   }
 
   @Get(':studioId')
@@ -56,7 +65,7 @@ export class StudiosController {
     @Param('studioId') studioId: string,
     @CurrentUser() user: any,
   ) {
-    return this.studiosService.findOne(studioId, user.role, user.studioId);
+    return this.studiosService.findOne(studioId, user.role, user.studioId, user.organizationId);
   }
 
   @Get(':studioId/settings')
@@ -71,7 +80,7 @@ export class StudiosController {
   }
 
   @Patch(':studioId/settings')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({
     summary:
       'Update studio settings: лимит бонусов, маркетинг «приведи друга» (уровень владельца)',
@@ -97,7 +106,7 @@ export class StudiosController {
   }
 
   @Put(':studioId/loyalty')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({
     summary:
       'Задать режим лояльности: PRESET или полная замена CUSTOM (tiers + milestones). Только уровень владельца.',
@@ -108,7 +117,7 @@ export class StudiosController {
     @Body() dto: UpdateStudioLoyaltyDto,
     @CurrentUser() user: any,
   ) {
-    return this.studiosService.updateLoyalty(studioId, dto, user.role);
+    return this.studiosService.updateLoyalty(studioId, dto, user.role, user.studioId);
   }
 }
 

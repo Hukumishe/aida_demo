@@ -6,6 +6,8 @@ const nanoid = customAlphabet(alphabet, 10);
 
 /** Префиксы для типов сущностей (по типу видно сущность в id) */
 export const IdPrefix = {
+  Organization: 'org',
+  OrganizationFaq: 'ofq',
   Studio: 'stu',
   User: 'usr',
   Client: 'cli',

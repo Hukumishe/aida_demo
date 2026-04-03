@@ -16,6 +16,14 @@ export class CreateStudioDto {
   @IsString()
   @IsOptional()
   timezone?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Только для роли DEVELOPER: id организации, в которой создаётся филиал',
+  })
+  @IsString()
+  @IsOptional()
+  organizationId?: string;
 }
 
 
