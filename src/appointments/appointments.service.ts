@@ -169,6 +169,15 @@ export class AppointmentsService {
       throw new NotFoundException('Service not found, does not belong to this organization, or is inactive');
     }
 
+    const disabledAtStudio = await this.prisma.studioDisabledService.findUnique({
+      where: {
+        studioId_serviceId: { studioId, serviceId: service.id },
+      },
+    });
+    if (disabledAtStudio) {
+      throw new NotFoundException('Service is not offered at this studio');
+    }
+
     // Get duration (override if exists, otherwise default)
     const staffOverride = await this.prisma.staffServiceOverride.findUnique({
       where: {

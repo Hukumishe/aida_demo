@@ -68,12 +68,7 @@ export class NextbotService {
     if (!list.length) {
       return { found: false, client: null as null };
     }
-    const profile = await this.clientsService.findOne(
-      list[0].id,
-      user.role,
-      user.studioId,
-      studioId,
-    );
+    const profile = await this.clientsService.findOne(list[0].id, user.role, user.studioId);
     return { found: true, client: profile };
   }
 
@@ -91,8 +86,9 @@ export class NextbotService {
       };
     }
     const c = status.client as Record<string, unknown>;
-    const sl = c['studioLoyalty'] as { currentTier?: { name?: string } } | null | undefined;
-    const loyaltyTierName = sl?.currentTier?.name ?? null;
+    const ol = c['organizationLoyalty'] as { currentTier?: { name?: string } } | null | undefined;
+    const slLegacy = c['studioLoyalty'] as { currentTier?: { name?: string } } | null | undefined;
+    const loyaltyTierName = ol?.currentTier?.name ?? slLegacy?.currentTier?.name ?? null;
     return {
       found: true,
       clientId: c['id'],

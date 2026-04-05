@@ -27,7 +27,12 @@ export class UpdateServiceDto {
   @Min(1)
   requiredStaffCount?: number;
 
-  @ApiProperty({ example: true, required: false })
+  @ApiProperty({
+    example: true,
+    required: false,
+    description:
+      'Активность услуги в каталоге организации (на всех филиалах). Чтобы скрыть услугу только в одном филиале, используйте PATCH .../studio-offering.',
+  })
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;

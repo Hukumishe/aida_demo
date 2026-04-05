@@ -163,7 +163,8 @@ result = {
 | `client.referredList` | Список приглашённых (если есть). |
 | `client.cashbackPercent` | Кэшбэк-процент по текущему уровню / кастомной лояльности. |
 | `client.levelProgress` | Прогресс до следующего уровня. |
-| `client.studioLoyalty` | Блок кастомной лояльности по организации (если включён режим CUSTOM и передан `studioId` в запросе профиля). |
+| `client.organizationLoyalty` | Блок кастомной лояльности по **организации клиента** (режим CUSTOM у организации). |
+| `client.studioLoyalty` | Устаревший алиас того же объекта, что и `organizationLoyalty` (для старых клиентов API). |
 
 ---
 

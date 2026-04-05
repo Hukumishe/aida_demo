@@ -381,6 +381,38 @@ ALTER TABLE "warehouses" ADD CONSTRAINT "warehouses_organizationId_fkey"
 
 CREATE INDEX "warehouses_organizationId_idx" ON "warehouses"("organizationId");
 
+-- Несколько филиалов → один org: у CENTRAL-складов совпадает organizationId; перед уникальным индексом сливаем в один склад на организацию.
+CREATE TEMP TABLE _wh_central_dup AS
+SELECT w."id" AS old_id, c.keep_id
+FROM "warehouses" w
+INNER JOIN (
+  SELECT "organizationId", MIN("id") AS keep_id
+  FROM "warehouses"
+  WHERE "type" = 'CENTRAL'
+  GROUP BY "organizationId"
+) c ON c."organizationId" = w."organizationId" AND w."type" = 'CENTRAL'
+WHERE w."id" <> c.keep_id;
+
+INSERT INTO "stocks" ("warehouseId", "productId", quantity, "updatedAt")
+SELECT d.keep_id, s."productId", s.quantity, s."updatedAt"
+FROM "stocks" s
+INNER JOIN _wh_central_dup d ON s."warehouseId" = d.old_id
+ON CONFLICT ("warehouseId", "productId") DO UPDATE SET
+  quantity = "stocks".quantity + EXCLUDED.quantity,
+  "updatedAt" = GREATEST("stocks"."updatedAt", EXCLUDED."updatedAt");
+
+DELETE FROM "stocks" s
+USING _wh_central_dup d
+WHERE s."warehouseId" = d.old_id;
+
+UPDATE "transfers" t SET "fromWarehouseId" = d.keep_id FROM _wh_central_dup d WHERE t."fromWarehouseId" = d.old_id;
+UPDATE "transfers" t SET "toWarehouseId" = d.keep_id FROM _wh_central_dup d WHERE t."toWarehouseId" = d.old_id;
+UPDATE "stock_movements" m SET "warehouseId" = d.keep_id FROM _wh_central_dup d WHERE m."warehouseId" = d.old_id;
+
+DELETE FROM "warehouses" w USING _wh_central_dup d WHERE w."id" = d.old_id;
+
+DROP TABLE _wh_central_dup;
+
 CREATE UNIQUE INDEX "warehouses_one_central_per_org" ON "warehouses"("organizationId")
   WHERE "type" = 'CENTRAL';
 

@@ -98,14 +98,14 @@ export class ClientsController {
     name: 'studioId',
     required: false,
     description:
-      'Для корректных флагов рефералки (скидка/бонус на первый визит) по настройкам студии «приведи друга»',
+      'Устарело: лояльность и рефералка считаются по организации клиента; параметр не влияет на ответ.',
   })
   async findOne(
     @Param('id') id: string,
-    @Query('studioId') studioId: string | undefined,
+    @Query('studioId') _studioId: string | undefined,
     @CurrentUser() user?: any,
   ) {
-    return this.clientsService.findOne(id, user?.role, user?.studioId, studioId);
+    return this.clientsService.findOne(id, user?.role, user?.studioId);
   }
 
   @Patch('clients/:id')

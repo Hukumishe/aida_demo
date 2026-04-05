@@ -309,6 +309,14 @@ export class AvailabilityService {
       if (!service) {
         throw new NotFoundException('Service not found for this studio');
       }
+      const disabledAtStudio = await this.prisma.studioDisabledService.findUnique({
+        where: {
+          studioId_serviceId: { studioId, serviceId: service.id },
+        },
+      });
+      if (disabledAtStudio) {
+        throw new NotFoundException('Service is not offered at this studio');
+      }
       durationMinutes = service.defaultDurationMin;
       if (options.staffUserId) {
         const ov = await this.prisma.staffServiceOverride.findUnique({

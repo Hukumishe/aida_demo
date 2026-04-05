@@ -61,21 +61,30 @@ export class UpdateClientDto {
 
   @ApiPropertyOptional({
     description:
-      'Режим CUSTOM у студии: id студии для ручного уровня или сброса (вместе с customLoyaltyTierId или customLoyaltyClearManual)',
+      'Режим CUSTOM: id организации клиента для ручного уровня или сброса (вместе с customLoyaltyTierId или customLoyaltyClearManual). Должен совпадать с organizationId клиента.',
+  })
+  @IsOptional()
+  @IsString()
+  customLoyaltyOrganizationId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Устарело: id студии; сервер преобразует в organizationId. Предпочтительно customLoyaltyOrganizationId.',
   })
   @IsOptional()
   @IsString()
   customLoyaltyStudioId?: string;
 
   @ApiPropertyOptional({
-    description: 'ID записи StudioLoyaltyTier — зафиксировать этот уровень вручную в указанной студии',
+    description: 'ID записи StudioLoyaltyTier — зафиксировать уровень вручную в организации клиента (CUSTOM)',
   })
   @IsOptional()
   @IsString()
   customLoyaltyTierId?: string;
 
   @ApiPropertyOptional({
-    description: 'С customLoyaltyStudioId: снять ручной уровень и пересчитать по сумме оплат в студии',
+    description:
+      'С customLoyaltyOrganizationId: снять ручной уровень и пересчитать по сумме оплат по организации',
   })
   @IsOptional()
   @IsBoolean()

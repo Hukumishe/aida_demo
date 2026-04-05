@@ -6,6 +6,10 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { getOrganizationIdForStudio } from '../common/organization-scope';
+import {
+  getDisabledServiceIdsForStudio,
+  isServiceOfferedInStudio,
+} from '../common/service-studio-offering';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -46,11 +50,19 @@ export class ServicesService {
 
       const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
-      return await this.prisma.service.findMany({
-        where: { organizationId },
-        include: { category: true },
-        orderBy: [{ name: 'asc' }],
-      });
+      const [services, disabledIds] = await Promise.all([
+        this.prisma.service.findMany({
+          where: { organizationId },
+          include: { category: true },
+          orderBy: [{ name: 'asc' }],
+        }),
+        getDisabledServiceIdsForStudio(this.prisma, studioId),
+      ]);
+
+      return services.map((s) => ({
+        ...s,
+        isOfferedInStudio: isServiceOfferedInStudio(s, disabledIds, s.id),
+      }));
     } catch (error) {
       if (error instanceof ForbiddenException || error instanceof NotFoundException) {
         throw error;
@@ -74,7 +86,7 @@ export class ServicesService {
 
     const audience = createServiceDto.audience ?? ServiceAudience.WOMEN;
 
-    return this.prisma.service.create({
+    const created = await this.prisma.service.create({
       data: {
         id: generateId(IdPrefix.Service),
         organizationId,
@@ -87,6 +99,7 @@ export class ServicesService {
       },
       include: { category: true },
     });
+    return { ...created, isOfferedInStudio: true };
   }
 
   async update(
@@ -128,11 +141,60 @@ export class ServicesService {
       data.categoryId = categoryId;
     }
 
-    return this.prisma.service.update({
+    const updated = await this.prisma.service.update({
       where: { id },
       data: data as any,
       include: { category: true },
     });
+
+    const disabledIds = await getDisabledServiceIdsForStudio(this.prisma, studioId);
+    return {
+      ...updated,
+      isOfferedInStudio: isServiceOfferedInStudio(updated, disabledIds, updated.id),
+    };
+  }
+
+  /**
+   * Включить/выключить услугу только в данном филиале.
+   * Каталог организации (`Service.isActive`) и другие филиалы не затрагиваются.
+   */
+  async setStudioServiceOffering(
+    studioId: string,
+    serviceId: string,
+    offered: boolean,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    this.assertStudioAccess(studioId, userRole, userStudioId);
+
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
+    const service = await this.prisma.service.findUnique({
+      where: { id: serviceId },
+    });
+    if (!service || service.organizationId !== organizationId) {
+      throw new NotFoundException('Service not found in this studio');
+    }
+
+    if (offered) {
+      await this.prisma.studioDisabledService.deleteMany({
+        where: { studioId, serviceId },
+      });
+    } else {
+      await this.prisma.studioDisabledService.upsert({
+        where: {
+          studioId_serviceId: { studioId, serviceId },
+        },
+        create: { studioId, serviceId },
+        update: {},
+      });
+    }
+
+    const disabledIds = await getDisabledServiceIdsForStudio(this.prisma, studioId);
+    return {
+      ...service,
+      isOfferedInStudio: isServiceOfferedInStudio(service, disabledIds, service.id),
+    };
   }
 
   async findCategories(studioId: string, userRole?: string, userStudioId?: string) {

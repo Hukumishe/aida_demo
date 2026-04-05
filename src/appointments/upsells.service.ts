@@ -53,6 +53,18 @@ export class UpsellsService {
       throw new BadRequestException('Service is not active');
     }
 
+    const disabledAtStudio = await this.prisma.studioDisabledService.findUnique({
+      where: {
+        studioId_serviceId: {
+          studioId: appointment.studioId,
+          serviceId: service.id,
+        },
+      },
+    });
+    if (disabledAtStudio) {
+      throw new BadRequestException('Service is not offered at this studio');
+    }
+
     const quantity = createUpsellDto.quantity || 1;
     const totalAmount = quantity * createUpsellDto.price;
 

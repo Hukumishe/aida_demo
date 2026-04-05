@@ -19,6 +19,7 @@ import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto';
 import { UpdateServiceCategoryDto } from './dto/update-service-category.dto';
+import { SetServiceStudioOfferingDto } from './dto/set-service-studio-offering.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
@@ -78,6 +79,29 @@ export class ServicesController {
     @CurrentUser() user?: any,
   ) {
     return this.servicesService.update(studioId, id, updateServiceDto, user?.role, user?.studioId);
+  }
+
+  @Patch('studios/:studioId/services/:id/studio-offering')
+  @ApiOperation({
+    summary: 'Включить/выключить услугу только в этом филиале',
+    description:
+      'Не меняет каталог организации и другие филиалы. Поле `isActive` у услуги — отдельно (на всю сеть).',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 404 })
+  setStudioOffering(
+    @Param('studioId') studioId: string,
+    @Param('id') id: string,
+    @Body() dto: SetServiceStudioOfferingDto,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.setStudioServiceOffering(
+      studioId,
+      id,
+      dto.offered,
+      user?.role,
+      user?.studioId,
+    );
   }
 
   // --- Категории услуг ---

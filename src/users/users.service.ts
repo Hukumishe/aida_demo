@@ -315,6 +315,18 @@ export class UsersService {
       throw new BadRequestException('Service does not belong to the same organization as the staff branch');
     }
 
+    const disabledAtStudio = await this.prisma.studioDisabledService.findUnique({
+      where: {
+        studioId_serviceId: {
+          studioId: staff.studioId!,
+          serviceId,
+        },
+      },
+    });
+    if (disabledAtStudio) {
+      throw new BadRequestException('Эта услуга отключена в этом филиале');
+    }
+
     // Check if already exists
     const existing = await this.prisma.staffService.findUnique({
       where: {

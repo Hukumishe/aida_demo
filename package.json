@@ -25,7 +25,6 @@
     "apply-admin-migration": "ts-node scripts/apply-admin-role-migration.ts",
     "create-admin": "ts-node scripts/create-admin-user.ts",
     "create-service-account": "ts-node scripts/create-service-account.ts",
-    "create-developer": "ts-node scripts/create-developer-user.ts",
     "apply-blacklist-migration": "ts-node scripts/apply-blacklist-migration.ts",
     "apply-blacklist-reason-migration": "ts-node scripts/apply-blacklist-reason-migration.ts",
     "postinstall": "prisma generate"

@@ -371,12 +371,7 @@ export class ClientsService {
     }
   }
 
-  async findOne(
-    id: string,
-    userRole?: string,
-    userStudioId?: string,
-    studioIdForReferral?: string,
-  ) {
+  async findOne(id: string, userRole?: string, userStudioId?: string) {
     const client = await this.prisma.client.findUnique({
       where: { id },
       include: {
@@ -445,29 +440,22 @@ export class ClientsService {
     // После первого DONE поле снова доступно для обычных промокодов акций.
     const referralCodeInputDisabled = firstVisitReferralPending;
 
+    const clientOrg = await this.prisma.organization.findUnique({
+      where: { id: client.organizationId },
+      select: {
+        referFriendEnabled: true,
+        referFriendInviteeRewardType: true,
+        loyaltyMode: true,
+      },
+    });
+
     let referralFirstVisitDiscountApplies = false;
     let referralFirstVisitBonusApplies = false;
-    if (studioIdForReferral) {
-      const st = await this.prisma.studio.findUnique({
-        where: { id: studioIdForReferral },
-        include: {
-          organization: {
-            select: {
-              referFriendEnabled: true,
-              referFriendInviteeRewardType: true,
-            },
-          },
-        },
-      });
-      const orgRef = st?.organization;
-      if (orgRef?.referFriendEnabled && firstVisitReferralPending) {
-        referralFirstVisitDiscountApplies =
-          orgRef.referFriendInviteeRewardType === 'DISCOUNT_PERCENT';
-        referralFirstVisitBonusApplies =
-          orgRef.referFriendInviteeRewardType === 'BONUS_PERCENT';
-      }
-    } else {
-      referralFirstVisitDiscountApplies = firstVisitReferralPending;
+    if (clientOrg?.referFriendEnabled && firstVisitReferralPending) {
+      referralFirstVisitDiscountApplies =
+        clientOrg.referFriendInviteeRewardType === 'DISCOUNT_PERCENT';
+      referralFirstVisitBonusApplies =
+        clientOrg.referFriendInviteeRewardType === 'BONUS_PERCENT';
     }
 
     let referredList: { clientId: string; firstName: string; lastName: string; usedAt: string }[] = [];
@@ -516,82 +504,73 @@ export class ClientsService {
 
     let cashbackPercent = getCashbackPercent(level);
     let levelProgress = getLevelProgress(totalPaidForLevel, level);
-    let studioLoyalty: Record<string, unknown> | null = null;
+    let organizationLoyalty: Record<string, unknown> | null = null;
 
-    if (studioIdForReferral) {
-      const stLoyalty = await this.prisma.studio.findUnique({
-        where: { id: studioIdForReferral },
-        select: {
-          organizationId: true,
-          organization: { select: { loyaltyMode: true } },
-        },
-      });
-      if (stLoyalty?.organization.loyaltyMode === StudioLoyaltyMode.CUSTOM) {
-        const orgId = stLoyalty.organizationId;
-        const [loyaltyTiers, loyaltyMilestones, csl] = await Promise.all([
-          this.prisma.studioLoyaltyTier.findMany({
-            where: { organizationId: orgId },
-            orderBy: { sortOrder: 'asc' },
-          }),
-          this.prisma.studioLoyaltyMilestone.findMany({
-            where: { organizationId: orgId },
-            orderBy: { minTotalPaid: 'asc' },
-          }),
-          this.prisma.clientStudioLoyalty.findUnique({
-            where: {
-              clientId_organizationId: { clientId: client.id, organizationId: orgId },
-            },
-            include: { currentTier: true },
-          }),
-        ]);
-        if (loyaltyTiers.length > 0 && loyaltyMilestones.length > 0) {
-          const tierLikes = loyaltyTiers.map((ct) => ({
-            id: ct.id,
-            sortOrder: ct.sortOrder,
-            name: ct.name,
-            cashbackPercent: ct.cashbackPercent,
-            manualOnly: ct.manualOnly,
-          }));
-          const milestoneLikes = loyaltyMilestones.map((m) => ({
-            minTotalPaid: m.minTotalPaid,
-            targetSortOrder: m.targetSortOrder,
-          }));
-          const paid = csl?.totalPaid ?? 0;
-          const currentTierResolved =
-            csl?.levelSetManually && csl.currentTier
-              ? {
-                  id: csl.currentTier.id,
-                  sortOrder: csl.currentTier.sortOrder,
-                  name: csl.currentTier.name,
-                  cashbackPercent: csl.currentTier.cashbackPercent,
-                  manualOnly: csl.currentTier.manualOnly,
-                }
-              : resolveAutoTierForTotalPaid(tierLikes, milestoneLikes, paid) ??
-                resolveAutoTierForTotalPaid(tierLikes, milestoneLikes, 0);
-          const prog = nextMilestoneProgress(milestoneLikes, tierLikes, paid);
-          cashbackPercent = currentTierResolved?.cashbackPercent ?? 0;
-          levelProgress = {
-            currentTotalPaid: paid,
-            nextLevel:
-              prog.nextTargetSortOrder != null ? `tier_${prog.nextTargetSortOrder}` : null,
-            nextLevelThreshold: prog.nextMilestoneMinPaid,
-            remainingToNext: prog.remainingToNext,
-          };
-          studioLoyalty = {
-            studioId: studioIdForReferral,
-            loyaltyMode: StudioLoyaltyMode.CUSTOM,
-            totalPaidForStudio: paid,
-            currentTier: currentTierResolved,
-            levelSetManually: csl?.levelSetManually ?? false,
-            milestones: loyaltyMilestones,
-            nextStep: {
-              minTotalPaid: prog.nextMilestoneMinPaid,
-              targetSortOrder: prog.nextTargetSortOrder,
-              targetTierName: prog.nextTierName,
-              remaining: prog.remainingToNext,
-            },
-          };
-        }
+    const orgId = client.organizationId;
+    if (clientOrg?.loyaltyMode === StudioLoyaltyMode.CUSTOM) {
+      const [loyaltyTiers, loyaltyMilestones, csl] = await Promise.all([
+        this.prisma.studioLoyaltyTier.findMany({
+          where: { organizationId: orgId },
+          orderBy: { sortOrder: 'asc' },
+        }),
+        this.prisma.studioLoyaltyMilestone.findMany({
+          where: { organizationId: orgId },
+          orderBy: { minTotalPaid: 'asc' },
+        }),
+        this.prisma.clientStudioLoyalty.findUnique({
+          where: {
+            clientId_organizationId: { clientId: client.id, organizationId: orgId },
+          },
+          include: { currentTier: true },
+        }),
+      ]);
+      if (loyaltyTiers.length > 0 && loyaltyMilestones.length > 0) {
+        const tierLikes = loyaltyTiers.map((ct) => ({
+          id: ct.id,
+          sortOrder: ct.sortOrder,
+          name: ct.name,
+          cashbackPercent: ct.cashbackPercent,
+          manualOnly: ct.manualOnly,
+        }));
+        const milestoneLikes = loyaltyMilestones.map((m) => ({
+          minTotalPaid: m.minTotalPaid,
+          targetSortOrder: m.targetSortOrder,
+        }));
+        const paid = csl?.totalPaid ?? 0;
+        const currentTierResolved =
+          csl?.levelSetManually && csl.currentTier
+            ? {
+                id: csl.currentTier.id,
+                sortOrder: csl.currentTier.sortOrder,
+                name: csl.currentTier.name,
+                cashbackPercent: csl.currentTier.cashbackPercent,
+                manualOnly: csl.currentTier.manualOnly,
+              }
+            : resolveAutoTierForTotalPaid(tierLikes, milestoneLikes, paid) ??
+              resolveAutoTierForTotalPaid(tierLikes, milestoneLikes, 0);
+        const prog = nextMilestoneProgress(milestoneLikes, tierLikes, paid);
+        cashbackPercent = currentTierResolved?.cashbackPercent ?? 0;
+        levelProgress = {
+          currentTotalPaid: paid,
+          nextLevel:
+            prog.nextTargetSortOrder != null ? `tier_${prog.nextTargetSortOrder}` : null,
+          nextLevelThreshold: prog.nextMilestoneMinPaid,
+          remainingToNext: prog.remainingToNext,
+        };
+        organizationLoyalty = {
+          organizationId: orgId,
+          loyaltyMode: StudioLoyaltyMode.CUSTOM,
+          totalPaid: paid,
+          currentTier: currentTierResolved,
+          levelSetManually: csl?.levelSetManually ?? false,
+          milestones: loyaltyMilestones,
+          nextStep: {
+            minTotalPaid: prog.nextMilestoneMinPaid,
+            targetSortOrder: prog.nextTargetSortOrder,
+            targetTierName: prog.nextTierName,
+            remaining: prog.remainingToNext,
+          },
+        };
       }
     }
 
@@ -601,7 +580,9 @@ export class ClientsService {
       referredList,
       cashbackPercent,
       levelProgress,
-      studioLoyalty,
+      organizationLoyalty,
+      /** @deprecated Используйте organizationLoyalty */
+      studioLoyalty: organizationLoyalty,
       referralCodeInputDisabled,
       referralFirstVisitDiscountApplies,
       referralFirstVisitBonusApplies,
@@ -610,24 +591,29 @@ export class ClientsService {
 
   private async applyCustomLoyaltyPatch(
     clientId: string,
-    studioId: string,
+    clientOrganizationId: string,
+    organizationId: string,
     tierId?: string,
     clearManual?: boolean,
   ) {
-    const studio = await this.prisma.studio.findUnique({
-      where: { id: studioId },
-      include: { organization: { select: { loyaltyMode: true } } },
-    });
-    if (!studio || studio.organization.loyaltyMode !== StudioLoyaltyMode.CUSTOM) {
-      throw new BadRequestException('Студия не в режиме кастомной лояльности (CUSTOM)');
+    if (organizationId !== clientOrganizationId) {
+      throw new BadRequestException(
+        'Кастомная лояльность задаётся только для организации клиента (customLoyaltyOrganizationId должен совпадать с organizationId клиента)',
+      );
     }
-    const organizationId = studio.organizationId;
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { loyaltyMode: true },
+    });
+    if (!org || org.loyaltyMode !== StudioLoyaltyMode.CUSTOM) {
+      throw new BadRequestException('Организация не в режиме кастомной лояльности (CUSTOM)');
+    }
     const [tiers, milestones] = await Promise.all([
       this.prisma.studioLoyaltyTier.findMany({ where: { organizationId } }),
       this.prisma.studioLoyaltyMilestone.findMany({ where: { organizationId } }),
     ]);
     if (tiers.length === 0 || milestones.length === 0) {
-      throw new BadRequestException('У студии не настроены уровни лояльности');
+      throw new BadRequestException('В организации не настроены уровни лояльности');
     }
     const tierLikes = tiers.map((ct) => ({
       id: ct.id,
@@ -646,7 +632,7 @@ export class ClientsService {
         where: { clientId_organizationId: { clientId, organizationId } },
       });
       if (!csl) {
-        throw new BadRequestException('Нет учёта лояльности клиента в этой студии');
+        throw new BadRequestException('Нет учёта лояльности клиента в этой организации');
       }
       const resolved = resolveAutoTierForTotalPaid(tierLikes, milestoneLikes, csl.totalPaid);
       await this.prisma.clientStudioLoyalty.update({
@@ -661,7 +647,7 @@ export class ClientsService {
     if (tierId) {
       const tier = tiers.find((t) => t.id === tierId);
       if (!tier) {
-        throw new BadRequestException('Уровень не найден в этой студии');
+        throw new BadRequestException('Уровень не найден в этой организации');
       }
       await this.prisma.clientStudioLoyalty.upsert({
         where: { clientId_organizationId: { clientId, organizationId } },
@@ -688,6 +674,7 @@ export class ClientsService {
     userStudioId?: string,
   ) {
     const {
+      customLoyaltyOrganizationId,
       customLoyaltyStudioId,
       customLoyaltyTierId,
       customLoyaltyClearManual,
@@ -713,12 +700,29 @@ export class ClientsService {
     }
 
     if (
+      customLoyaltyOrganizationId != null ||
       customLoyaltyStudioId != null ||
       customLoyaltyTierId != null ||
       customLoyaltyClearManual === true
     ) {
-      if (!customLoyaltyStudioId) {
-        throw new BadRequestException('Для кастомной лояльности укажите customLoyaltyStudioId');
+      let loyaltyOrgId = customLoyaltyOrganizationId ?? null;
+      if (customLoyaltyStudioId) {
+        const st = await this.prisma.studio.findUnique({
+          where: { id: customLoyaltyStudioId },
+          select: { organizationId: true },
+        });
+        const fromStudio = st?.organizationId ?? null;
+        if (loyaltyOrgId && fromStudio && loyaltyOrgId !== fromStudio) {
+          throw new BadRequestException(
+            'customLoyaltyOrganizationId не совпадает с организацией customLoyaltyStudioId',
+          );
+        }
+        if (!loyaltyOrgId) loyaltyOrgId = fromStudio;
+      }
+      if (!loyaltyOrgId) {
+        throw new BadRequestException(
+          'Для кастомной лояльности укажите customLoyaltyOrganizationId (или устаревший customLoyaltyStudioId)',
+        );
       }
       if (!isOwnerLevelRole(userRole)) {
         throw new ForbiddenException('Only owner level role can change custom loyalty tier');
@@ -730,7 +734,8 @@ export class ClientsService {
       }
       await this.applyCustomLoyaltyPatch(
         client.id,
-        customLoyaltyStudioId,
+        client.organizationId,
+        loyaltyOrgId,
         customLoyaltyTierId ?? undefined,
         customLoyaltyClearManual === true,
       );

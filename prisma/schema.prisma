@@ -167,11 +167,12 @@ model Studio {
   workSchedules         WorkScheduleDay[]
   busySlots             BusySlot[]
   appointments          Appointment[]
-  staffServices         StaffService[]
-  staffServiceOverrides StaffServiceOverride[]
-  noShowIncomes         NoShowIncome[]
-  Notification          Notification[]
-  warehouse             Warehouse?
+  staffServices           StaffService[]
+  staffServiceOverrides   StaffServiceOverride[]
+  studioDisabledServices  StudioDisabledService[]
+  noShowIncomes           NoShowIncome[]
+  Notification            Notification[]
+  warehouse               Warehouse?
 
   @@index([organizationId])
   @@map("studios")
@@ -461,9 +462,24 @@ model Service {
 
   landingPromotionServices LandingPromotionService[]
   landingServiceCards      LandingServiceCard[]
+  studioDisabledServices   StudioDisabledService[]
 
   @@index([organizationId])
   @@map("services")
+}
+
+/// Услуга отключена в конкретном филиале: общий каталог организации не меняется, другие филиалы не затрагиваются.
+model StudioDisabledService {
+  studioId  String
+  serviceId String
+  createdAt DateTime @default(now())
+
+  studio  Studio  @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([studioId, serviceId])
+  @@index([serviceId])
+  @@map("studio_disabled_services")
 }
 
 // --- Настройки лендинга ---
