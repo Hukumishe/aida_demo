@@ -82,6 +82,65 @@ export class UploadController {
     return { url };
   }
 
+  @Post('landing')
+  @ApiOperation({
+    summary: 'Загрузить изображение для карточки услуги на лендинге',
+    description:
+      'Возвращает публичный url; подставьте его в поле imageUrl при создании/редактировании карточки лендинга.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Файл сохранён',
+    schema: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          example: 'http://localhost:3000/uploads/123e4567-e89b-12d3-a456-426614174000.jpg',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Неверный тип или размер файла' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB
+      },
+      fileFilter: (req, file, cb) => {
+        if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+          return cb(
+            new BadRequestException('Only image files are allowed'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async uploadLandingImage(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+
+    const url = await this.uploadService.saveFile(file);
+    return { url };
+  }
+
   @Post('portfolio')
   @ApiOperation({ summary: 'Upload portfolio image' })
   @ApiConsumes('multipart/form-data')
