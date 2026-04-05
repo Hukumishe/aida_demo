@@ -10,10 +10,26 @@ import { generateId, IdPrefix } from '../common/id-generator';
 import { getOrganizationIdForStudio } from '../common/organization-scope';
 import { getDisabledServiceIdsForStudio } from '../common/service-studio-offering';
 import { isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { ServicesService } from '../services/services.service';
 
 @Injectable()
 export class LandingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly servicesService: ServicesService,
+  ) {}
+
+  /**
+   * Каталог услуг организации для выпадающего списка при создании карточки лендинга.
+   * Не путать с getServiceCards — там уже сохранённые карточки.
+   */
+  getServiceCatalogForLandingCards(
+    studioId: string,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    return this.servicesService.findAll(studioId, userRole, userStudioId);
+  }
 
   // --- Promotions ---
 

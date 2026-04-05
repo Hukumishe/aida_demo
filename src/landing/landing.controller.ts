@@ -152,10 +152,38 @@ export class LandingController {
 
   // --- Services ---
 
-  // Публичный список карточек услуг для лендинга
+  /**
+   * Каталог услуг (CRM) для админки: выпадающий список при добавлении карточки на лендинг.
+   * Не использовать GET .../landing/services — он отдаёт уже созданные карточки, не справочник услуг.
+   */
+  @Get('studios/:studioId/landing/service-catalog')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @ApiOperation({
+    summary: 'Каталог услуг для выбора в карточке лендинга (админка)',
+    description:
+      'Тот же состав, что GET /studios/:studioId/services (с полем isOfferedInStudio). Для селекта «Услуга» в модалке добавления карточки.',
+  })
+  @ApiResponse({ status: 200 })
+  async getServiceCatalogForLanding(
+    @Param('studioId') studioId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.landingService.getServiceCatalogForLandingCards(
+      studioId,
+      user?.role,
+      user?.studioId,
+    );
+  }
+
+  // Публичный список карточек услуг для лендинга (уже настроенные блоки, не справочник услуг)
   @Public()
   @Get('studios/:studioId/landing/services')
-  @ApiOperation({ summary: 'Карточки услуг для лендинга' })
+  @ApiOperation({
+    summary: 'Карточки услуг для лендинга (публично)',
+    description: 'Сохранённые карточки с картинками/текстами. Для выпадающего списка услуг в админке — GET .../landing/service-catalog.',
+  })
   @ApiResponse({ status: 200 })
   async getServiceCards(
     @Param('studioId') studioId: string,
