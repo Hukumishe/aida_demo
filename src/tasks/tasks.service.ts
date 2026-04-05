@@ -14,7 +14,15 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CreateStudioTaskDto } from './dto/create-task.dto';
 import { UpdateStudioTaskDto } from './dto/update-task.dto';
 
-const CONTROLLER_ROLES: UserRole[] = [UserRole.MANAGER, UserRole.ADMIN, UserRole.DEVELOPER];
+/** Кто может быть «контролёром» задачи: мастера филиала + уровень владельца + DEVELOPER */
+const CONTROLLER_ROLES: UserRole[] = [
+  UserRole.MANAGER,
+  UserRole.ADMIN,
+  UserRole.DEVELOPER,
+  UserRole.OWNER,
+  UserRole.DEPUTY_OWNER,
+  UserRole.SERVICE,
+];
 
 @Injectable()
 export class TasksService {
@@ -48,7 +56,7 @@ export class TasksService {
     });
     if (users.length !== unique.length) {
       throw new BadRequestException(
-        'Контролёры задачи: только активные менеджеры филиала (роли MANAGER или ADMIN)',
+        'Контролёры задачи: активные пользователи филиала с ролью MANAGER, ADMIN или уровень владельца / DEVELOPER',
       );
     }
   }

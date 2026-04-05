@@ -24,24 +24,24 @@ import { Roles, UserRole } from '../common/decorators/roles.decorator';
 @ApiTags('prompts')
 @Controller('prompts')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.DEVELOPER, UserRole.SERVICE)
+@Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
 @ApiBearerAuth()
 export class PromptsController {
   constructor(private readonly promptsService: PromptsService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Создать промпт (только роль SERVICE)' })
+  @ApiOperation({ summary: 'Создать промпт (уровень владельца, SERVICE, DEVELOPER)' })
   @ApiResponse({ status: 201, description: 'Промпт создан' })
   @ApiResponse({ status: 400, description: 'Ошибка валидации' })
-  @ApiResponse({ status: 403, description: 'Доступ только для роли SERVICE' })
+  @ApiResponse({ status: 403, description: 'Недостаточно прав' })
   create(@Body() dto: CreatePromptDto) {
     return this.promptsService.create(dto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Список всех промптов (только роль SERVICE)' })
+  @ApiOperation({ summary: 'Список всех промптов' })
   @ApiResponse({ status: 200, description: 'Список промптов' })
-  @ApiResponse({ status: 403, description: 'Доступ только для роли SERVICE' })
+  @ApiResponse({ status: 403, description: 'Недостаточно прав' })
   findAll() {
     return this.promptsService.findAll();
   }
@@ -56,11 +56,11 @@ export class PromptsController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Обновить промпт (только роль SERVICE)' })
+  @ApiOperation({ summary: 'Обновить промпт' })
   @ApiResponse({ status: 200, description: 'Промпт обновлён' })
   @ApiResponse({ status: 400, description: 'Ошибка валидации' })
   @ApiResponse({ status: 404, description: 'Промпт не найден' })
-  @ApiResponse({ status: 403, description: 'Доступ только для роли SERVICE' })
+  @ApiResponse({ status: 403, description: 'Недостаточно прав' })
   update(
     @Param('id') id: string,
     @Body() dto: UpdatePromptDto,
@@ -69,10 +69,10 @@ export class PromptsController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Удалить промпт (только роль SERVICE)' })
+  @ApiOperation({ summary: 'Удалить промпт' })
   @ApiResponse({ status: 200, description: 'Промпт удалён' })
   @ApiResponse({ status: 404, description: 'Промпт не найден' })
-  @ApiResponse({ status: 403, description: 'Доступ только для роли SERVICE' })
+  @ApiResponse({ status: 403, description: 'Недостаточно прав' })
   remove(@Param('id') id: string) {
     return this.promptsService.remove(id);
   }

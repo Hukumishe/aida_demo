@@ -14,7 +14,8 @@ export const ROLES_KEY = 'roles';
 export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
 
 /**
- * Проверяет, является ли роль уровнем владельца (OWNER, DEPUTY_OWNER или SERVICE)
+ * «Уровень владельца» для бизнес-доступа в тенанте: OWNER, DEPUTY_OWNER, SERVICE и DEVELOPER.
+ * DEVELOPER по возможностям внутри сети совпадает с владельцем (плюс кросс-тенант и /organizations).
  */
 export function isOwnerLevelRole(role: string | undefined): boolean {
   return (

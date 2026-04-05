@@ -3,6 +3,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { getOrganizationIdForStudio } from '../common/organization-scope';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { NotificationType } from '@prisma/client';
+import { UserRole } from '../common/decorators/roles.decorator';
 
 @Injectable()
 export class NotificationsService {
@@ -174,7 +175,7 @@ export class NotificationsService {
       where: {
         organizationId,
         role: {
-          in: ['OWNER', 'DEPUTY_OWNER'],
+          in: [UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.DEVELOPER],
         },
         isActive: true,
       },

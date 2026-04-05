@@ -16,12 +16,10 @@ export class ReferralLinksService {
   constructor(private readonly prisma: PrismaService) {}
 
   private assertOwnerOrDeputy(userRole: string) {
-    if (
-      userRole !== UserRole.OWNER &&
-      userRole !== UserRole.DEPUTY_OWNER &&
-      userRole !== UserRole.DEVELOPER
-    ) {
-      throw new ForbiddenException('Только владелец или заместитель могут управлять реферальными ссылками');
+    if (!isOwnerLevelRole(userRole)) {
+      throw new ForbiddenException(
+        'Только уровень владельца (OWNER, DEPUTY, SERVICE, DEVELOPER) может управлять реферальными ссылками',
+      );
     }
   }
 
