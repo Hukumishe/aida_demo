@@ -22,7 +22,6 @@ import { DevTicketsService, DevTicketBucket } from './dev-tickets.service';
 import { CreateDevTicketDto } from './dto/create-dev-ticket.dto';
 import { AddDevTicketMessageDto } from './dto/add-dev-ticket-message.dto';
 import { UpdateDevTicketStatusDto } from './dto/update-dev-ticket-status.dto';
-import { UserRole } from '../common/decorators/roles.decorator';
 
 @ApiTags('dev-tickets')
 @Controller('dev-tickets')
