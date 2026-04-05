@@ -23,6 +23,7 @@ import { NextbotModule } from './nextbot/nextbot.module';
 import { TasksModule } from './tasks/tasks.module';
 import { ReferralLinksModule } from './referral-links/referral-links.module';
 import { OrganizationsModule } from './organizations/organizations.module';
+import { DevTicketsModule } from './dev-tickets/dev-tickets.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -54,6 +55,7 @@ import { AppController } from './app.controller';
     TasksModule,
     ReferralLinksModule,
     OrganizationsModule,
+    DevTicketsModule,
   ],
   controllers: [AppController],
 })

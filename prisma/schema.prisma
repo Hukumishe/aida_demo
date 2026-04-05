@@ -66,6 +66,13 @@ enum TaskStatus {
   CANCELLED
 }
 
+/// Тикеты в поддержку разработчиков (OWNER/DEPUTY создают; ведут DEVELOPER)
+enum DevTicketStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+}
+
 enum WarehouseType {
   CENTRAL
   BRANCH
@@ -148,6 +155,7 @@ model Organization {
   faqs                  OrganizationFaq[]
   prompts               Prompt[]
   notifications         Notification[]
+  devTickets            DevTicket[]
 
   @@map("organizations")
 }
@@ -293,11 +301,56 @@ model User {
   tasksAssigned         StudioTask[]           @relation("StudioTaskAssignee")
   studioTaskControllers StudioTaskController[]
 
+  devTicketsCreated     DevTicket[]            @relation("DevTicketCreator")
+  devTicketMessages     DevTicketMessage[]
+  devTicketsCompleted   DevTicket[]            @relation("DevTicketCompletedBy")
+
   @@index([organizationId])
   @@index([studioId])
   @@index([email])
   @@index([phone])
   @@map("users")
+}
+
+/// Тикет разработчикам (описание, шаги воспроизведения, скриншоты-URL)
+model DevTicket {
+  id                 String          @id
+  organizationId   String
+  createdByUserId    String
+  title              String
+  problemDescription String
+  howItHappened      String?
+  screenshotUrls     String[]        @default([])
+  status             DevTicketStatus @default(OPEN)
+  completedAt        DateTime?
+  completedByUserId  String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User                @relation("DevTicketCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  completedBy  User?               @relation("DevTicketCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
+  messages     DevTicketMessage[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("dev_tickets")
+}
+
+model DevTicketMessage {
+  id        String   @id
+  ticketId  String
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+
+  ticket DevTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([createdAt])
+  @@map("dev_ticket_messages")
 }
 
 model StaffProfile {
