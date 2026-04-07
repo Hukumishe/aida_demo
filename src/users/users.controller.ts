@@ -33,6 +33,21 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @Get('studios/:studioId/staff/network')
+  @ApiOperation({
+    summary: 'Сетевой персонал организации (без привязки к филиалу)',
+    description:
+      'Пользователи с `studioId = null`: OWNER, DEPUTY_OWNER, SERVICE, MANAGER. Один и тот же список при любом выбранном филиале сети. Для блока «администрирование» на экране сотрудников.',
+  })
+  @ApiResponse({ status: 200, description: 'List of organization-level staff' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async findNetworkStaff(
+    @Param('studioId') studioId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.findNetworkStaff(studioId, user.role, user.studioId);
+  }
+
   @Get('studios/:studioId/staff')
   @ApiOperation({ summary: 'Get all staff members for a studio' })
   @ApiResponse({ status: 200, description: 'List of staff members' })

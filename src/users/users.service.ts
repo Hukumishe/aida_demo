@@ -14,9 +14,54 @@ import { CreateServiceOverrideDto } from './dto/create-service-override.dto';
 import { UpdateServiceOverrideDto } from './dto/update-service-override.dto';
 import { UserRole, isOwnerLevelRole, canManageOwners, canManageDeputies } from '../common/decorators/roles.decorator';
 
+/** Роли, которые могут быть на уровне сети (`studioId` = null) и показываются во всех филиалах. */
+const NETWORK_STAFF_ROLES: UserRole[] = [
+  UserRole.OWNER,
+  UserRole.DEPUTY_OWNER,
+  UserRole.SERVICE,
+  UserRole.MANAGER,
+];
+
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * Пользователи организации без привязки к филиалу (административный персонал сети).
+   * Не включает DEVELOPER (платформа) и роли филиала (ADMIN/MASTER с studioId).
+   */
+  async findNetworkStaff(studioId: string, userRole: string, userStudioId?: string) {
+    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
+      throw new ForbiddenException('Access denied to this studio');
+    }
+
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { organizationId: true },
+    });
+    if (!studio) {
+      throw new NotFoundException(`Studio with ID ${studioId} not found`);
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        organizationId: studio.organizationId,
+        studioId: null,
+        isActive: true,
+        role: { in: NETWORK_STAFF_ROLES },
+      },
+      include: {
+        staffProfile: true,
+      },
+      orderBy: [{ createdAt: 'desc' }],
+    });
+
+    if (!isOwnerLevelRole(userRole)) {
+      return users.map(({ password, ...user }) => user);
+    }
+
+    return users;
+  }
 
   async findAll(studioId: string, userRole: string, userStudioId?: string) {
     // Check access
