@@ -175,6 +175,15 @@ export class UsersService {
       throw new NotFoundException('Studio not found');
     }
 
+    /** Роли уровня сети: без привязки к филиалу (см. GET .../staff/network). */
+    const orgWideRoles: UserRole[] = [
+      UserRole.MANAGER,
+      UserRole.OWNER,
+      UserRole.DEPUTY_OWNER,
+      UserRole.SERVICE,
+    ];
+    const assignStudioId = orgWideRoles.includes(createStaffDto.role) ? null : studioId;
+
     const createdUser = await this.prisma.user.create({
       data: {
         id: generateId(IdPrefix.User),
@@ -184,7 +193,7 @@ export class UsersService {
         password: createStaffDto.password, // Store plain password for OWNER/DEPUTY_OWNER visibility
         role: createStaffDto.role,
         organizationId: studioRow.organizationId,
-        studioId,
+        studioId: assignStudioId,
         staffProfile: {
           create: {
             firstName: createStaffDto.firstName,
