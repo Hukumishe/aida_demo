@@ -226,14 +226,32 @@ export class TasksService {
       if (task.assigneeUserId !== userId) {
         throw new ForbiddenException('Можно менять только свои задачи');
       }
-      const allowedKeys = ['status'];
+      const allowedKeys = ['status', 'rejectionComment'];
       const keys = Object.keys(dto).filter((k) => (dto as any)[k] !== undefined);
       const bad = keys.filter((k) => !allowedKeys.includes(k));
       if (bad.length) {
-        throw new ForbiddenException('Мастер может только отметить статус задачи (например DONE)');
+        throw new ForbiddenException(
+          'Мастер может менять только статус и комментарий отказа по своей задаче',
+        );
       }
-      if (dto.status != null && dto.status !== TaskStatus.DONE && dto.status !== TaskStatus.OPEN) {
-        throw new BadRequestException('Мастер может перевести задачу в DONE или вернуть в OPEN');
+      if (
+        dto.status != null &&
+        dto.status !== TaskStatus.DONE &&
+        dto.status !== TaskStatus.OPEN &&
+        dto.status !== TaskStatus.CANCELLED
+      ) {
+        throw new BadRequestException(
+          'Мастер может перевести задачу в DONE, OPEN или CANCELLED (отказ)',
+        );
+      }
+      if (dto.status === TaskStatus.CANCELLED) {
+        if (!dto.rejectionComment || !dto.rejectionComment.trim()) {
+          throw new BadRequestException(
+            'При отказе от задачи мастер должен указать комментарий причины отказа',
+          );
+        }
+      } else if (dto.rejectionComment !== undefined) {
+        throw new BadRequestException('Комментарий отказа можно передать только со статусом CANCELLED');
       }
     }
 
@@ -255,6 +273,10 @@ export class TasksService {
       data.deadlineReminderSentAt = null;
     }
     if (dto.status !== undefined) data.status = dto.status;
+    if (dto.rejectionComment !== undefined) data.rejectionComment = dto.rejectionComment.trim();
+    if (dto.status !== undefined && dto.status !== TaskStatus.CANCELLED) {
+      data.rejectionComment = null;
+    }
 
     await this.prisma.$transaction(async (tx) => {
       if (dto.controllerUserIds !== undefined) {
@@ -278,10 +300,34 @@ export class TasksService {
       }
     });
 
-    return this.prisma.studioTask.findFirst({
+    const updatedTask = await this.prisma.studioTask.findFirst({
       where: { id: taskId },
       include: this.taskInclude(),
     });
+    if (!updatedTask) {
+      throw new NotFoundException('Задача не найдена');
+    }
+
+    const shouldNotifyCreator =
+      isMaster &&
+      dto.status === TaskStatus.CANCELLED &&
+      task.createdByUserId !== userId;
+
+    if (shouldNotifyCreator) {
+      try {
+        await this.notifications.createTaskRejectedNotification(
+          studioId,
+          task.id,
+          task.createdByUserId,
+          task.title,
+          dto.rejectionComment!.trim(),
+        );
+      } catch (e) {
+        this.logger.warn(`createTaskRejectedNotification failed: ${e}`);
+      }
+    }
+
+    return updatedTask;
   }
 
   async remove(

@@ -41,4 +41,11 @@ export class UpdateStudioTaskDto {
   @IsOptional()
   @IsEnum(TaskStatus)
   status?: TaskStatus;
+
+  @ApiPropertyOptional({
+    description: 'Комментарий к смене статуса (обязателен для мастера при отказе/CANCELLED)',
+  })
+  @IsOptional()
+  @IsString()
+  rejectionComment?: string;
 }

@@ -258,4 +258,26 @@ export class NotificationsService {
       },
     });
   }
+
+  async createTaskRejectedNotification(
+    studioId: string,
+    taskId: string,
+    creatorUserId: string,
+    title: string,
+    rejectionComment: string,
+  ) {
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    return this.prisma.notification.create({
+      data: {
+        id: generateId(IdPrefix.Notification),
+        userId: creatorUserId,
+        organizationId,
+        studioId,
+        type: NotificationType.TASK_REJECTED,
+        title: 'Отказ от задачи',
+        message: `Мастер отказался от задачи «${title}». Причина: ${rejectionComment}`,
+        data: JSON.stringify({ taskId, title, rejectionComment }),
+      },
+    });
+  }
 }

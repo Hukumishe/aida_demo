@@ -58,6 +58,7 @@ enum NotificationType {
   BLACKLIST_REQUEST // Запрос на добавление в черный список для владельца
   NEW_TASK // Назначена новая задача (исполнителю)
   TASK_DEADLINE_APPROACHING // Напоминание о приближающемся сроке задачи
+  TASK_REJECTED // Мастер отказался от задачи (уведомление постановщику)
 }
 
 enum TaskStatus {
@@ -792,6 +793,7 @@ model StudioTask {
   organizationId         String
   title                  String
   description            String?
+  rejectionComment       String?
   assigneeUserId         String
   createdByUserId        String
   deadlineAt             DateTime
