@@ -43,12 +43,13 @@ export class UsersService {
       throw new NotFoundException(`Studio with ID ${studioId} not found`);
     }
 
+    // Менеджер — всегда «сеть»; старые записи могли иметь studioId — показываем и их.
     const users = await this.prisma.user.findMany({
       where: {
         organizationId: studio.organizationId,
-        studioId: null,
         isActive: true,
         role: { in: NETWORK_STAFF_ROLES },
+        OR: [{ studioId: null }, { role: UserRole.MANAGER }],
       },
       include: {
         staffProfile: true,
@@ -69,11 +70,12 @@ export class UsersService {
       throw new ForbiddenException('Access denied to this studio');
     }
 
+    // Только персонал филиала: админ и мастер. MANAGER — сетевой, см. GET .../staff/network.
     const users = await this.prisma.user.findMany({
       where: {
         studioId,
         role: {
-          in: [UserRole.ADMIN, UserRole.MANAGER, UserRole.MASTER],
+          in: [UserRole.ADMIN, UserRole.MASTER],
         },
       },
       include: {
@@ -94,7 +96,7 @@ export class UsersService {
           where: {
             studioId,
             role: {
-              in: [UserRole.MANAGER, UserRole.MASTER],
+              in: [UserRole.ADMIN, UserRole.MASTER],
             },
           },
           include: {
