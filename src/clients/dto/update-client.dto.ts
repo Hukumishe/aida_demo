@@ -1,6 +1,6 @@
 import { IsString, IsOptional, IsInt, Min, Max, Matches, ValidateIf, IsEnum, IsBoolean } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ClientLevel } from '@prisma/client';
+import { ClientLevel, ClientGender } from '@prisma/client';
 
 export class UpdateClientDto {
   @ApiProperty({ example: 'John', required: false })
@@ -24,6 +24,16 @@ export class UpdateClientDto {
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'birthDate must be YYYY-MM-DD' })
   birthDate?: string | null;
+
+  @ApiPropertyOptional({
+    enum: ClientGender,
+    description:
+      'Пол клиента: MALE / FEMALE. Передать null чтобы очистить (= «не указано»).',
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsEnum(ClientGender)
+  gender?: ClientGender | null;
 
   @ApiProperty({ example: 'Regular client, prefers morning appointments', required: false })
   @IsString()

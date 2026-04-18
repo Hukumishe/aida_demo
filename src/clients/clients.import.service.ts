@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import * as crypto from 'crypto';
-import { ClientLevel, Prisma } from '@prisma/client';
+import { ClientGender, ClientLevel, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { isDeveloperRole } from '../common/decorators/roles.decorator';
@@ -36,6 +36,7 @@ type NormalizedRow = {
   firstName: string;
   lastName: string | null;
   phone: string;
+  gender: ClientGender | null;
   birthDate: Date | null;
   notes: string | null;
   bonuses: number;
@@ -89,6 +90,10 @@ const HEADER_ALIASES: Record<string, string> = {
   уровень: 'level',
   level: 'level',
   статус: 'level',
+
+  пол: 'gender',
+  gender: 'gender',
+  sex: 'gender',
 };
 
 const REFERRAL_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -164,6 +169,20 @@ function isValidDateParts(y: number, m: number, d: number): boolean {
   if (d < 1 || d > 31) return false;
   const dt = new Date(Date.UTC(y, m - 1, d));
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+function parseGender(value: unknown): ClientGender | null | 'invalid' {
+  if (value === null || value === undefined || value === '') return null;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return null;
+  if (['-', '—', 'не указано', 'unknown', 'none', 'null'].includes(raw)) return null;
+  if (['m', 'male', 'муж', 'мужчина', 'мужской', 'м'].includes(raw)) {
+    return ClientGender.MALE;
+  }
+  if (['f', 'w', 'female', 'жен', 'женщина', 'женский', 'ж'].includes(raw)) {
+    return ClientGender.FEMALE;
+  }
+  return 'invalid';
 }
 
 function parseLevel(value: unknown): ClientLevel | null | 'invalid' {
@@ -282,6 +301,7 @@ export class ClientsImportService {
           firstName: row.firstName,
           lastName: row.lastName ?? undefined,
           phone: row.phone,
+          gender: row.gender ?? undefined,
           birthDate: row.birthDate ?? undefined,
           notes: row.notes ?? undefined,
           bonuses: row.bonuses,
@@ -472,12 +492,26 @@ export class ClientsImportService {
       };
     }
 
+    const gender = parseGender(row['gender']);
+    if (gender === 'invalid') {
+      return {
+        error: {
+          row: rowNumber,
+          status: 'error',
+          phone,
+          name: firstName,
+          reason: `Некорректный пол: "${row['gender']}". Доступные: MALE, FEMALE (или "мужчина"/"женщина", пусто = не указано)`,
+        },
+      };
+    }
+
     return {
       row: {
         rowNumber,
         firstName,
         lastName,
         phone,
+        gender,
         birthDate: birthDateResult ?? null,
         notes,
         bonuses: bonuses ?? 0,

@@ -359,6 +359,7 @@ export class ClientsService {
             firstName: createClientDto.firstName,
             lastName: createClientDto.lastName,
             phone: createClientDto.phone,
+            gender: createClientDto.gender,
             birthDate: createClientDto.birthDate ? new Date(createClientDto.birthDate) : undefined,
             notes: createClientDto.notes,
             bonuses: createClientDto.bonuses ?? 0,

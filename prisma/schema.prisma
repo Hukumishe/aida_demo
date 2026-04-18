@@ -120,6 +120,12 @@ enum ServiceAudience {
   WOMEN
 }
 
+/// Пол клиента. NULL = «не указано».
+enum ClientGender {
+  MALE
+  FEMALE
+}
+
 /// Тенант: сеть салонов в одной БД. Каталог услуг, CRM, маркетинг, склад, задачи и т.д. — на уровне организации.
 model Organization {
   id                             String                         @id
@@ -380,6 +386,7 @@ model Client {
   lastName                        String?
   phone                           String
   notes                           String?
+  gender                          ClientGender? // Пол клиента: MALE / FEMALE / null (не указано)
   birthDate                       DateTime?   @db.Date // День рождения клиента
   level                           ClientLevel @default(BRONZE)
   levelSetManually                Boolean     @default(false) // true если DIAMOND назначен вручную (только режим PRESET)

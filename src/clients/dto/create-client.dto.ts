@@ -1,5 +1,15 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt, Min, Max, Matches } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsInt,
+  Min,
+  Max,
+  Matches,
+  IsEnum,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { ClientGender } from '@prisma/client';
 
 export class CreateClientDto {
   @ApiProperty({ example: 'John' })
@@ -16,6 +26,15 @@ export class CreateClientDto {
   @IsString()
   @IsNotEmpty()
   phone: string;
+
+  @ApiProperty({
+    enum: ClientGender,
+    required: false,
+    description: 'Пол клиента: MALE / FEMALE. Не передавать (или null) — «не указано».',
+  })
+  @IsOptional()
+  @IsEnum(ClientGender)
+  gender?: ClientGender;
 
   @ApiProperty({ example: '1990-05-15', required: false, description: 'День рождения (YYYY-MM-DD)' })
   @IsOptional()
