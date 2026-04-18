@@ -18,6 +18,8 @@ export interface ImportRowReport {
   status: 'created' | 'skipped' | 'error';
   category?: string;
   name?: string;
+  serviceId?: string;
+  categoryId?: string;
   reason?: string;
 }
 
@@ -26,7 +28,10 @@ export interface ImportServicesResult {
   totalRows: number;
   createdCategories: { id: string; name: string }[];
   skippedCategories: { id: string; name: string }[];
-  createdServices: number;
+  /** Список созданных услуг с id, name и categoryId (удобно для фронта) */
+  createdServices: { id: string; name: string; categoryId: string }[];
+  /** Количество созданных услуг — дубль от createdServices.length для совместимости. */
+  createdServicesCount: number;
   skippedServices: number;
   errors: number;
   details: ImportRowReport[];
@@ -196,9 +201,9 @@ export class ServicesImportService {
 
     const createdCategories: { id: string; name: string }[] = [];
     const skippedCategories: { id: string; name: string }[] = [];
+    const createdServiceList: { id: string; name: string; categoryId: string }[] = [];
     const details: ImportRowReport[] = [...errors];
 
-    let createdServices = 0;
     let skippedServices = 0;
 
     const isDryRun = !!options.dryRun;
@@ -259,19 +264,22 @@ export class ServicesImportService {
       }
 
       if (isDryRun) {
-        createdServices++;
+        const fakeId = `DRY_${generateId(IdPrefix.Service)}`;
+        createdServiceList.push({ id: fakeId, name: row.name, categoryId: cat.id });
         existingSvcSet.add(svcKey);
         details.push({
           row: row.rowNumber,
           status: 'created',
           category: cat.name,
           name: row.name,
+          serviceId: fakeId,
+          categoryId: cat.id,
         });
         continue;
       }
 
       try {
-        await this.prisma.service.create({
+        const created = await this.prisma.service.create({
           data: {
             id: generateId(IdPrefix.Service),
             organizationId,
@@ -282,14 +290,17 @@ export class ServicesImportService {
             categoryId: cat.id,
             audience: row.audience,
           },
+          select: { id: true, name: true, categoryId: true },
         });
         existingSvcSet.add(svcKey);
-        createdServices++;
+        createdServiceList.push(created);
         details.push({
           row: row.rowNumber,
           status: 'created',
           category: cat.name,
           name: row.name,
+          serviceId: created.id,
+          categoryId: created.categoryId,
         });
       } catch (err) {
         details.push({
@@ -307,7 +318,8 @@ export class ServicesImportService {
       totalRows: rows.length,
       createdCategories,
       skippedCategories,
-      createdServices,
+      createdServices: createdServiceList,
+      createdServicesCount: createdServiceList.length,
       skippedServices,
       errors: details.filter((d) => d.status === 'error').length,
       details,

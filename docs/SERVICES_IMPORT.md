@@ -62,16 +62,43 @@ form field: file = <CSV | XLSX>
   "skippedCategories": [
     { "id": "sca_xyz...", "name": "Skin's прайс" }
   ],
-  "createdServices": 117,
+  "createdServices": [
+    { "id": "srv_abc...", "name": "Подмышки воск", "categoryId": "sca_abc..." }
+  ],
+  "createdServicesCount": 117,
   "skippedServices": 3,
   "errors": 0,
   "details": [
-    { "row": 2, "status": "created", "category": "Воск прайс", "name": "Подмышки воск" },
-    { "row": 5, "status": "skipped", "category": "Воск прайс", "name": "Усики воск", "reason": "Услуга уже существует (имя + аудитория)" },
-    { "row": 7, "status": "error",   "category": "",            "name": "Лицо", "reason": "Не указана категория" }
+    { "row": 2, "status": "created", "category": "Воск прайс", "name": "Подмышки воск",
+      "serviceId": "srv_abc...", "categoryId": "sca_abc..." },
+    { "row": 5, "status": "skipped", "category": "Воск прайс", "name": "Усики воск",
+      "reason": "Услуга уже существует (имя + аудитория)" },
+    { "row": 7, "status": "error",   "category": "",            "name": "Лицо",
+      "reason": "Не указана категория" }
   ]
 }
 ```
+
+> Импортированные услуги автоматически доступны во всех филиалах организации
+> (`Service.isActive = true`, категория `isActive = true`, нет записей в
+> `StudioDisabledService`/`StudioDisabledCategory`). Отдельно «привязывать»
+> услугу к студии не нужно. `createdServices[]` возвращается, если всё же
+> захочется массово выключить их в каком-то конкретном филиале через
+> `PATCH /services/:id/studio-offering`.
+
+## Важно для DEVELOPER-режима
+
+DEVELOPER ходит в API с явным `?organizationId=...`. **После импорта** фронт обязан
+запрашивать списки услуг/категорий для этой же организации:
+
+```
+GET /services?organizationId=org_xxx&studioId=sid_xxx   ← studioId — из той же организации
+GET /services/categories?organizationId=org_xxx&studioId=sid_xxx
+```
+
+Если в `GET /services?studioId=...` **не** передавать `organizationId`, backend
+подставит `organizationId` из JWT (у DEVELOPER-а это его собственная dev-организация),
+и импортированные в чужую организацию услуги туда не попадут — список будет пустой.
 
 ## Коды ошибок
 
