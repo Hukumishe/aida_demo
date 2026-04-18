@@ -191,12 +191,38 @@ export class ServicesImportService {
 
     const existingServices = await this.prisma.service.findMany({
       where: { organizationId },
-      select: { id: true, name: true, audience: true },
+      select: {
+        id: true,
+        name: true,
+        audience: true,
+        defaultPrice: true,
+        defaultDurationMin: true,
+        categoryId: true,
+      },
     });
-    const serviceKey = (name: string, audience: ServiceAudience) =>
-      `${name.trim().toLowerCase()}|${audience}`;
+    /**
+     * Дубликат = совпадают ВСЕ ключевые поля: имя + аудитория + цена + длительность + категория.
+     * Если хоть одно поле отличается (например, три «Электроэпиляция 1 час» с разной ценой) —
+     * считаем это отдельной услугой и создаём.
+     */
+    const serviceKey = (
+      name: string,
+      audience: ServiceAudience,
+      price: number,
+      duration: number,
+      categoryId: string,
+    ) =>
+      `${name.trim().toLowerCase()}|${audience}|${price}|${duration}|${categoryId}`;
     const existingSvcSet = new Set(
-      existingServices.map((s) => serviceKey(s.name, s.audience)),
+      existingServices.map((s) =>
+        serviceKey(
+          s.name,
+          s.audience,
+          s.defaultPrice ?? 0,
+          s.defaultDurationMin,
+          s.categoryId,
+        ),
+      ),
     );
 
     const createdCategories: { id: string; name: string }[] = [];
@@ -250,7 +276,13 @@ export class ServicesImportService {
         skippedCategories.push(cat);
       }
 
-      const svcKey = serviceKey(row.name, row.audience);
+      const svcKey = serviceKey(
+        row.name,
+        row.audience,
+        row.price,
+        row.duration,
+        cat.id,
+      );
       if (existingSvcSet.has(svcKey)) {
         skippedServices++;
         details.push({
@@ -258,7 +290,8 @@ export class ServicesImportService {
           status: 'skipped',
           category: row.category,
           name: row.name,
-          reason: 'Услуга уже существует (имя + аудитория)',
+          reason:
+            'Услуга уже существует (совпали имя, аудитория, цена, длительность и категория)',
         });
         continue;
       }
