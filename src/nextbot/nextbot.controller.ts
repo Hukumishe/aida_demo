@@ -133,10 +133,27 @@ export class NextbotController {
     return this.nextbotService.getServices(studioId.trim(), user);
   }
 
-  // --- get_active_promotions ---
+  // --- get_active_promotions (org-level) ---
+  // Акции действуют на всю организацию, поэтому studioId не требуется.
+  @Get('landing/promotions')
+  @ApiOperation({
+    summary: 'get_active_promotions',
+    description:
+      'Активные акции организации (определяется по JWT / API-ключу). studioId НЕ требуется — акции общие по всей сети салонов.',
+  })
+  getPromotionsForOrganization(@CurrentUser() user: CurrentUserPayload) {
+    return this.nextbotService.getPromotionsForOrganization(user);
+  }
+
+  // --- get_active_promotions (deprecated legacy: по studioId) ---
   @Get('studios/:studioId/landing/promotions')
   @UseGuards(StudioAccessGuard)
-  @ApiOperation({ summary: 'get_active_promotions' })
+  @ApiOperation({
+    summary: 'get_active_promotions (deprecated)',
+    description:
+      'DEPRECATED: акции привязаны к организации, studioId не нужен. Используй GET /nextbot/landing/promotions. Эндпоинт оставлен ради обратной совместимости.',
+    deprecated: true,
+  })
   getPromotions(
     @Param('studioId') studioId: string,
     @CurrentUser() user: CurrentUserPayload,

@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { PrismaService } from '../common/prisma/prisma.service';
 import { StudiosService } from '../studios/studios.service';
 import { ClientsService } from '../clients/clients.service';
 import { ServicesService } from '../services/services.service';
@@ -35,6 +36,7 @@ export type NextbotXmindFunction =
 @Injectable()
 export class NextbotService {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly studiosService: StudiosService,
     private readonly clientsService: ClientsService,
     private readonly servicesService: ServicesService,
@@ -286,6 +288,26 @@ export class NextbotService {
       user.organizationId,
       user.role,
     );
+    return this.withNextbotPrompt(user.organizationId, 'get_active_promotions', { data });
+  }
+
+  /**
+   * get_active_promotions (org-level) — акции действуют на всю организацию,
+   * поэтому studioId не нужен. Фильтруем по `organizationId` из текущего пользователя / API-ключа.
+   */
+  async getPromotionsForOrganization(user: CurrentUserPayload) {
+    const now = new Date();
+    const data = await this.prisma.landingPromotion.findMany({
+      where: {
+        organizationId: user.organizationId,
+        OR: [{ validUntil: null }, { validUntil: { gt: now } }],
+      },
+      include: {
+        services: { include: { service: true } },
+        codes: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
     return this.withNextbotPrompt(user.organizationId, 'get_active_promotions', { data });
   }
 
