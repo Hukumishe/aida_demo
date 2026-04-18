@@ -288,17 +288,37 @@ export class NextbotService {
    */
   async getPromotionsForOrganization(user: CurrentUserPayload) {
     const now = new Date();
-    const data = await this.prisma.landingPromotion.findMany({
+    const rows = await this.prisma.landingPromotion.findMany({
       where: {
         organizationId: user.organizationId,
+        isActive: true,
         OR: [{ validUntil: null }, { validUntil: { gt: now } }],
       },
-      include: {
-        services: { include: { service: true } },
-        codes: true,
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        description: true,
+        discountPercent: true,
+        bundlePrice: true,
+        validUntil: true,
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    // Возвращаем боту только то, что нужно для диалога:
+    // id, название, описание условий, тип, цена/скидка и дата окончания.
+    const data = rows.map((p) => ({
+      id: p.id,
+      title: p.title,
+      description: p.description,
+      type: p.type,
+      discountPercent: p.type === 'DISCOUNT' ? p.discountPercent : null,
+      bundlePrice:
+        p.type === 'ONE_PLUS_ONE' || p.type === 'SERVICE_BUNDLE' ? p.bundlePrice : null,
+      endsAt: p.validUntil,
+    }));
+
     return this.withNextbotPrompt(user.organizationId, 'get_active_promotions', { data });
   }
 
