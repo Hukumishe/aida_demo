@@ -1,11 +1,12 @@
 # Удобная обёртка xmind: отмена записи (тот же API, что modify_booking)
-# args: base_url, api_key, appointment_id
+# args: base_url, api_key, organization_id, appointment_id
 # Без import json — requests(..., json=...)
 
 base = args.get("base_url", "").rstrip("/")
 aid = str(args.get("appointment_id", ""))
 headers = {
   "X-API-Key": args.get("api_key", ""),
+  "X-Organization-Id": args.get("organization_id", ""),
   "Accept": "application/json",
   "Content-Type": "application/json",
 }

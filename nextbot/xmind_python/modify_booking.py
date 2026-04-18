@@ -1,5 +1,5 @@
 # xmind: modify_booking (перенос, отмена, предоплата — одно тело UpdateAppointmentDto)
-# args: base_url, api_key, appointment_id
+# args: base_url, api_key, organization_id, appointment_id
 # тело: patch_json — строка JSON, напр. {"status":"CANCELLED"} или {"startAt":"2025-01-15T10:00:00+06:00"}
 # Без import json — json.loads / requests(..., json=...) в среде Nextbot.
 
@@ -7,6 +7,7 @@ base = args.get("base_url", "").rstrip("/")
 aid = str(args.get("appointment_id", ""))
 headers = {
   "X-API-Key": args.get("api_key", ""),
+  "X-Organization-Id": args.get("organization_id", ""),
   "Accept": "application/json",
   "Content-Type": "application/json",
 }

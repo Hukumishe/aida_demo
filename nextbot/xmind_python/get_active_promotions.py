@@ -1,10 +1,11 @@
 # xmind: get_active_promotions
-# args: base_url, api_key, studio_id
+# args: base_url, api_key, organization_id, studio_id
 
 base = args.get("base_url", "").rstrip("/")
 sid = str(args.get("studio_id", ""))
 headers = {
   "X-API-Key": args.get("api_key", ""),
+  "X-Organization-Id": args.get("organization_id", ""),
   "Accept": "application/json",
 }
 url = base + "/nextbot/studios/" + sid + "/landing/promotions"

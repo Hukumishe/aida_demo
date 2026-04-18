@@ -1,5 +1,5 @@
 # Удобная обёртка: перенос времени (тот же API, что modify_booking)
-# args: base_url, api_key, appointment_id, start_at (ISO 8601 с таймзоной)
+# args: base_url, api_key, organization_id, appointment_id, start_at (ISO 8601 с таймзоной)
 # Без import json — requests(..., json=...)
 
 base = args.get("base_url", "").rstrip("/")
@@ -7,6 +7,7 @@ aid = str(args.get("appointment_id", ""))
 start_at = str(args.get("start_at", ""))
 headers = {
   "X-API-Key": args.get("api_key", ""),
+  "X-Organization-Id": args.get("organization_id", ""),
   "Accept": "application/json",
   "Content-Type": "application/json",
 }

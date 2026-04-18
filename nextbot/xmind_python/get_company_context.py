@@ -1,9 +1,10 @@
 # xmind: get_company_context
-# args: base_url, api_key
+# args: base_url, api_key, organization_id
 
 base = args.get("base_url", "").rstrip("/")
 headers = {
   "X-API-Key": args.get("api_key", ""),
+  "X-Organization-Id": args.get("organization_id", ""),
   "Accept": "application/json",
 }
 url = base + "/nextbot/context"

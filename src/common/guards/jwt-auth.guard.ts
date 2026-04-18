@@ -1,12 +1,12 @@
-import { Injectable, ExecutionContext } from '@nestjs/common';
+import { Injectable, ExecutionContext, BadRequestException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import * as crypto from 'crypto';
 
-/** Пользователь, под которым считаются запросы с валидным API-ключом (роль SERVICE = права уровня владельца) */
-const API_KEY_USER = {
+/** Базовые поля синтетического пользователя для запросов с валидным API-ключом (роль SERVICE = права уровня владельца). organizationId добавляется из заголовка X-Organization-Id. */
+const API_KEY_USER_BASE = {
   userId: 'api-key',
   role: 'SERVICE',
   studioId: undefined as string | undefined,
@@ -45,7 +45,18 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       const headerKey = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw[0] : undefined;
 
       if (headerKey && this.constantTimeCompare(headerKey, apiKey)) {
-        request.user = API_KEY_USER;
+        const orgHeader = request.headers['x-organization-id'];
+        const organizationId = typeof orgHeader === 'string'
+          ? orgHeader.trim()
+          : Array.isArray(orgHeader) ? orgHeader[0]?.trim() : undefined;
+
+        if (!organizationId) {
+          throw new BadRequestException(
+            'При авторизации по API-ключу обязателен заголовок X-Organization-Id с идентификатором организации.',
+          );
+        }
+
+        request.user = { ...API_KEY_USER_BASE, organizationId };
         return true;
       }
     }

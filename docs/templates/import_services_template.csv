@@ -1,0 +1,4 @@
+name,defaultDurationMin,defaultPrice,requiredStaffCount,categoryName,categoryId,audience,isActive,bonusAccrualEnabled
+Женская стрижка,60,12000,1,Стрижки,sca_abc12defgh3,WOMEN,true,true
+Мужская стрижка,45,9000,1,Стрижки,sca_abc12defgh3,MEN,true,true
+Окрашивание корней,120,18000,1,Окрашивание,sca_qwe34rtyu78,WOMEN,true,true

@@ -1,5 +1,5 @@
 # xmind: process_survey_answers
-# args: base_url, api_key, client_id, answers_json (строка JSON объекта)
+# args: base_url, api_key, organization_id, client_id, answers_json (строка JSON объекта)
 # опционально: merge_into_notes (по умолчанию True), survey_prefix
 # Без import json — см. комментарий в register_new_client.py
 
@@ -7,6 +7,7 @@ base = args.get("base_url", "").rstrip("/")
 cid = str(args.get("client_id", ""))
 headers = {
   "X-API-Key": args.get("api_key", ""),
+  "X-Organization-Id": args.get("organization_id", ""),
   "Accept": "application/json",
   "Content-Type": "application/json",
 }

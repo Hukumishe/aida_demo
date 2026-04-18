@@ -1,5 +1,5 @@
 # xmind: process_survey_answers_failed (заглушка backend 501)
-# args: base_url, api_key, client_id
+# args: base_url, api_key, organization_id, client_id
 # опционально: body_json — произвольный JSON
 # Без import json — json.loads / requests(..., json=...)
 
@@ -7,6 +7,7 @@ base = args.get("base_url", "").rstrip("/")
 cid = str(args.get("client_id", ""))
 headers = {
   "X-API-Key": args.get("api_key", ""),
+  "X-Organization-Id": args.get("organization_id", ""),
   "Accept": "application/json",
   "Content-Type": "application/json",
 }

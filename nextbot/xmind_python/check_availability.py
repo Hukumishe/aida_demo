@@ -1,5 +1,5 @@
 # xmind: check_availability
-# args: base_url, api_key, studio_id, date (YYYY-MM-DD)
+# args: base_url, api_key, organization_id, studio_id, date (YYYY-MM-DD)
 # опционально: staff_user_id, service_id, duration_minutes, slot_step_minutes
 # Ответ API: freeSlots (только свободные окна), check_availability (текст промпта для ИИ), durationMinutes, slotStepMinutes, date, studioId
 
@@ -11,6 +11,7 @@ if staff == "":
   staff = None
 headers = {
   "X-API-Key": args.get("api_key", ""),
+  "X-Organization-Id": args.get("organization_id", ""),
   "Accept": "application/json",
 }
 params = {"date": date}
