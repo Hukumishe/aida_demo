@@ -120,8 +120,11 @@ export class NextbotController {
   @Get('studios/:studioId/landing/promotions')
   @UseGuards(StudioAccessGuard)
   @ApiOperation({ summary: 'get_active_promotions' })
-  getPromotions(@Param('studioId') studioId: string) {
-    return this.nextbotService.getPromotions(studioId);
+  getPromotions(
+    @Param('studioId') studioId: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.nextbotService.getPromotions(studioId, user);
   }
 
   // --- check_loyalty_status ---

@@ -8,10 +8,33 @@ import { UpdatePromptDto } from './dto/update-prompt.dto';
 export class PromptsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Текст промпта для Nextbot: сначала запись организации, иначе глобальная (organizationId null).
+   */
+  async getDescriptionForOrganization(
+    organizationId: string,
+    key: string,
+  ): Promise<string | null> {
+    const forOrg = await this.prisma.prompt.findFirst({
+      where: { key, organizationId },
+      select: { description: true },
+    });
+    if (forOrg) {
+      return forOrg.description;
+    }
+    const global = await this.prisma.prompt.findFirst({
+      where: { key, organizationId: null },
+      select: { description: true },
+    });
+    return global?.description ?? null;
+  }
+
   async create(dto: CreatePromptDto) {
-    const existing = await this.prisma.prompt.findUnique({ where: { key: dto.key } });
+    const existing = await this.prisma.prompt.findFirst({
+      where: { key: dto.key, organizationId: null },
+    });
     if (existing) {
-      throw new ConflictException(`Промпт с ключом "${dto.key}" уже существует`);
+      throw new ConflictException(`Промпт с ключом "${dto.key}" уже существует (глобальный)`);
     }
     return this.prisma.prompt.create({
       data: {
@@ -37,13 +60,17 @@ export class PromptsService {
   }
 
   async update(id: string, dto: UpdatePromptDto) {
-    await this.findOne(id);
+    const current = await this.findOne(id);
     if (dto.key != null) {
       const existing = await this.prisma.prompt.findFirst({
-        where: { key: dto.key, NOT: { id } },
+        where: {
+          key: dto.key,
+          organizationId: current.organizationId,
+          NOT: { id },
+        },
       });
       if (existing) {
-        throw new ConflictException(`Промпт с ключом "${dto.key}" уже существует`);
+        throw new ConflictException(`Промпт с ключом "${dto.key}" уже существует для этой области`);
       }
     }
     return this.prisma.prompt.update({

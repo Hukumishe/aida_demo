@@ -279,7 +279,6 @@ export class AvailabilityService {
       startAt: string;
       endAt: string;
     }>;
-    check_availability: string;
   }> {
     const dateStr = dateInput.includes('T') ? dateInput.split('T')[0] : dateInput;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
@@ -447,7 +446,6 @@ export class AvailabilityService {
       durationMinutes,
       slotStepMinutes: slotStep,
       freeSlots,
-      check_availability: NEXTBOT_CHECK_AVAILABILITY_PROMPT,
     };
   }
 }

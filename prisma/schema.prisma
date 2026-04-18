@@ -237,15 +237,16 @@ model ClientStudioLoyalty {
 
 model Prompt {
   id             String   @id
-  key            String   @unique
+  key            String
   description    String
-  organizationId String? // null — общий промпт (сервисный аккаунт)
+  organizationId String? // null — общий промпт; иначе промпт организации (см. частичные unique-индексы в миграции)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
+  @@index([organizationId, key])
   @@map("prompts")
 }
 

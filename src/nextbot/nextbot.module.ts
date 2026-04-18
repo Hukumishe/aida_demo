@@ -5,10 +5,9 @@ import { StudiosModule } from '../studios/studios.module';
 import { ClientsModule } from '../clients/clients.module';
 import { ServicesModule } from '../services/services.module';
 import { LandingModule } from '../landing/landing.module';
-import { ScheduleModule } from '../schedule/schedule.module';
-import { BusySlotsModule } from '../busy-slots/busy-slots.module';
 import { AppointmentsModule } from '../appointments/appointments.module';
 import { AvailabilityModule } from '../availability/availability.module';
+import { PromptsModule } from '../prompts/prompts.module';
 
 @Module({
   imports: [
@@ -16,10 +15,9 @@ import { AvailabilityModule } from '../availability/availability.module';
     ClientsModule,
     ServicesModule,
     LandingModule,
-    ScheduleModule,
-    BusySlotsModule,
     AppointmentsModule,
     AvailabilityModule,
+    PromptsModule,
   ],
   controllers: [NextbotController],
   providers: [NextbotService],

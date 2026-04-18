@@ -3,16 +3,18 @@ import { StudiosService } from '../studios/studios.service';
 import { ClientsService } from '../clients/clients.service';
 import { ServicesService } from '../services/services.service';
 import { LandingService } from '../landing/landing.service';
-import { ScheduleService } from '../schedule/schedule.service';
-import { BusySlotsService } from '../busy-slots/busy-slots.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { CreateClientDto } from '../clients/dto/create-client.dto';
 import { CreateAppointmentDto } from '../appointments/dto/create-appointment.dto';
 import { UpdateAppointmentDto } from '../appointments/dto/update-appointment.dto';
 import { NextbotSurveyDto } from './dto/nextbot-survey.dto';
 import { CurrentUserPayload } from '../common/decorators/current-user.decorator';
-import { AvailabilityService } from '../availability/availability.service';
+import {
+  AvailabilityService,
+  NEXTBOT_CHECK_AVAILABILITY_PROMPT,
+} from '../availability/availability.service';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { PromptsService } from '../prompts/prompts.service';
 
 /** Имена функций из системного промпта xmind (aida_xmind.pdf). */
 export type NextbotXmindFunction =
@@ -33,11 +35,37 @@ export class NextbotService {
     private readonly clientsService: ClientsService,
     private readonly servicesService: ServicesService,
     private readonly landingService: LandingService,
-    private readonly scheduleService: ScheduleService,
-    private readonly busySlotsService: BusySlotsService,
     private readonly appointmentsService: AppointmentsService,
     private readonly availabilityService: AvailabilityService,
+    private readonly promptsService: PromptsService,
   ) {}
+
+  /**
+   * Добавляет в ответ текст промпта с портала (таблица prompts) под ключом имени функции xmind.
+   * Приоритет: промпт организации → глобальный (organizationId null) → fallback.
+   */
+  private async withNextbotPrompt<T extends Record<string, unknown>>(
+    organizationId: string | undefined,
+    functionKey: string,
+    data: T,
+    fallback?: string,
+  ): Promise<T & Record<string, string>> {
+    let text = fallback ?? '';
+    if (organizationId?.trim()) {
+      const custom = await this.promptsService.getDescriptionForOrganization(
+        organizationId.trim(),
+        functionKey,
+      );
+      if (custom != null && custom.trim() !== '') {
+        text = custom;
+      } else if (fallback !== undefined) {
+        text = fallback;
+      }
+    } else if (fallback !== undefined) {
+      text = fallback;
+    }
+    return { ...data, [functionKey]: text } as T & Record<string, string>;
+  }
 
   /** Заглушка: функция из xmind, в CRM ещё нет реализации. */
   notImplemented(fn: NextbotXmindFunction): never {
@@ -59,77 +87,106 @@ export class NextbotService {
       user.studioId,
       user.organizationId,
     );
-    return {
+    return this.withNextbotPrompt(user.organizationId, 'get_company_context', {
       organizationId: user.organizationId,
       studios,
-    };
+    });
   }
 
-  /** verify_client_status */
-  async verifyClient(q: string | undefined, user: CurrentUserPayload) {
+  /** Без промпта — общая логика для verify / loyalty / referral. */
+  private async resolveClientProfile(q: string | undefined, user: CurrentUserPayload) {
     const list = await this.clientsService.findAll(
       q,
       user.role,
       user.organizationId,
     );
     if (!list.length) {
-      return { found: false, client: null as null };
+      return null;
     }
-    const profile = await this.clientsService.findOne(
+    return this.clientsService.findOne(
       list[0].id,
       user.role,
       user.studioId,
       user.organizationId,
     );
-    return { found: true, client: profile };
+  }
+
+  /** verify_client_status */
+  async verifyClient(q: string | undefined, user: CurrentUserPayload) {
+    const profile = await this.resolveClientProfile(q, user);
+    if (!profile) {
+      return this.withNextbotPrompt(user.organizationId, 'verify_client_status', {
+        found: false,
+        client: null as unknown as null,
+      });
+    }
+    return this.withNextbotPrompt(user.organizationId, 'verify_client_status', {
+      found: true,
+      client: profile as unknown as Record<string, unknown>,
+    });
   }
 
   /** check_loyalty_status */
   async loyaltySummary(q: string | undefined, user: CurrentUserPayload) {
-    const status = await this.verifyClient(q, user);
-    if (!status.found || !status.client) {
-      return {
+    const profile = await this.resolveClientProfile(q, user);
+    if (!profile) {
+      return this.withNextbotPrompt(user.organizationId, 'check_loyalty_status', {
         found: false,
         clientId: null,
         level: null,
         bonuses: null,
         discount: null,
         rawClient: null,
-      };
+      });
     }
-    const c = status.client as Record<string, unknown>;
+    const c = profile as Record<string, unknown>;
     const ol = c['organizationLoyalty'] as { currentTier?: { name?: string } } | null | undefined;
     const slLegacy = c['studioLoyalty'] as { currentTier?: { name?: string } } | null | undefined;
     const loyaltyTierName = ol?.currentTier?.name ?? slLegacy?.currentTier?.name ?? null;
-    return {
+    return this.withNextbotPrompt(user.organizationId, 'check_loyalty_status', {
       found: true,
       clientId: c['id'],
       level: c['level'] ?? null,
       loyaltyTierName,
       bonuses: c['bonuses'] ?? null,
       discount: c['discount'] ?? null,
-      rawClient: status.client,
-    };
+      rawClient: profile,
+    });
   }
 
   /** get_referral_code */
   async referralSummary(q: string | undefined, user: CurrentUserPayload) {
-    const status = await this.verifyClient(q, user);
-    if (!status.found || !status.client) {
-      return { found: false, clientId: null, referralCode: null, rawClient: null };
+    const profile = await this.resolveClientProfile(q, user);
+    if (!profile) {
+      return this.withNextbotPrompt(user.organizationId, 'get_referral_code', {
+        found: false,
+        clientId: null,
+        referralCode: null,
+        rawClient: null,
+      });
     }
-    const c = status.client as Record<string, unknown>;
-    return {
+    const c = profile as Record<string, unknown>;
+    return this.withNextbotPrompt(user.organizationId, 'get_referral_code', {
       found: true,
       clientId: c['id'],
       referralCode: c['referralCode'] ?? null,
-      rawClient: status.client,
-    };
+      rawClient: profile,
+    });
   }
 
   /** register_new_client */
-  registerClient(dto: CreateClientDto, user: CurrentUserPayload) {
-    return this.clientsService.create(dto, user.role, user.studioId, user.organizationId);
+  async registerClient(dto: CreateClientDto, user: CurrentUserPayload) {
+    const created = await this.clientsService.create(
+      dto,
+      user.role,
+      user.studioId,
+      user.organizationId,
+    );
+    return this.withNextbotPrompt(
+      user.organizationId,
+      'register_new_client',
+      created as unknown as Record<string, unknown>,
+    );
   }
 
   /** process_survey_answers */
@@ -153,29 +210,42 @@ export class NextbotService {
       newNotes = old ? `${old}\n\n${block}`.trim() : block;
     }
 
-    return this.clientsService.update(
+    const updated = await this.clientsService.update(
       clientId,
       { notes: newNotes },
       user.role,
       user.studioId,
       user.organizationId,
     );
+    return this.withNextbotPrompt(
+      user.organizationId,
+      'process_survey_answers',
+      updated as unknown as Record<string, unknown>,
+    );
   }
 
   /** get_services_and_prices */
-  getServices(studioId: string, user: CurrentUserPayload) {
-    return this.servicesService.findAll(
+  async getServices(studioId: string, user: CurrentUserPayload) {
+    const data = await this.servicesService.findAll(
       user.role,
       user.studioId,
       user.organizationId,
       undefined,
       studioId,
     );
+    return this.withNextbotPrompt(user.organizationId, 'get_services_and_prices', {
+      data,
+    });
   }
 
   /** get_active_promotions */
-  getPromotions(studioId: string) {
-    return this.landingService.getPromotions(studioId);
+  async getPromotions(studioId: string, user: CurrentUserPayload) {
+    const data = await this.landingService.getPromotions(
+      studioId,
+      user.organizationId,
+      user.role,
+    );
+    return this.withNextbotPrompt(user.organizationId, 'get_active_promotions', { data });
   }
 
   /**
@@ -206,26 +276,37 @@ export class NextbotService {
     const effectiveStaffId =
       user.role === UserRole.MASTER ? user.userId : staffUserId;
 
-    return this.availabilityService.computeNextbotFreeSlots(studioId, date, {
+    const slots = await this.availabilityService.computeNextbotFreeSlots(studioId, date, {
       staffUserId: effectiveStaffId ?? undefined,
       serviceId: options?.serviceId,
       durationMinutes: options?.durationMinutes,
       slotStepMinutes: options?.slotStepMinutes,
     });
+    return this.withNextbotPrompt(
+      user.organizationId,
+      'check_availability',
+      slots as unknown as Record<string, unknown>,
+      NEXTBOT_CHECK_AVAILABILITY_PROMPT,
+    );
   }
 
   /** create_booking_request */
-  createAppointment(
+  async createAppointment(
     studioId: string,
     dto: CreateAppointmentDto,
     user: CurrentUserPayload,
   ) {
-    return this.appointmentsService.create(
+    const created = await this.appointmentsService.create(
       studioId,
       dto,
       user.role,
       user.studioId,
       user.organizationId,
+    );
+    return this.withNextbotPrompt(
+      user.organizationId,
+      'create_booking_request',
+      created as unknown as Record<string, unknown>,
     );
   }
 
@@ -233,18 +314,23 @@ export class NextbotService {
    * modify_booking (в т.ч. перенос и отмена: `status: CANCELLED` в теле).
    * В xmind отмена/перенос не выделены отдельными функциями.
    */
-  modifyBooking(
+  async modifyBooking(
     id: string,
     dto: UpdateAppointmentDto,
     user: CurrentUserPayload,
   ) {
-    return this.appointmentsService.update(
+    const updated = await this.appointmentsService.update(
       id,
       dto,
       user.role,
       user.studioId,
       user.userId,
       user.organizationId,
+    );
+    return this.withNextbotPrompt(
+      user.organizationId,
+      'modify_booking',
+      updated as unknown as Record<string, unknown>,
     );
   }
 }
