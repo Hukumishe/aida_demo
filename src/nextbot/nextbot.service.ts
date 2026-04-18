@@ -21,6 +21,19 @@ import {
   VerifyClientVerificationStatus,
 } from './verify-client-status.constants';
 
+/** Фолбэк-промпт для get_service_categories, если в таблице prompts нет записи. */
+export const NEXTBOT_GET_SERVICE_CATEGORIES_PROMPT = [
+  'СИСТЕМНОЕ СООБЩЕНИЕ: Категории услуг успешно загружены в массиве "categories". Включай режим подбора процедур.',
+  '',
+  'ТВОИ ДЕЙСТВИЯ:',
+  'ГЕНДЕРНАЯ ИДЕНТИФИКАЦИЯ (КРИТИЧНО): Студия обслуживает как женщин, так и мужчин, но расчет стоимости производится по разным прайсам. Если к тебе обращается новый клиент и его пол неочевиден, ты обязана напрямую, но максимально деликатно уточнить этот момент до начала подбора окон и озвучивания цен. Используй строго следующие формулировки:',
+  '"Подскажите, вас интересует мужской или женский прайс?"',
+  '"Вы планируете запись для себя или для мужчины?"',
+  'ПРЕЗЕНТАЦИЯ КАТЕГОРИЙ: Озвучь клиенту доступные направления услуг, используя их названия из поля "name" в массиве "categories".',
+  'ПРОВЕРКА ДОСТУПНОСТИ (КРИТИЧНО): В массиве "categories" у каждой услуги есть параметр "available_in" со списком ID филиалов. Если клиент выбрал услугу, которая доступна НЕ во всех студиях (например, только в одной), ты ОБЯЗАН предупредить его об этом и предложить только доступные варианты, опираясь на названия из справочника локаций в твоем базовом контексте.',
+  'ПЕРЕХОД К ПРАЙСУ: Как только клиент определится с категорией (зафиксируй её "id") и ты будешь точно знать нужный прайс, вызывай функцию get_services_and_prices для получения конкретных услуг.',
+].join('\n');
+
 /** Имена функций из системного промпта xmind (aida_xmind.pdf). */
 export type NextbotXmindFunction =
   | 'add_to_waitlist'
@@ -282,6 +295,57 @@ export class NextbotService {
   }
 
   /** get_active_promotions */
+  /**
+   * get_service_categories — укрупнённые направления работы (категории услуг).
+   * Возвращает активные категории организации + для каждой `available_in`
+   * (филиалы сети, где категория НЕ отключена через StudioDisabledCategory).
+   */
+  async getServiceCategories(user: CurrentUserPayload) {
+    const [categories, studios, disabled] = await Promise.all([
+      this.prisma.serviceCategory.findMany({
+        where: { organizationId: user.organizationId, isActive: true },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.studio.findMany({
+        where: { organizationId: user.organizationId },
+        select: { id: true },
+      }),
+      this.prisma.studioDisabledCategory.findMany({
+        where: { studio: { organizationId: user.organizationId } },
+        select: { studioId: true, categoryId: true },
+      }),
+    ]);
+
+    const allStudioIds = studios.map((s) => s.id);
+    const disabledByCategory = new Map<string, Set<string>>();
+    for (const row of disabled) {
+      if (!disabledByCategory.has(row.categoryId)) {
+        disabledByCategory.set(row.categoryId, new Set());
+      }
+      disabledByCategory.get(row.categoryId)!.add(row.studioId);
+    }
+
+    const data = {
+      categories: categories.map((c) => {
+        const disabledSet = disabledByCategory.get(c.id) ?? new Set<string>();
+        const availableIn = allStudioIds.filter((sid) => !disabledSet.has(sid));
+        return {
+          id: c.id,
+          name: c.name,
+          available_in: availableIn,
+        };
+      }),
+    };
+
+    return this.withNextbotPrompt(
+      user.organizationId,
+      'get_service_categories',
+      data,
+      NEXTBOT_GET_SERVICE_CATEGORIES_PROMPT,
+    );
+  }
+
   /**
    * get_active_promotions — акции действуют на всю организацию,
    * поэтому studioId не нужен. Фильтруем по `organizationId` из текущего пользователя / API-ключа.

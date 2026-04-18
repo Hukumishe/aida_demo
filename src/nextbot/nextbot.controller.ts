@@ -115,6 +115,27 @@ export class NextbotController {
     return this.nextbotService.notImplemented('process_survey_answers_failed');
   }
 
+  // --- get_service_categories ---
+  // Первичный фильтр: укрупнённые направления работы (категории услуг).
+  // Для каждой категории возвращается `available_in` — список ID филиалов организации,
+  // где она НЕ отключена (учёт StudioDisabledCategory).
+  @Get('service-categories')
+  @ApiOperation({
+    summary: 'get_service_categories',
+    description:
+      'Возвращает категории услуг организации для презентации клиенту. У каждой категории есть ' +
+      '`available_in` — ID филиалов, где она доступна. Организация определяется по JWT / API-ключу. ' +
+      'Параметр `studioId` принимается для совместимости, но не обязателен (категории общие на всю сеть).',
+  })
+  @ApiQuery({
+    name: 'studioId',
+    required: false,
+    description: 'Необязательно. Принимается для совместимости с вызовом из xmind-обёртки.',
+  })
+  getServiceCategories(@CurrentUser() user: CurrentUserPayload) {
+    return this.nextbotService.getServiceCategories(user);
+  }
+
   // --- get_services_and_prices ---
   @Get('services')
   @ApiOperation({ summary: 'get_services_and_prices' })
