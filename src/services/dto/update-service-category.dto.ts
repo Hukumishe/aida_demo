@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class UpdateServiceCategoryDto {
   @ApiProperty({ required: false })
@@ -13,4 +13,13 @@ export class UpdateServiceCategoryDto {
   @IsOptional()
   @Min(0)
   sortOrder?: number;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Включить/выключить категорию в каталоге сети. Все услуги в категории получают тот же isActive.',
+  })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }

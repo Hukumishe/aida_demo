@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { assertServiceBookableAtStudio } from '../common/service-studio-offering';
 
 /** Промпт для ИИ: возвращается в теле ответа Nextbot под ключом `check_availability`. */
 export const NEXTBOT_CHECK_AVAILABILITY_PROMPT =
@@ -298,24 +299,12 @@ export class AvailabilityService {
 
     let durationMinutes = options.durationMinutes ?? 60;
     if (options.serviceId) {
-      const service = await this.prisma.service.findFirst({
-        where: {
-          id: options.serviceId,
-          organizationId: studioRow.organizationId,
-          isActive: true,
-        },
-      });
-      if (!service) {
-        throw new NotFoundException('Service not found for this studio');
-      }
-      const disabledAtStudio = await this.prisma.studioDisabledService.findUnique({
-        where: {
-          studioId_serviceId: { studioId, serviceId: service.id },
-        },
-      });
-      if (disabledAtStudio) {
-        throw new NotFoundException('Service is not offered at this studio');
-      }
+      const service = await assertServiceBookableAtStudio(
+        this.prisma,
+        studioId,
+        options.serviceId,
+        studioRow.organizationId,
+      );
       durationMinutes = service.defaultDurationMin;
       if (options.staffUserId) {
         const ov = await this.prisma.staffServiceOverride.findUnique({

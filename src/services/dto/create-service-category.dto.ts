@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateServiceCategoryDto {
   @ApiProperty({ example: 'Стрижка' })
@@ -13,4 +13,13 @@ export class CreateServiceCategoryDto {
   @IsOptional()
   @Min(0)
   sortOrder?: number;
+
+  @ApiProperty({
+    required: false,
+    default: true,
+    description: 'Доступность категории в каталоге сети',
+  })
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }

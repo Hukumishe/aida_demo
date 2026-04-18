@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { assertServiceBookableAtStudio } from '../common/service-studio-offering';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { CreateOrganizationOwnerDto } from './dto/create-organization-owner.dto';
@@ -421,36 +422,22 @@ export class UsersService {
       throw new ForbiddenException('Access denied to this staff member');
     }
 
-    // Verify service exists and belongs to same studio
-    const service = await this.prisma.service.findUnique({
-      where: { id: serviceId },
-    });
-
-    if (!service) {
-      throw new NotFoundException(`Service with ID ${serviceId} not found`);
-    }
-
     const staffBranch = staff.studioId
       ? await this.prisma.studio.findUnique({
           where: { id: staff.studioId },
           select: { organizationId: true },
         })
       : null;
-    if (!staffBranch || service.organizationId !== staffBranch.organizationId) {
-      throw new BadRequestException('Service does not belong to the same organization as the staff branch');
+    if (!staffBranch) {
+      throw new BadRequestException('Staff has no branch');
     }
 
-    const disabledAtStudio = await this.prisma.studioDisabledService.findUnique({
-      where: {
-        studioId_serviceId: {
-          studioId: staff.studioId!,
-          serviceId,
-        },
-      },
-    });
-    if (disabledAtStudio) {
-      throw new BadRequestException('Эта услуга отключена в этом филиале');
-    }
+    const service = await assertServiceBookableAtStudio(
+      this.prisma,
+      staff.studioId!,
+      serviceId,
+      staffBranch.organizationId,
+    );
 
     // Check if already exists
     const existing = await this.prisma.staffService.findUnique({

@@ -36,15 +36,25 @@ export class ServicesController {
   // --- Категории (статические пути до :id) ---
 
   @Get('categories')
-  @ApiOperation({ summary: 'Список категорий услуг организации' })
+  @ApiOperation({
+    summary: 'Список категорий услуг организации',
+    description:
+      'Опционально `studioId` — добавить `isOfferedInStudio` для выбранного филиала (как у услуг).',
+  })
   @ApiQuery({
     name: 'organizationId',
     required: false,
     description: 'Только DEVELOPER: категории указанной организации',
   })
+  @ApiQuery({
+    name: 'studioId',
+    required: false,
+    description: 'Филиал для флага isOfferedInStudio (переключение — PATCH categories/.../studio-offering)',
+  })
   @ApiResponse({ status: 200 })
   listCategories(
     @Query('organizationId') organizationId: string | undefined,
+    @Query('studioId') studioId: string | undefined,
     @CurrentUser() user?: any,
   ) {
     return this.servicesService.findCategories(
@@ -52,6 +62,7 @@ export class ServicesController {
       user?.studioId,
       user?.organizationId,
       organizationId,
+      studioId,
     );
   }
 
@@ -74,6 +85,29 @@ export class ServicesController {
       user?.studioId,
       user?.organizationId,
       organizationId,
+    );
+  }
+
+  @Patch('categories/:categoryId/studio-offering')
+  @ApiOperation({
+    summary: 'Включить/выключить категорию только в выбранном филиале',
+    description:
+      'Тело: `studioId` + `offered`. Каталог сети и другие филиалы не меняются; услуги в категории наследуют недоступность здесь.',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 404 })
+  setCategoryStudioOffering(
+    @Param('categoryId') categoryId: string,
+    @Body() dto: SetServiceStudioOfferingDto,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.setStudioCategoryOffering(
+      categoryId,
+      dto.studioId,
+      dto.offered,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
     );
   }
 

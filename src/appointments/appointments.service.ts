@@ -27,6 +27,7 @@ import {
   assertUserOrganizationMatchesStudio,
   assertUserOrganizationMatchesStudioOrganizationId,
 } from '../common/organization-scope';
+import { assertServiceBookableAtStudio } from '../common/service-studio-offering';
 
 @Injectable()
 export class AppointmentsService {
@@ -170,23 +171,12 @@ export class AppointmentsService {
       throw new BadRequestException('Cannot create appointment for a blacklisted client');
     }
 
-    // Verify service exists and belongs to studio
-    const service = await this.prisma.service.findUnique({
-      where: { id: createAppointmentDto.serviceId },
-    });
-
-    if (!service || service.organizationId !== studio.organizationId || !service.isActive) {
-      throw new NotFoundException('Service not found, does not belong to this organization, or is inactive');
-    }
-
-    const disabledAtStudio = await this.prisma.studioDisabledService.findUnique({
-      where: {
-        studioId_serviceId: { studioId, serviceId: service.id },
-      },
-    });
-    if (disabledAtStudio) {
-      throw new NotFoundException('Service is not offered at this studio');
-    }
+    const service = await assertServiceBookableAtStudio(
+      this.prisma,
+      studioId,
+      createAppointmentDto.serviceId,
+      studio.organizationId,
+    );
 
     // Get duration (override if exists, otherwise default)
     const staffOverride = await this.prisma.staffServiceOverride.findUnique({

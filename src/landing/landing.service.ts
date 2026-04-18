@@ -11,7 +11,12 @@ import {
   assertUserOrganizationMatchesStudio,
   getOrganizationIdForStudio,
 } from '../common/organization-scope';
-import { getDisabledServiceIdsForStudio } from '../common/service-studio-offering';
+import {
+  assertServiceBookableAtStudio,
+  getDisabledServiceIdsForStudio,
+  getDisabledCategoryIdsForStudio,
+  isServiceOfferedInStudio,
+} from '../common/service-studio-offering';
 import { isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { ServicesService } from '../services/services.service';
 
@@ -69,7 +74,10 @@ export class LandingService {
 
   async resolvePromotionCode(studioId: string, rawCode: string) {
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
-    const disabledServiceIds = await getDisabledServiceIdsForStudio(this.prisma, studioId);
+    const [disabledServiceIds, disabledCategoryIds] = await Promise.all([
+      getDisabledServiceIdsForStudio(this.prisma, studioId),
+      getDisabledCategoryIdsForStudio(this.prisma, studioId),
+    ]);
     const code = rawCode?.trim().toUpperCase();
     if (!code) {
       throw new BadRequestException('Promo code is required');
@@ -82,7 +90,7 @@ export class LandingService {
           include: {
             services: {
               include: {
-                service: true,
+                service: { include: { category: true } },
               },
             },
           },
@@ -117,15 +125,26 @@ export class LandingService {
           organizationId,
           isActive: true,
           id: { in: [promotion.serviceIdA, promotion.serviceIdB] },
+          category: { isActive: true },
         },
         select: {
           id: true,
           name: true,
           defaultPrice: true,
           defaultDurationMin: true,
+          isActive: true,
+          categoryId: true,
+          category: { select: { id: true, isActive: true } },
         },
       });
-      const services = servicesRaw.filter((s) => !disabledServiceIds.has(s.id));
+      const services = servicesRaw.filter((s) =>
+        isServiceOfferedInStudio(
+          s,
+          s.category,
+          disabledServiceIds,
+          disabledCategoryIds,
+        ),
+      );
       return {
         code,
         promotionId: promotion.id,
@@ -146,9 +165,14 @@ export class LandingService {
         .map((x) => x.service)
         .filter(
           (s) =>
+            s &&
             s.organizationId === organizationId &&
-            s.isActive &&
-            !disabledServiceIds.has(s.id),
+            isServiceOfferedInStudio(
+              s,
+              s.category,
+              disabledServiceIds,
+              disabledCategoryIds,
+            ),
         )
         .map((s) => ({
           id: s.id,
@@ -177,9 +201,14 @@ export class LandingService {
         .map((x) => x.service)
         .filter(
           (s) =>
+            s &&
             s.organizationId === organizationId &&
-            s.isActive &&
-            !disabledServiceIds.has(s.id),
+            isServiceOfferedInStudio(
+              s,
+              s.category,
+              disabledServiceIds,
+              disabledCategoryIds,
+            ),
         )
         .map((s) => ({
           id: s.id,
@@ -452,15 +481,27 @@ export class LandingService {
 
   async getServiceCards(studioId: string) {
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
-    const disabledServiceIds = await getDisabledServiceIdsForStudio(this.prisma, studioId);
+    const [disabledServiceIds, disabledCategoryIds] = await Promise.all([
+      getDisabledServiceIdsForStudio(this.prisma, studioId),
+      getDisabledCategoryIdsForStudio(this.prisma, studioId),
+    ]);
     const cards = await this.prisma.landingServiceCard.findMany({
       where: { organizationId },
       include: {
-        service: true,
+        service: { include: { category: true } },
       },
       orderBy: { order: 'asc' },
     });
-    return cards.filter((c) => c.service && !disabledServiceIds.has(c.serviceId));
+    return cards.filter(
+      (c) =>
+        c.service &&
+        isServiceOfferedInStudio(
+          c.service,
+          c.service.category,
+          disabledServiceIds,
+          disabledCategoryIds,
+        ),
+    );
   }
 
   async createServiceCard(
@@ -473,20 +514,7 @@ export class LandingService {
 
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
-    const service = await this.prisma.service.findFirst({
-      where: { id: dto.serviceId, organizationId },
-    });
-    if (!service) {
-      throw new NotFoundException('Service not found in this studio');
-    }
-    const disabledAtStudio = await this.prisma.studioDisabledService.findUnique({
-      where: {
-        studioId_serviceId: { studioId, serviceId: service.id },
-      },
-    });
-    if (disabledAtStudio) {
-      throw new BadRequestException('Нельзя добавить карточку: услуга отключена в этом филиале');
-    }
+    await assertServiceBookableAtStudio(this.prisma, studioId, dto.serviceId, organizationId);
 
     const count = await this.prisma.landingServiceCard.count({
       where: { organizationId },

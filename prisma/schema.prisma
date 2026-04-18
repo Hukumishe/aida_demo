@@ -177,9 +177,10 @@ model Studio {
   busySlots             BusySlot[]
   appointments          Appointment[]
   staffServices           StaffService[]
-  staffServiceOverrides   StaffServiceOverride[]
-  studioDisabledServices  StudioDisabledService[]
-  noShowIncomes           NoShowIncome[]
+  staffServiceOverrides      StaffServiceOverride[]
+  studioDisabledServices     StudioDisabledService[]
+  studioDisabledCategories   StudioDisabledCategory[]
+  noShowIncomes              NoShowIncome[]
   Notification            Notification[]
   warehouse               Warehouse?
 
@@ -482,11 +483,14 @@ model ServiceCategory {
   organizationId String
   name           String
   sortOrder      Int      @default(0)
+  /// Доступность категории в каталоге сети; при выключении синхронно выставляется всем услугам категории.
+  isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  services     Service[]
+  organization             Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  services                 Service[]
+  studioDisabledCategories StudioDisabledCategory[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -535,6 +539,20 @@ model StudioDisabledService {
   @@id([studioId, serviceId])
   @@index([serviceId])
   @@map("studio_disabled_services")
+}
+
+/// Категория отключена в филиале: все услуги категории недоступны здесь (каталог сети не меняется).
+model StudioDisabledCategory {
+  studioId   String
+  categoryId String
+  createdAt  DateTime @default(now())
+
+  studio   Studio          @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  category ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([studioId, categoryId])
+  @@index([categoryId])
+  @@map("studio_disabled_categories")
 }
 
 // --- Настройки лендинга ---

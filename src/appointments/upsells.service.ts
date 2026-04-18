@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { assertServiceBookableAtStudio } from '../common/service-studio-offering';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateUpsellDto } from './dto/create-upsell.dto';
 import { UpdateUpsellDto } from './dto/update-upsell.dto';
@@ -40,30 +41,12 @@ export class UpsellsService {
       }
     }
 
-    // Проверяем, что услуга существует и принадлежит тому же салону
-    const service = await this.prisma.service.findUnique({
-      where: { id: createUpsellDto.serviceId },
-    });
-
-    if (!service || service.organizationId !== appointment.studio.organizationId) {
-      throw new NotFoundException('Service not found or does not belong to this studio');
-    }
-
-    if (!service.isActive) {
-      throw new BadRequestException('Service is not active');
-    }
-
-    const disabledAtStudio = await this.prisma.studioDisabledService.findUnique({
-      where: {
-        studioId_serviceId: {
-          studioId: appointment.studioId,
-          serviceId: service.id,
-        },
-      },
-    });
-    if (disabledAtStudio) {
-      throw new BadRequestException('Service is not offered at this studio');
-    }
+    await assertServiceBookableAtStudio(
+      this.prisma,
+      appointment.studioId,
+      createUpsellDto.serviceId,
+      appointment.studio.organizationId,
+    );
 
     const quantity = createUpsellDto.quantity || 1;
     const totalAmount = quantity * createUpsellDto.price;

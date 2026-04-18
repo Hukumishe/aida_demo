@@ -12,6 +12,7 @@ import {
 } from '../common/organization-scope';
 import {
   getDisabledServiceIdsForStudio,
+  getDisabledCategoryIdsForStudio,
   isServiceOfferedInStudio,
 } from '../common/service-studio-offering';
 import { generateId, IdPrefix } from '../common/id-generator';
@@ -116,10 +117,18 @@ export class ServicesService {
         userRole,
       );
 
-      const disabledIds = await getDisabledServiceIdsForStudio(this.prisma, sid);
+      const [disabledIds, disabledCategoryIds] = await Promise.all([
+        getDisabledServiceIdsForStudio(this.prisma, sid),
+        getDisabledCategoryIdsForStudio(this.prisma, sid),
+      ]);
       return services.map((s) => ({
         ...s,
-        isOfferedInStudio: isServiceOfferedInStudio(s, disabledIds, s.id),
+        isOfferedInStudio: isServiceOfferedInStudio(
+          s,
+          s.category,
+          disabledIds,
+          disabledCategoryIds,
+        ),
       }));
     } catch (error) {
       if (error instanceof ForbiddenException || error instanceof NotFoundException) {
@@ -268,10 +277,83 @@ export class ServicesService {
       });
     }
 
-    const disabledIds = await getDisabledServiceIdsForStudio(this.prisma, studioId);
+    const [disabledIds, disabledCategoryIds] = await Promise.all([
+      getDisabledServiceIdsForStudio(this.prisma, studioId),
+      getDisabledCategoryIdsForStudio(this.prisma, studioId),
+    ]);
+    const category = await this.prisma.serviceCategory.findUnique({
+      where: { id: service.categoryId },
+    });
+    if (!category) {
+      throw new NotFoundException('Category not found for service');
+    }
     return {
       ...service,
-      isOfferedInStudio: isServiceOfferedInStudio(service, disabledIds, service.id),
+      isOfferedInStudio: isServiceOfferedInStudio(
+        service,
+        category,
+        disabledIds,
+        disabledCategoryIds,
+      ),
+    };
+  }
+
+  /**
+   * Включить/выключить категорию только в данном филиале (как услуги).
+   * Каталог сети (`ServiceCategory.isActive`) и другие филиалы не меняются.
+   */
+  async setStudioCategoryOffering(
+    categoryId: string,
+    studioId: string,
+    offered: boolean,
+    userRole?: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+  ) {
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
+      if (userRole === UserRole.ADMIN || userRole === UserRole.MASTER) {
+        if (userStudioId !== studioId) {
+          throw new ForbiddenException('Access denied to this studio');
+        }
+      } else {
+        throw new ForbiddenException('Access denied');
+      }
+    }
+
+    await assertUserOrganizationMatchesStudio(
+      this.prisma,
+      studioId,
+      userOrganizationId,
+      userRole,
+    );
+
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
+    const cat = await this.prisma.serviceCategory.findUnique({
+      where: { id: categoryId },
+    });
+    if (!cat || cat.organizationId !== organizationId) {
+      throw new NotFoundException('Category not found in this organization');
+    }
+
+    if (offered) {
+      await this.prisma.studioDisabledCategory.deleteMany({
+        where: { studioId, categoryId },
+      });
+    } else {
+      await this.prisma.studioDisabledCategory.upsert({
+        where: {
+          studioId_categoryId: { studioId, categoryId },
+        },
+        create: { studioId, categoryId },
+        update: {},
+      });
+    }
+
+    const disabledCategoryIds = await getDisabledCategoryIdsForStudio(this.prisma, studioId);
+    return {
+      ...cat,
+      isOfferedInStudio: cat.isActive && !disabledCategoryIds.has(cat.id),
     };
   }
 
@@ -280,16 +362,32 @@ export class ServicesService {
     userStudioId?: string,
     userOrganizationId?: string,
     organizationIdQuery?: string,
+    studioIdForOffering?: string,
   ) {
     const organizationId = await this.resolveOrganizationId(
       userRole,
       userOrganizationId,
       organizationIdQuery,
     );
-    return this.prisma.serviceCategory.findMany({
+    const categories = await this.prisma.serviceCategory.findMany({
       where: { organizationId },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
+    if (!studioIdForOffering?.trim()) {
+      return categories;
+    }
+    const sid = studioIdForOffering.trim();
+    await assertUserOrganizationMatchesStudio(
+      this.prisma,
+      sid,
+      userOrganizationId,
+      userRole,
+    );
+    const disabledCategoryIds = await getDisabledCategoryIdsForStudio(this.prisma, sid);
+    return categories.map((c) => ({
+      ...c,
+      isOfferedInStudio: c.isActive && !disabledCategoryIds.has(c.id),
+    }));
   }
 
   async createCategory(
@@ -313,6 +411,7 @@ export class ServicesService {
         organizationId,
         name: dto.name.trim(),
         sortOrder: dto.sortOrder ?? 0,
+        isActive: dto.isActive ?? true,
       },
     });
   }
@@ -340,12 +439,22 @@ export class ServicesService {
       throw new NotFoundException('Категория не найдена');
     }
 
-    return this.prisma.serviceCategory.update({
-      where: { id: categoryId },
-      data: {
-        ...(dto.name !== undefined && { name: dto.name.trim() }),
-        ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.serviceCategory.update({
+        where: { id: categoryId },
+        data: {
+          ...(dto.name !== undefined && { name: dto.name.trim() }),
+          ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
+          ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+        },
+      });
+      if (dto.isActive !== undefined) {
+        await tx.service.updateMany({
+          where: { categoryId },
+          data: { isActive: dto.isActive },
+        });
+      }
+      return updated;
     });
   }
 
