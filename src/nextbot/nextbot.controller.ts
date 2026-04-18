@@ -56,12 +56,23 @@ export class NextbotController {
   // --- verify_client_status ---
   @Get('clients/verify')
   @ApiOperation({ summary: 'verify_client_status' })
-  @ApiQuery({ name: 'q', required: false })
+  @ApiQuery({
+    name: 'phone',
+    required: false,
+    description: 'Телефон / контакт для поиска клиента в организации',
+  })
+  @ApiQuery({
+    name: 'q',
+    required: false,
+    description: 'Устарело: то же, что phone (если phone не передан)',
+  })
   verifyClient(
-    @Query('q') q: string | undefined,
+    @Query('phone') phone: string | undefined,
+    @Query('q') legacyQ: string | undefined,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.nextbotService.verifyClient(q, user);
+    const resolved = phone?.trim() || legacyQ?.trim();
+    return this.nextbotService.verifyClient(resolved || undefined, user);
   }
 
   // --- register_new_client ---
@@ -130,23 +141,45 @@ export class NextbotController {
   // --- check_loyalty_status ---
   @Get('clients/loyalty')
   @ApiOperation({ summary: 'check_loyalty_status' })
-  @ApiQuery({ name: 'q', required: false })
+  @ApiQuery({
+    name: 'phone',
+    required: false,
+    description: 'Телефон / контакт для поиска клиента',
+  })
+  @ApiQuery({
+    name: 'q',
+    required: false,
+    description: 'Устарело: то же, что phone (если phone не передан)',
+  })
   loyalty(
-    @Query('q') q: string | undefined,
+    @Query('phone') phone: string | undefined,
+    @Query('q') legacyQ: string | undefined,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.nextbotService.loyaltySummary(q, user);
+    const resolved = phone?.trim() || legacyQ?.trim();
+    return this.nextbotService.loyaltySummary(resolved || undefined, user);
   }
 
   // --- get_referral_code ---
   @Get('clients/referral')
   @ApiOperation({ summary: 'get_referral_code' })
-  @ApiQuery({ name: 'q', required: false })
+  @ApiQuery({
+    name: 'phone',
+    required: false,
+    description: 'Телефон / контакт для поиска клиента',
+  })
+  @ApiQuery({
+    name: 'q',
+    required: false,
+    description: 'Устарело: то же, что phone (если phone не передан)',
+  })
   referral(
-    @Query('q') q: string | undefined,
+    @Query('phone') phone: string | undefined,
+    @Query('q') legacyQ: string | undefined,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.nextbotService.referralSummary(q, user);
+    const resolved = phone?.trim() || legacyQ?.trim();
+    return this.nextbotService.referralSummary(resolved || undefined, user);
   }
 
   // --- check_availability ---

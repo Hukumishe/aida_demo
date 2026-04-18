@@ -94,9 +94,9 @@ export class NextbotService {
   }
 
   /** Без промпта — общая логика для verify / loyalty / referral. */
-  private async resolveClientProfile(q: string | undefined, user: CurrentUserPayload) {
+  private async resolveClientProfile(phone: string | undefined, user: CurrentUserPayload) {
     const list = await this.clientsService.findAll(
-      q,
+      phone,
       user.role,
       user.organizationId,
     );
@@ -112,8 +112,8 @@ export class NextbotService {
   }
 
   /** verify_client_status */
-  async verifyClient(q: string | undefined, user: CurrentUserPayload) {
-    const profile = await this.resolveClientProfile(q, user);
+  async verifyClient(phone: string | undefined, user: CurrentUserPayload) {
+    const profile = await this.resolveClientProfile(phone, user);
     if (!profile) {
       return this.withNextbotPrompt(user.organizationId, 'verify_client_status', {
         found: false,
@@ -127,8 +127,8 @@ export class NextbotService {
   }
 
   /** check_loyalty_status */
-  async loyaltySummary(q: string | undefined, user: CurrentUserPayload) {
-    const profile = await this.resolveClientProfile(q, user);
+  async loyaltySummary(phone: string | undefined, user: CurrentUserPayload) {
+    const profile = await this.resolveClientProfile(phone, user);
     if (!profile) {
       return this.withNextbotPrompt(user.organizationId, 'check_loyalty_status', {
         found: false,
@@ -155,8 +155,8 @@ export class NextbotService {
   }
 
   /** get_referral_code */
-  async referralSummary(q: string | undefined, user: CurrentUserPayload) {
-    const profile = await this.resolveClientProfile(q, user);
+  async referralSummary(phone: string | undefined, user: CurrentUserPayload) {
+    const profile = await this.resolveClientProfile(phone, user);
     if (!profile) {
       return this.withNextbotPrompt(user.organizationId, 'get_referral_code', {
         found: false,
