@@ -1,7 +1,8 @@
 # xmind: verify_client_status
 # HTTP: GET {base_url}/nextbot/clients/verify?phone=...
 # Args: base_url, api_key, organization_id [, phone]
-# Ответ: found, client, плюс промпт в поле "verify_client_status".
+# Ответ: verificationStatus — NOT_FOUND | FOUND_WITH_BIRTH_DATE | FOUND_WITHOUT_BIRTH_DATE;
+#        found, client; строка verify_client_status — промпт с портала для выбранного сценария.
 
 base = args.get("base_url", "").rstrip("/")
 phone = args.get("phone", "")

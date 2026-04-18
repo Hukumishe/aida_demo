@@ -55,7 +55,13 @@ export class NextbotController {
 
   // --- verify_client_status ---
   @Get('clients/verify')
-  @ApiOperation({ summary: 'verify_client_status' })
+  @ApiOperation({
+    summary: 'verify_client_status',
+    description:
+      'Ответ: verificationStatus (NOT_FOUND | FOUND_WITH_BIRTH_DATE | FOUND_WITHOUT_BIRTH_DATE), found, client, ' +
+      'и строка verify_client_status — промпт с портала для этого сценария (ключи в БД: verify_client_status_not_found, ' +
+      'verify_client_status_found_with_birth_date, verify_client_status_found_without_birth_date).',
+  })
   @ApiQuery({
     name: 'phone',
     required: false,

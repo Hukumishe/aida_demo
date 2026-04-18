@@ -15,6 +15,10 @@ import {
 } from '../availability/availability.service';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { PromptsService } from '../prompts/prompts.service';
+import {
+  VERIFY_CLIENT_STATUS_PROMPT_KEYS,
+  VerifyClientVerificationStatus,
+} from './verify-client-status.constants';
 
 /** Имена функций из системного промпта xmind (aida_xmind.pdf). */
 export type NextbotXmindFunction =
@@ -43,18 +47,21 @@ export class NextbotService {
   /**
    * Добавляет в ответ текст промпта с портала (таблица prompts) под ключом имени функции xmind.
    * Приоритет: промпт организации → глобальный (organizationId null) → fallback.
+   * @param promptLookupKey — если задан, искать промпт по этому ключу в БД, а в JSON положить в `responseFieldKey`.
    */
   private async withNextbotPrompt<T extends Record<string, unknown>>(
     organizationId: string | undefined,
-    functionKey: string,
+    responseFieldKey: string,
     data: T,
     fallback?: string,
+    promptLookupKey?: string,
   ): Promise<T & Record<string, string>> {
+    const lookupKey = promptLookupKey ?? responseFieldKey;
     let text = fallback ?? '';
     if (organizationId?.trim()) {
       const custom = await this.promptsService.getDescriptionForOrganization(
         organizationId.trim(),
-        functionKey,
+        lookupKey,
       );
       if (custom != null && custom.trim() !== '') {
         text = custom;
@@ -64,7 +71,19 @@ export class NextbotService {
     } else if (fallback !== undefined) {
       text = fallback;
     }
-    return { ...data, [functionKey]: text } as T & Record<string, string>;
+    return { ...data, [responseFieldKey]: text } as T & Record<string, string>;
+  }
+
+  /** Есть ли у клиента день рождения в CRM (поле birthDate). */
+  private clientHasBirthDate(client: Record<string, unknown>): boolean {
+    const bd = client['birthDate'];
+    if (bd == null) {
+      return false;
+    }
+    if (typeof bd === 'string' && bd.trim() === '') {
+      return false;
+    }
+    return true;
   }
 
   /** Заглушка: функция из xmind, в CRM ещё нет реализации. */
@@ -111,19 +130,41 @@ export class NextbotService {
     );
   }
 
-  /** verify_client_status */
+  /**
+   * verify_client_status — промпт под ключом `verify_client_status` подбирается по сценарию
+   * (ключи в БД: verify_client_status_not_found | …_with_birth_date | …_without_birth_date).
+   */
   async verifyClient(phone: string | undefined, user: CurrentUserPayload) {
     const profile = await this.resolveClientProfile(phone, user);
     if (!profile) {
-      return this.withNextbotPrompt(user.organizationId, 'verify_client_status', {
-        found: false,
-        client: null as unknown as null,
-      });
+      return this.withNextbotPrompt(
+        user.organizationId,
+        'verify_client_status',
+        {
+          verificationStatus: VerifyClientVerificationStatus.NOT_FOUND,
+          found: false,
+          client: null as unknown as null,
+        },
+        undefined,
+        VERIFY_CLIENT_STATUS_PROMPT_KEYS[VerifyClientVerificationStatus.NOT_FOUND],
+      );
     }
-    return this.withNextbotPrompt(user.organizationId, 'verify_client_status', {
-      found: true,
-      client: profile as unknown as Record<string, unknown>,
-    });
+    const c = profile as Record<string, unknown>;
+    const hasBirth = this.clientHasBirthDate(c);
+    const status = hasBirth
+      ? VerifyClientVerificationStatus.FOUND_WITH_BIRTH_DATE
+      : VerifyClientVerificationStatus.FOUND_WITHOUT_BIRTH_DATE;
+    return this.withNextbotPrompt(
+      user.organizationId,
+      'verify_client_status',
+      {
+        verificationStatus: status,
+        found: true,
+        client: c,
+      },
+      undefined,
+      VERIFY_CLIENT_STATUS_PROMPT_KEYS[status],
+    );
   }
 
   /** check_loyalty_status */

@@ -8,7 +8,7 @@ from ..config import AidaConfig, build_headers, nextbot_api_root
 def verify_client_status(cfg: AidaConfig, phone: str) -> Dict[str, Any]:
   """
   GET /nextbot/clients/verify?phone=...
-  Один запрос: backend возвращает { found, client } с полным профилем при найденном клиенте.
+  Ответ: verificationStatus, found, client, verify_client_status (промпт для сценария).
   """
   url = f"{nextbot_api_root(cfg)}/clients/verify"
   resp = requests.get(
