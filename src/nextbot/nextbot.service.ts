@@ -282,17 +282,8 @@ export class NextbotService {
   }
 
   /** get_active_promotions */
-  async getPromotions(studioId: string, user: CurrentUserPayload) {
-    const data = await this.landingService.getPromotions(
-      studioId,
-      user.organizationId,
-      user.role,
-    );
-    return this.withNextbotPrompt(user.organizationId, 'get_active_promotions', { data });
-  }
-
   /**
-   * get_active_promotions (org-level) — акции действуют на всю организацию,
+   * get_active_promotions — акции действуют на всю организацию,
    * поэтому studioId не нужен. Фильтруем по `organizationId` из текущего пользователя / API-ключа.
    */
   async getPromotionsForOrganization(user: CurrentUserPayload) {

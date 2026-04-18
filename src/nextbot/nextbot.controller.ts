@@ -145,22 +145,6 @@ export class NextbotController {
     return this.nextbotService.getPromotionsForOrganization(user);
   }
 
-  // --- get_active_promotions (deprecated legacy: по studioId) ---
-  @Get('studios/:studioId/landing/promotions')
-  @UseGuards(StudioAccessGuard)
-  @ApiOperation({
-    summary: 'get_active_promotions (deprecated)',
-    description:
-      'DEPRECATED: акции привязаны к организации, studioId не нужен. Используй GET /nextbot/landing/promotions. Эндпоинт оставлен ради обратной совместимости.',
-    deprecated: true,
-  })
-  getPromotions(
-    @Param('studioId') studioId: string,
-    @CurrentUser() user: CurrentUserPayload,
-  ) {
-    return this.nextbotService.getPromotions(studioId, user);
-  }
-
   // --- check_loyalty_status ---
   @Get('clients/loyalty')
   @ApiOperation({ summary: 'check_loyalty_status' })
