@@ -1,7 +1,8 @@
 # xmind: register_new_client
-# args: base_url, api_key, organization_id
-# тело: либо payload_json (строка JSON CreateClientDto), либо отдельные first_name, phone, last_name, birth_date, notes, ...
-# Без import json: json.loads и requests(..., json=...) доступны в среде Nextbot.
+# HTTP: POST {base_url}/nextbot/clients/register  (тело CreateClientDto)
+# Args: base_url, api_key, organization_id
+# Либо payload_json (строка JSON), либо first_name, phone [, last_name, birth_date, notes, bonuses, discount, balance]
+# Ответ: созданный клиент + поле "register_new_client" (промпт).
 
 base = args.get("base_url", "").rstrip("/")
 headers = {

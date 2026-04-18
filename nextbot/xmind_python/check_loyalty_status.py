@@ -1,5 +1,7 @@
 # xmind: check_loyalty_status
-# args: base_url, api_key, organization_id, q
+# HTTP: GET {base_url}/nextbot/clients/loyalty?q=...
+# Args: base_url, api_key, organization_id [, q]
+# Ответ: уровень/бонусы и поле "check_loyalty_status" (промпт).
 
 base = args.get("base_url", "").rstrip("/")
 q = args.get("q", "")

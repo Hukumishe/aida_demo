@@ -1,7 +1,8 @@
 # xmind: create_booking_request
-# args: base_url, api_key, organization_id, studio_id
-# тело: либо payload_json (строка JSON CreateAppointmentDto), либо staff_user_id, client_id, service_id, start_at [, prepayment_amount]
-# Без import json — см. register_new_client.py
+# HTTP: POST {base_url}/nextbot/studios/{studioId}/appointments  (тело CreateAppointmentDto)
+# Args: base_url, api_key, organization_id, studio_id
+# Либо payload_json, либо staff_user_id, client_id, service_id, start_at [, prepayment_amount]
+# Ответ: запись + поле "create_booking_request" (промпт).
 
 base = args.get("base_url", "").rstrip("/")
 sid = str(args.get("studio_id", ""))

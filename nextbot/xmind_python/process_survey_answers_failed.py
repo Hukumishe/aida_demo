@@ -1,7 +1,6 @@
-# xmind: process_survey_answers_failed (заглушка backend 501)
-# args: base_url, api_key, organization_id, client_id
-# опционально: body_json — произвольный JSON
-# Без import json — json.loads / requests(..., json=...)
+# xmind: process_survey_answers_failed (backend пока 501 NOT_IMPLEMENTED)
+# HTTP: POST {base_url}/nextbot/clients/{clientId}/survey-failed
+# Args: base_url, api_key, organization_id, client_id [, body_json]
 
 base = args.get("base_url", "").rstrip("/")
 cid = str(args.get("client_id", ""))

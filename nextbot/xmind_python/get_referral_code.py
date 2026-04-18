@@ -1,5 +1,7 @@
 # xmind: get_referral_code
-# args: base_url, api_key, organization_id, q
+# HTTP: GET {base_url}/nextbot/clients/referral?q=...
+# Args: base_url, api_key, organization_id [, q]
+# Ответ: referralCode и поле "get_referral_code" (промпт).
 
 base = args.get("base_url", "").rstrip("/")
 q = args.get("q", "")

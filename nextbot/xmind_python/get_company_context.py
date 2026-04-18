@@ -1,5 +1,7 @@
 # xmind: get_company_context
-# args: base_url, api_key, organization_id
+# HTTP: GET {base_url}/nextbot/context
+# Args: base_url, api_key, organization_id  (для API-ключа обязателен X-Organization-Id)
+# Ответ JSON: organizationId, studios[], плюс строка промпта с портала в поле "get_company_context".
 
 base = args.get("base_url", "").rstrip("/")
 headers = {

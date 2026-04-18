@@ -1,5 +1,6 @@
-# xmind: purchase_certificate (заглушка 501)
-# Без import json — json.loads / requests(..., json=...)
+# xmind: purchase_certificate (backend 501 NOT_IMPLEMENTED)
+# HTTP: POST {base_url}/nextbot/purchase-certificate
+# Args: base_url, api_key, organization_id [, body_json]
 
 base = args.get("base_url", "").rstrip("/")
 headers = {

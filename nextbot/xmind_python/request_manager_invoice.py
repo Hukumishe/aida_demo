@@ -1,5 +1,6 @@
-# xmind: request_manager_invoice (заглушка 501)
-# Без import json — json.loads / requests(..., json=...)
+# xmind: request_manager_invoice (backend 501 NOT_IMPLEMENTED)
+# HTTP: POST {base_url}/nextbot/request-manager-invoice
+# Args: base_url, api_key, organization_id [, body_json]
 
 base = args.get("base_url", "").rstrip("/")
 headers = {

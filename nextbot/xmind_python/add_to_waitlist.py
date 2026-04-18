@@ -1,6 +1,6 @@
-# xmind: add_to_waitlist (заглушка 501)
-# опционально: body_json
-# Без import json — json.loads / requests(..., json=...)
+# xmind: add_to_waitlist (backend 501 NOT_IMPLEMENTED)
+# HTTP: POST {base_url}/nextbot/add-to-waitlist
+# Args: base_url, api_key, organization_id [, body_json]
 
 base = args.get("base_url", "").rstrip("/")
 headers = {

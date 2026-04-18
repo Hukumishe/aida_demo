@@ -1,5 +1,6 @@
-# xmind: dev_error_report (заглушка 501)
-# Без import json — json.loads / requests(..., json=...)
+# xmind: dev_error_report (backend 501 NOT_IMPLEMENTED)
+# HTTP: POST {base_url}/nextbot/dev-error-report
+# Args: base_url, api_key, organization_id [, body_json]
 
 base = args.get("base_url", "").rstrip("/")
 headers = {

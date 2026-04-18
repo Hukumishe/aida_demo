@@ -1,7 +1,8 @@
 # xmind: check_availability
-# args: base_url, api_key, organization_id, studio_id, date (YYYY-MM-DD)
-# опционально: staff_user_id, service_id, duration_minutes, slot_step_minutes
-# Ответ API: freeSlots (только свободные окна), check_availability (текст промпта для ИИ), durationMinutes, slotStepMinutes, date, studioId
+# HTTP: GET {base_url}/nextbot/studios/{studioId}/availability-raw?date=YYYY-MM-DD&...
+# Args: base_url, api_key, organization_id, studio_id, date
+# Опционально: staff_user_id, service_id, duration_minutes, slot_step_minutes
+# Ответ: freeSlots, date, studioId, durationMinutes, slotStepMinutes, поле "check_availability" (текст промпта для ИИ).
 
 base = args.get("base_url", "").rstrip("/")
 sid = str(args.get("studio_id", ""))

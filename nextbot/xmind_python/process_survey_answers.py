@@ -1,7 +1,8 @@
 # xmind: process_survey_answers
-# args: base_url, api_key, organization_id, client_id, answers_json (строка JSON объекта)
-# опционально: merge_into_notes (по умолчанию True), survey_prefix
-# Без import json — см. комментарий в register_new_client.py
+# HTTP: POST {base_url}/nextbot/clients/{clientId}/survey
+# Args: base_url, api_key, organization_id, client_id, answers_json
+# Опционально: merge_into_notes (по умолчанию true), survey_prefix
+# Ответ: обновлённый клиент + поле "process_survey_answers" (промпт).
 
 base = args.get("base_url", "").rstrip("/")
 cid = str(args.get("client_id", ""))

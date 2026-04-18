@@ -1,5 +1,7 @@
 # xmind: get_active_promotions
-# args: base_url, api_key, organization_id, studio_id
+# HTTP: GET {base_url}/nextbot/studios/{studioId}/landing/promotions
+# Args: base_url, api_key, organization_id, studio_id
+# Ответ: { "data": [ акции... ], "get_active_promotions": "<промпт>" }
 
 base = args.get("base_url", "").rstrip("/")
 sid = str(args.get("studio_id", ""))

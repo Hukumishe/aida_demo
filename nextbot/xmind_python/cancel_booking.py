@@ -1,6 +1,6 @@
-# Удобная обёртка xmind: отмена записи (тот же API, что modify_booking)
-# args: base_url, api_key, organization_id, appointment_id
-# Без import json — requests(..., json=...)
+# Обёртка: отмена записи (тот же API, что modify_booking)
+# HTTP: POST {base_url}/nextbot/appointments/{id}/update  с телом {"status":"CANCELLED"}
+# Args: base_url, api_key, organization_id, appointment_id
 
 base = args.get("base_url", "").rstrip("/")
 aid = str(args.get("appointment_id", ""))

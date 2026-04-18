@@ -1,6 +1,7 @@
 # xmind: verify_client_status
-# args: base_url, api_key, organization_id, q (телефон / имя для поиска)
-# studio_id в сценарии не нужен — клиенты на уровне организации.
+# HTTP: GET {base_url}/nextbot/clients/verify?q=...
+# Args: base_url, api_key, organization_id [, q]
+# Ответ: found, client, плюс промпт в поле "verify_client_status".
 
 base = args.get("base_url", "").rstrip("/")
 q = args.get("q", "")

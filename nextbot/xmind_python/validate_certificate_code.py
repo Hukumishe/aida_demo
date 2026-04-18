@@ -1,5 +1,6 @@
-# xmind: validate_certificate_code (заглушка 501)
-# Без import json — json.loads / requests(..., json=...)
+# xmind: validate_certificate_code (backend 501 NOT_IMPLEMENTED)
+# HTTP: POST {base_url}/nextbot/validate-certificate-code
+# Args: base_url, api_key, organization_id [, body_json]
 
 base = args.get("base_url", "").rstrip("/")
 headers = {

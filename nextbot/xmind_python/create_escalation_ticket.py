@@ -1,5 +1,6 @@
-# xmind: create_escalation_ticket (заглушка 501)
-# Без import json — json.loads / requests(..., json=...)
+# xmind: create_escalation_ticket (backend 501 NOT_IMPLEMENTED)
+# HTTP: POST {base_url}/nextbot/create-escalation-ticket
+# Args: base_url, api_key, organization_id [, body_json]
 
 base = args.get("base_url", "").rstrip("/")
 headers = {

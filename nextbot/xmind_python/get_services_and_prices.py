@@ -1,7 +1,7 @@
 # xmind: get_services_and_prices
-# В Nextbot в «Параметры функции» добавь 4 параметра с именами ТОЧНО: base_url, api_key, organization_id, studio_id
-# (или заполни блок «Тестовые аргументы» при нажатии «Тестировать код»).
-# base_url — это адрес сервера БЕЗ /nextbot (переменная base ниже = тот же хост, просто без хвостового /).
+# HTTP: GET {base_url}/nextbot/services?studioId=<uuid>
+# Args: base_url, api_key, organization_id, studio_id
+# Ответ: { "data": [ услуги... ], "get_services_and_prices": "<промпт с портала>" }
 
 base = args.get("base_url", "").rstrip("/")
 sid = str(args.get("studio_id", ""))
