@@ -5,11 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
-import {
-  assertUserOrganizationMatchesClientOrganizationId,
-  assertUserOrganizationMatchesStudio,
-  assertUserOrganizationMatchesStudioOrganizationId,
-} from '../common/organization-scope';
+import { assertUserOrganizationMatchesStudioOrganizationId } from '../common/organization-scope';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
@@ -85,6 +81,23 @@ export class ClientsService {
       userRole,
     );
     return organizationId;
+  }
+
+  /** Клиент должен принадлежать той же организации, что и выбранный контекст (для DEVELOPER — query organizationId или JWT). */
+  private async assertClientInOrganizationContext(
+    clientOrganizationId: string,
+    userRole?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
+  ): Promise<void> {
+    const effectiveOrgId = await this.resolveListOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
+    if (clientOrganizationId !== effectiveOrgId) {
+      throw new ForbiddenException('Access denied to this client');
+    }
   }
 
   /**
@@ -277,6 +290,7 @@ export class ClientsService {
     userRole?: string,
     userStudioId?: string,
     userOrganizationId?: string,
+    organizationIdQuery?: string,
   ) {
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       if (userRole === UserRole.MASTER) {
@@ -284,15 +298,10 @@ export class ClientsService {
       }
     }
 
-    if (!userOrganizationId?.trim()) {
-      throw new BadRequestException('Organization context required');
-    }
-    const organizationId = userOrganizationId.trim();
-
-    assertUserOrganizationMatchesStudioOrganizationId(
-      organizationId,
-      userOrganizationId,
+    const organizationId = await this.resolveListOrganizationId(
       userRole,
+      userOrganizationId,
+      organizationIdQuery,
     );
 
     const existingClient = await this.prisma.client.findUnique({
@@ -392,7 +401,13 @@ export class ClientsService {
     }
   }
 
-  async findOne(id: string, userRole?: string, userStudioId?: string, userOrganizationId?: string) {
+  async findOne(
+    id: string,
+    userRole?: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
+  ) {
     const client = await this.prisma.client.findUnique({
       where: { id },
       include: {
@@ -415,10 +430,11 @@ export class ClientsService {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
 
-    assertUserOrganizationMatchesClientOrganizationId(
+    await this.assertClientInOrganizationContext(
       client.organizationId,
-      userOrganizationId,
       userRole,
+      userOrganizationId,
+      organizationIdQuery,
     );
 
     // Check access (клиенты общие для всех салонов; ADMIN/MASTER как раньше)
@@ -700,6 +716,7 @@ export class ClientsService {
     userRole?: string,
     userStudioId?: string,
     userOrganizationId?: string,
+    organizationIdQuery?: string,
   ) {
     const {
       customLoyaltyOrganizationId,
@@ -717,10 +734,11 @@ export class ClientsService {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
 
-    assertUserOrganizationMatchesClientOrganizationId(
+    await this.assertClientInOrganizationContext(
       client.organizationId,
-      userOrganizationId,
       userRole,
+      userOrganizationId,
+      organizationIdQuery,
     );
 
     // Check access (клиенты общие для всех салонов)
@@ -839,6 +857,7 @@ export class ClientsService {
     userRole?: string,
     userStudioId?: string,
     userOrganizationId?: string,
+    organizationIdQuery?: string,
   ) {
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
@@ -849,11 +868,10 @@ export class ClientsService {
       }
     }
 
-    await assertUserOrganizationMatchesStudio(
-      this.prisma,
-      studioId,
-      userOrganizationId,
+    const resolvedOrgId = await this.resolveListOrganizationId(
       userRole,
+      userOrganizationId,
+      organizationIdQuery,
     );
 
     const studio = await this.prisma.studio.findUnique({
@@ -862,6 +880,9 @@ export class ClientsService {
     });
     if (!studio) {
       throw new NotFoundException(`Studio with ID ${studioId} not found`);
+    }
+    if (studio.organizationId !== resolvedOrgId) {
+      throw new ForbiddenException('Access denied to this studio');
     }
 
     const now = new Date();
@@ -922,7 +943,13 @@ export class ClientsService {
     };
   }
 
-  async getClientStatistics(id: string, userRole?: string, userStudioId?: string) {
+  async getClientStatistics(
+    id: string,
+    userRole?: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
+  ) {
     const client = await this.prisma.client.findUnique({
       where: { id },
     });
@@ -930,6 +957,13 @@ export class ClientsService {
     if (!client) {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
+
+    await this.assertClientInOrganizationContext(
+      client.organizationId,
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
 
     // Check access (клиенты общие для всех салонов)
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
@@ -998,6 +1032,8 @@ export class ClientsService {
     upcomingOnly: boolean = false,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
   ) {
     const client = await this.prisma.client.findUnique({
       where: { id },
@@ -1006,6 +1042,13 @@ export class ClientsService {
     if (!client) {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
+
+    await this.assertClientInOrganizationContext(
+      client.organizationId,
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
 
     // Check access (клиенты общие для всех салонов)
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
@@ -1054,12 +1097,26 @@ export class ClientsService {
     });
   }
 
-  async getBonusHistory(clientId: string, userRole?: string, userStudioId?: string) {
+  async getBonusHistory(
+    clientId: string,
+    userRole?: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
+  ) {
     const client = await this.prisma.client.findUnique({
       where: { id: clientId },
-      select: { id: true },
+      select: { id: true, organizationId: true },
     });
     if (!client) throw new NotFoundException(`Client with ID ${clientId} not found`);
+
+    await this.assertClientInOrganizationContext(
+      client.organizationId,
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
+
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       if (userRole === UserRole.ADMIN && !userStudioId) {
         throw new ForbiddenException('Access denied to this client');
@@ -1080,6 +1137,7 @@ export class ClientsService {
     userRole?: string,
     userStudioId?: string,
     userOrganizationId?: string,
+    organizationIdQuery?: string,
   ) {
     if (!isOwnerLevelRole(userRole)) {
       throw new ForbiddenException('Only owner level role can manually adjust bonus balance');
@@ -1089,9 +1147,13 @@ export class ClientsService {
       select: { id: true, bonuses: true, organizationId: true },
     });
     if (!client) throw new NotFoundException(`Client with ID ${clientId} not found`);
-    if (userOrganizationId && client.organizationId !== userOrganizationId) {
-      throw new ForbiddenException('Access denied to this client');
-    }
+
+    await this.assertClientInOrganizationContext(
+      client.organizationId,
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
     const newBalance = client.bonuses + dto.amount;
     if (newBalance < 0) {
       throw new BadRequestException('Adjustment would result in negative bonus balance');

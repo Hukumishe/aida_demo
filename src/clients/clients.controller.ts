@@ -65,10 +65,17 @@ export class ClientsController {
     required: true,
     description: 'Филиал для расчёта сегментов (последний визит в эту студию)',
   })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description:
+      'Только DEVELOPER: филиал должен принадлежать этой организации (контекст экрана).',
+  })
   @ApiResponse({ status: 200, description: 'Segment counts' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getSegments(
     @Query('studioId') studioId: string,
+    @Query('organizationId') organizationId?: string,
     @CurrentUser() user?: any,
   ) {
     if (!studioId?.trim()) {
@@ -79,6 +86,7 @@ export class ClientsController {
       user?.role,
       user?.studioId,
       user?.organizationId,
+      organizationId,
     );
   }
 
@@ -131,10 +139,17 @@ export class ClientsController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new client' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description:
+      'Только DEVELOPER: создать клиента в указанной организации (контекст экрана). Иначе — организация из JWT.',
+  })
   @ApiResponse({ status: 201, description: 'Client created' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async create(
     @Body() createClientDto: CreateClientDto,
+    @Query('organizationId') organizationId?: string,
     @CurrentUser() user?: any,
   ) {
     return this.clientsService.create(
@@ -142,11 +157,18 @@ export class ClientsController {
       user?.role,
       user?.studioId,
       user?.organizationId,
+      organizationId,
     );
   }
 
   @Get(':id/statistics')
   @ApiOperation({ summary: 'Get client statistics (visits, average check)' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description:
+      'Только DEVELOPER: клиент должен быть в этой организации (тот же контекст, что и GET /clients).',
+  })
   @ApiResponse({
     status: 200,
     description: 'Client statistics',
@@ -163,9 +185,16 @@ export class ClientsController {
   @ApiResponse({ status: 404, description: 'Client not found' })
   async getStatistics(
     @Param('id') id: string,
+    @Query('organizationId') organizationId?: string,
     @CurrentUser() user?: any,
   ) {
-    return this.clientsService.getClientStatistics(id, user?.role, user?.studioId);
+    return this.clientsService.getClientStatistics(
+      id,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+      organizationId,
+    );
   }
 
   @Get(':id/appointments')
@@ -176,12 +205,18 @@ export class ClientsController {
     type: Boolean,
     description: 'Get only upcoming appointments (default: false)',
   })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER: контекст организации (как GET /clients).',
+  })
   @ApiResponse({ status: 200, description: 'List of client appointments' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
   async getAppointments(
     @Param('id') id: string,
     @Query('upcoming') upcoming?: string,
+    @Query('organizationId') organizationId?: string,
     @CurrentUser() user?: any,
   ) {
     const upcomingOnly = upcoming === 'true' || upcoming === '1';
@@ -190,38 +225,74 @@ export class ClientsController {
       upcomingOnly,
       user?.role,
       user?.studioId,
+      user?.organizationId,
+      organizationId,
     );
   }
 
   @Get(':id/bonus-history')
   @ApiOperation({ summary: 'Get client bonus history (accruals and deductions)' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER: контекст организации (как GET /clients).',
+  })
   @ApiResponse({ status: 200, description: 'List of bonus history entries' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
   async getBonusHistory(
     @Param('id') id: string,
+    @Query('organizationId') organizationId?: string,
     @CurrentUser() user?: any,
   ) {
-    return this.clientsService.getBonusHistory(id, user?.role, user?.studioId);
+    return this.clientsService.getBonusHistory(
+      id,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+      organizationId,
+    );
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get client by ID' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description:
+      'Только DEVELOPER: клиент должен быть в этой организации (тот же контекст, что и GET /clients).',
+  })
   @ApiResponse({ status: 200, description: 'Client details' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
-  async findOne(@Param('id') id: string, @CurrentUser() user?: any) {
-    return this.clientsService.findOne(id, user?.role, user?.studioId, user?.organizationId);
+  async findOne(
+    @Param('id') id: string,
+    @Query('organizationId') organizationId?: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.clientsService.findOne(
+      id,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+      organizationId,
+    );
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update client' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER: контекст организации (как GET /clients).',
+  })
   @ApiResponse({ status: 200, description: 'Client updated' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
   async update(
     @Param('id') id: string,
     @Body() updateClientDto: UpdateClientDto,
+    @Query('organizationId') organizationId?: string,
     @CurrentUser() user?: any,
   ) {
     return this.clientsService.update(
@@ -230,11 +301,17 @@ export class ClientsController {
       user?.role,
       user?.studioId,
       user?.organizationId,
+      organizationId,
     );
   }
 
   @Post(':id/bonus-adjustment')
   @ApiOperation({ summary: 'Manual bonus adjustment (Owner only)' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER: контекст организации (как GET /clients).',
+  })
   @ApiResponse({ status: 201, description: 'Adjustment applied' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Client not found' })
@@ -242,6 +319,7 @@ export class ClientsController {
   async bonusAdjustment(
     @Param('id') id: string,
     @Body() dto: BonusAdjustmentDto,
+    @Query('organizationId') organizationId?: string,
     @CurrentUser() user?: any,
   ) {
     return this.clientsService.bonusAdjustment(
@@ -251,6 +329,7 @@ export class ClientsController {
       user?.role,
       user?.studioId,
       user?.organizationId,
+      organizationId,
     );
   }
 }

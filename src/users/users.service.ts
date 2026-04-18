@@ -8,6 +8,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateStaffDto } from './dto/create-staff.dto';
+import { CreateOrganizationOwnerDto } from './dto/create-organization-owner.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { UpdateStaffProfileDto } from './dto/update-staff-profile.dto';
 import { CreateServiceOverrideDto } from './dto/create-service-override.dto';
@@ -215,6 +216,76 @@ export class UsersService {
 
     // Remove password from response if user is not OWNER or DEPUTY_OWNER
     if (!isOwnerLevelRole(userRole)) {
+      const { password, ...userWithoutPassword } = createdUser;
+      return userWithoutPassword;
+    }
+
+    return createdUser;
+  }
+
+  /**
+   * Создать OWNER организации без филиала (studioId = null).
+   * Используется при онбординге новой организации (DEVELOPER).
+   */
+  async createOrganizationOwner(
+    organizationId: string,
+    dto: CreateOrganizationOwnerDto,
+    actorRole: string,
+  ) {
+    if (!canManageOwners(actorRole)) {
+      throw new ForbiddenException('Cannot create organization owner with this role');
+    }
+
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+    });
+    if (!org) {
+      throw new NotFoundException(`Organization with ID ${organizationId} not found`);
+    }
+
+    if (dto.email) {
+      const existingEmail = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
+      if (existingEmail) {
+        throw new BadRequestException('Email already exists');
+      }
+    }
+
+    const existingPhone = await this.prisma.user.findUnique({
+      where: { phone: dto.phone },
+    });
+    if (existingPhone) {
+      throw new BadRequestException('Phone already exists');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    const createdUser = await this.prisma.user.create({
+      data: {
+        id: generateId(IdPrefix.User),
+        email: dto.email,
+        phone: dto.phone,
+        passwordHash,
+        password: dto.password,
+        role: UserRole.OWNER,
+        organizationId,
+        studioId: null,
+        staffProfile: {
+          create: {
+            firstName: dto.firstName,
+            lastName: dto.lastName,
+            providesServices: false,
+            portfolioPhotos: [],
+          },
+        },
+      },
+      include: {
+        staffProfile: true,
+      },
+    });
+
+    if (!isOwnerLevelRole(actorRole)) {
       const { password, ...userWithoutPassword } = createdUser;
       return userWithoutPassword;
     }
