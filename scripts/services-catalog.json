@@ -1,0 +1,247 @@
+{
+  "categories": [
+    {
+      "name": "Skin's прайс",
+      "audience": "WOMEN",
+      "services": [
+        { "name": "Подмышки Skin's", "price": 3000, "duration": 10 },
+        { "name": "Полоска на животе Skin's", "price": 2000, "duration": 15 },
+        { "name": "Классическое бикини Skin's", "price": 6000, "duration": 20 },
+        { "name": "Среднее бикини Skin's", "price": 7000, "duration": 25 },
+        { "name": "Глубокое бикини Skin's", "price": 9000, "duration": 30 }
+      ]
+    },
+    {
+      "name": "Воск прайс",
+      "audience": "WOMEN",
+      "services": [
+        { "name": "Подмышки воск", "price": 2000, "duration": 10 },
+        { "name": "Спина полностью воск", "price": 5000, "duration": 30 },
+        { "name": "Поясница воск", "price": 3000, "duration": 20 },
+        { "name": "Ягодицы воск", "price": 4500, "duration": 30 },
+        { "name": "Живот полностью воск", "price": 4000, "duration": 30 },
+        { "name": "Полоска на животе воск", "price": 1500, "duration": 10 },
+        { "name": "Классическое бикини воск", "price": 4500, "duration": 20 },
+        { "name": "Среднее бикини воск", "price": 5500, "duration": 30 },
+        { "name": "Глубокое бикини воск", "price": 7000, "duration": 30 },
+        { "name": "Лицо полностью воск", "price": 5000, "duration": 40 },
+        { "name": "Усики воск", "price": 1000, "duration": 10 },
+        { "name": "Баки воск", "price": 2000, "duration": 10 },
+        { "name": "Носовые пазухи воск", "price": 1500, "duration": 10 },
+        { "name": "Подбородок воск", "price": 1500, "duration": 10 },
+        { "name": "Ноги выше колен воск", "price": 5000, "duration": 30 },
+        { "name": "Ноги до колен воск", "price": 5000, "duration": 30 },
+        { "name": "Ноги полностью воск", "price": 7000, "duration": 40 },
+        { "name": "Руки до локтя воск", "price": 4000, "duration": 30 },
+        { "name": "Руки выше локтя воск", "price": 4000, "duration": 30 },
+        { "name": "Руки полностью воск", "price": 5000, "duration": 40 }
+      ]
+    },
+    {
+      "name": "Электроэпиляция",
+      "audience": "WOMEN",
+      "services": [
+        { "name": "Материал электро", "price": 1500, "duration": 1 },
+        { "name": "Обезбол электро", "price": 1000, "duration": 1 },
+        { "name": "Обезбол электро на продажу", "price": 2000, "duration": 1 },
+        { "name": "Электроэпиляция 1 час (10800тг)", "price": 10800, "duration": 60 },
+        { "name": "Электроэпиляция 1 час (13200тг)", "price": 13200, "duration": 60 },
+        { "name": "Электроэпиляция 1 час (18000тг)", "price": 18000, "duration": 60 },
+        { "name": "Электроэпиляция 2 часа (21600тг)", "price": 21600, "duration": 120 },
+        { "name": "Электроэпиляция 2 часа (26400тг)", "price": 26400, "duration": 120 },
+        { "name": "Электроэпиляция 2 часа (36000тг)", "price": 36000, "duration": 120 }
+      ]
+    },
+    {
+      "name": "Электроэпиляция муж",
+      "audience": "MEN",
+      "services": [
+        { "name": "Электроэпиляция муж 1 час", "price": 24000, "duration": 60 },
+        { "name": "Электроэпиляция муж 2 часа", "price": 48000, "duration": 120 }
+      ]
+    },
+    {
+      "name": "Прайс шугаринг",
+      "audience": "WOMEN",
+      "services": [
+        { "name": "Подмышки Топ", "price": 2000, "duration": 10 },
+        { "name": "Подмышки 1к", "price": 1500, "duration": 10 },
+        { "name": "Подмышки 2к", "price": 1000, "duration": 10 },
+
+        { "name": "Живот полностью Топ", "price": 2500, "duration": 30 },
+        { "name": "Живот полностью 1к", "price": 2000, "duration": 30 },
+        { "name": "Живот полностью 2к", "price": 1500, "duration": 30 },
+
+        { "name": "Полоска на животе Топ", "price": 1000, "duration": 10 },
+        { "name": "Полоска на животе 1к", "price": 700, "duration": 10 },
+        { "name": "Полоска на животе 2к", "price": 500, "duration": 10 },
+
+        { "name": "Поясница Топ", "price": 1200, "duration": 10 },
+        { "name": "Поясница 1к", "price": 900, "duration": 10 },
+        { "name": "Поясница 2к", "price": 700, "duration": 10 },
+
+        { "name": "Спина полностью Топ", "price": 4000, "duration": 10 },
+        { "name": "Спина полностью 1к", "price": 3000, "duration": 10 },
+        { "name": "Спина полностью 2к", "price": 2000, "duration": 10 },
+
+        { "name": "Грудь Топ", "price": 1500, "duration": 15 },
+        { "name": "Грудь 1к", "price": 1200, "duration": 15 },
+        { "name": "Грудь 2к", "price": 1000, "duration": 15 },
+
+        { "name": "Ягодицы Топ", "price": 2500, "duration": 20 },
+        { "name": "Ягодицы 1к", "price": 2000, "duration": 20 },
+        { "name": "Ягодицы 2к", "price": 1500, "duration": 20 },
+
+        { "name": "Затылок Топ", "price": 1000, "duration": 10 },
+        { "name": "Затылок 1к", "price": 1000, "duration": 10 },
+        { "name": "Затылок 2к", "price": 1000, "duration": 10 },
+
+        { "name": "Классическое бикини Топ", "price": 3000, "duration": 15 },
+        { "name": "Классическое бикини 1к", "price": 2500, "duration": 15 },
+        { "name": "Классическое бикини 2к", "price": 2000, "duration": 15 },
+
+        { "name": "Среднее бикини Топ", "price": 3500, "duration": 10 },
+        { "name": "Среднее бикини 1к", "price": 3000, "duration": 10 },
+        { "name": "Среднее бикини 2к", "price": 2500, "duration": 10 },
+
+        { "name": "Глубокое бикини Топ", "price": 5000, "duration": 30 },
+        { "name": "Глубокое бикини 1к", "price": 4000, "duration": 30 },
+        { "name": "Глубокое бикини 2к", "price": 3000, "duration": 30 },
+
+        { "name": "Лицо полностью Топ", "price": 5000, "duration": 30 },
+        { "name": "Лицо полностью 1к", "price": 4500, "duration": 30 },
+        { "name": "Лицо полностью 2к", "price": 4000, "duration": 30 },
+
+        { "name": "Баки Топ", "price": 1500, "duration": 10 },
+        { "name": "Баки 1к", "price": 1000, "duration": 10 },
+        { "name": "Баки 2к", "price": 1000, "duration": 10 },
+
+        { "name": "Усики Топ", "price": 1000, "duration": 10 },
+        { "name": "Усики 1к", "price": 700, "duration": 10 },
+        { "name": "Усики 2к", "price": 500, "duration": 10 },
+
+        { "name": "Щёки Топ", "price": 1000, "duration": 15 },
+        { "name": "Щёки 1к", "price": 1000, "duration": 15 },
+        { "name": "Щёки 2к", "price": 1000, "duration": 15 },
+
+        { "name": "Подбородок Топ", "price": 800, "duration": 10 },
+        { "name": "Подбородок 1к", "price": 800, "duration": 10 },
+        { "name": "Подбородок 2к", "price": 800, "duration": 10 },
+
+        { "name": "Лоб Топ", "price": 1000, "duration": 10 },
+        { "name": "Лоб 1к", "price": 1000, "duration": 10 },
+        { "name": "Лоб 2к", "price": 1000, "duration": 10 },
+
+        { "name": "Руки до локтя Топ", "price": 3000, "duration": 20 },
+        { "name": "Руки до локтя 1к", "price": 2500, "duration": 20 },
+        { "name": "Руки до локтя 2к", "price": 2000, "duration": 20 },
+
+        { "name": "Руки выше локтя Топ", "price": 3000, "duration": 20 },
+        { "name": "Руки выше локтя 1к", "price": 2500, "duration": 20 },
+        { "name": "Руки выше локтя 2к", "price": 2000, "duration": 20 },
+
+        { "name": "Руки полностью Топ", "price": 4000, "duration": 30 },
+        { "name": "Руки полностью 1к", "price": 3500, "duration": 30 },
+        { "name": "Руки полностью 2к", "price": 3000, "duration": 30 },
+
+        { "name": "Ноги до колен Топ", "price": 3500, "duration": 30 },
+        { "name": "Ноги до колен 1к", "price": 3000, "duration": 30 },
+        { "name": "Ноги до колен 2к", "price": 2500, "duration": 30 },
+
+        { "name": "Ноги выше колен Топ", "price": 3500, "duration": 20 },
+        { "name": "Ноги выше колен 1к", "price": 3000, "duration": 20 },
+        { "name": "Ноги выше колен 2к", "price": 2500, "duration": 20 },
+
+        { "name": "Ноги полностью Топ", "price": 6000, "duration": 30 },
+        { "name": "Ноги полностью 1к", "price": 5000, "duration": 30 },
+        { "name": "Ноги полностью 2к", "price": 4000, "duration": 30 },
+
+        { "name": "Пальчики Топ", "price": 700, "duration": 10 },
+        { "name": "Пальчики 1к", "price": 700, "duration": 10 },
+        { "name": "Пальчики 2к", "price": 700, "duration": 10 },
+
+        { "name": "Комплекс Топ", "price": 15000, "duration": 90 },
+        { "name": "Комплекс 1к", "price": 12000, "duration": 90 },
+        { "name": "Комплекс 2к", "price": 9000, "duration": 90 }
+      ]
+    },
+    {
+      "name": "МУЖСКОЙ ПРАЙС ШУГАРИНГ",
+      "audience": "MEN",
+      "services": [
+        { "name": "Подмышки муж", "price": 5000, "duration": 15 },
+        { "name": "Подмышки для подростка муж", "price": 3000, "duration": 15 },
+        { "name": "Полоска на животе муж", "price": 2000, "duration": 10 },
+        { "name": "Живот полностью муж", "price": 5000, "duration": 15 },
+        { "name": "Поясница муж", "price": 3000, "duration": 10 },
+        { "name": "Спина полностью муж", "price": 6000, "duration": 30 },
+        { "name": "Ягодицы муж", "price": 5000, "duration": 30 },
+        { "name": "Грудь муж", "price": 5000, "duration": 15 },
+        { "name": "Глубокое бикини муж", "price": 10000, "duration": 60 },
+        { "name": "Среднее бикини муж", "price": 5000, "duration": 30 },
+        { "name": "Лицо полностью муж", "price": 8000, "duration": 30 },
+        { "name": "Баки муж", "price": 2000, "duration": 15 },
+        { "name": "Подбородок муж", "price": 5000, "duration": 10 },
+        { "name": "Усы муж", "price": 5000, "duration": 15 },
+        { "name": "Усы для подростка муж", "price": 3000, "duration": 15 },
+        { "name": "Щёки муж", "price": 2000, "duration": 15 },
+        { "name": "Руки до локтя муж", "price": 5000, "duration": 20 },
+        { "name": "Руки выше локтя муж", "price": 5000, "duration": 20 },
+        { "name": "Руки полностью муж", "price": 7000, "duration": 35 },
+        { "name": "Ноги до колен муж", "price": 8000, "duration": 30 },
+        { "name": "Ноги выше колен муж", "price": 8000, "duration": 30 },
+        { "name": "Ноги полностью муж", "price": 13000, "duration": 45 }
+      ]
+    },
+    {
+      "name": "SKIN's ДЛЯ МУЖЧИН",
+      "audience": "MEN",
+      "services": [
+        { "name": "Подмышки skins муж", "price": 7000, "duration": 30 },
+        { "name": "Бикини skins муж", "price": 14000, "duration": 60 },
+        { "name": "Борода skins муж", "price": 7500, "duration": 30 },
+        { "name": "Усы skins муж", "price": 3000, "duration": 20 }
+      ]
+    },
+    {
+      "name": "ВОСК ДЛЯ МУЖЧИН",
+      "audience": "MEN",
+      "services": [
+        { "name": "Подмышки воск муж", "price": 5000, "duration": 15 },
+        { "name": "Спина полностью воск муж", "price": 7500, "duration": 30 },
+        { "name": "Ягодицы муж воск", "price": 7000, "duration": 30 },
+        { "name": "Грудь муж воск", "price": 4500, "duration": 30 },
+        { "name": "Живот полностью муж воск", "price": 5000, "duration": 30 },
+        { "name": "Классическое бикини воск муж", "price": 6500, "duration": 30 },
+        { "name": "Глубокое бикини воск муж", "price": 12000, "duration": 60 },
+        { "name": "Лицо полностью воск муж", "price": 7000, "duration": 40 },
+        { "name": "Борода воск муж", "price": 4000, "duration": 30 },
+        { "name": "Носовые пазухи муж", "price": 2000, "duration": 15 }
+      ]
+    },
+    {
+      "name": "ЛАЗЕРНАЯ ЭПИЛЯЦИЯ ДЛЯ МУЖЧИН",
+      "audience": "MEN",
+      "services": [
+        { "name": "Подмышки муж лазер", "price": 5000, "duration": 20 },
+        { "name": "Спина полностью муж лазер", "price": 10000, "duration": 40 },
+        { "name": "Ягодицы муж лазер", "price": 8000, "duration": 50 },
+        { "name": "Грудь муж лазер", "price": 6000, "duration": 40 },
+        { "name": "Глубокое бикини муж лазер", "price": 12000, "duration": 60 },
+        { "name": "Лобок муж лазер", "price": 6000, "duration": 30 },
+        { "name": "Лицо полностью муж лазер", "price": 7000, "duration": 30 },
+        { "name": "Усы муж лазер", "price": 2500, "duration": 20 },
+        { "name": "Баки муж лазер", "price": 4000, "duration": 20 },
+        { "name": "Борода муж лазер", "price": 5000, "duration": 30 },
+        { "name": "Шея муж лазер", "price": 4000, "duration": 20 },
+        { "name": "Руки до локтя муж лазер", "price": 4500, "duration": 30 },
+        { "name": "Руки выше локтя муж лазер", "price": 4500, "duration": 30 },
+        { "name": "Руки полностью муж лазер", "price": 8000, "duration": 50 },
+        { "name": "Пальчики муж лазер", "price": 2000, "duration": 15 },
+        { "name": "Ноги до колен муж лазер", "price": 10000, "duration": 60 },
+        { "name": "Ноги выше колен муж лазер", "price": 10000, "duration": 40 },
+        { "name": "Ноги полностью муж лазер", "price": 15000, "duration": 60 }
+      ]
+    }
+  ]
+}

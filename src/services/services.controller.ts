@@ -8,6 +8,9 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -15,8 +18,13 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiQuery,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ServicesService } from './services.service';
+import { ServicesImportService } from './services.import.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto';
@@ -24,6 +32,7 @@ import { UpdateServiceCategoryDto } from './dto/update-service-category.dto';
 import { SetServiceStudioOfferingDto } from './dto/set-service-studio-offering.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles, UserRole } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('services')
@@ -31,7 +40,10 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class ServicesController {
-  constructor(private readonly servicesService: ServicesService) {}
+  constructor(
+    private readonly servicesService: ServicesService,
+    private readonly servicesImportService: ServicesImportService,
+  ) {}
 
   // --- Категории (статические пути до :id) ---
 
@@ -160,6 +172,76 @@ export class ServicesController {
       user?.organizationId,
       organizationId,
     );
+  }
+
+  // --- Импорт (только DEVELOPER) ---
+
+  @Post('import')
+  @Roles(UserRole.DEVELOPER)
+  @ApiOperation({
+    summary: 'Импортировать услуги из CSV/XLSX (только DEVELOPER)',
+    description:
+      'Загружает файл с колонками «Категория», «Услуга», «Цена», «Длительность», «Аудитория» (MEN/WOMEN, по умолчанию WOMEN). ' +
+      'Недостающие категории создаются автоматически. Существующие услуги (по имени + аудитории) пропускаются — импорт идемпотентен. ' +
+      'Параметр `dryRun=true` запускает «сухой прогон» — ничего не пишется в БД, возвращается план импорта.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiQuery({
+    name: 'organizationId',
+    required: true,
+    description: 'ID организации, в которую импортируются услуги',
+  })
+  @ApiQuery({
+    name: 'dryRun',
+    required: false,
+    description: 'true — проверить файл без записи в БД',
+  })
+  @ApiResponse({ status: 201, description: 'Импорт выполнен' })
+  @ApiResponse({ status: 400, description: 'Ошибка формата файла / данных' })
+  @ApiResponse({ status: 403, description: 'Доступно только DEVELOPER' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        const ok =
+          /(\.csv|\.xlsx|\.xls|\.xlsm|\.xlsb)$/i.test(file.originalname) ||
+          /csv|excel|spreadsheet|sheet|octet-stream/i.test(file.mimetype);
+        if (!ok) {
+          return cb(
+            new BadRequestException('Разрешены только CSV или Excel (xlsx/xls) файлы'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async importServices(
+    @UploadedFile() file: Express.Multer.File,
+    @Query('organizationId') organizationId: string | undefined,
+    @Query('dryRun') dryRun: string | undefined,
+    @CurrentUser() user?: any,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Файл не передан');
+    }
+    const orgId = (organizationId ?? '').trim() || user?.organizationId;
+    if (!orgId) {
+      throw new BadRequestException('Укажите organizationId в query');
+    }
+    return this.servicesImportService.importFromFile(file, user?.role, orgId, {
+      dryRun: dryRun === 'true' || dryRun === '1',
+    });
   }
 
   // --- Каталог услуг (один на организацию) ---
