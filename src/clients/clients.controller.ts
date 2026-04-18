@@ -8,6 +8,8 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -15,13 +17,19 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiQuery,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ClientsService } from './clients.service';
+import { ClientsImportService } from './clients.import.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { BonusAdjustmentDto } from './dto/bonus-adjustment.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles, UserRole } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('clients')
@@ -29,7 +37,10 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class ClientsController {
-  constructor(private readonly clientsService: ClientsService) {}
+  constructor(
+    private readonly clientsService: ClientsService,
+    private readonly clientsImportService: ClientsImportService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Get all clients for the organization' })
@@ -135,6 +146,74 @@ export class ClientsController {
       user?.organizationId,
       organizationId,
     );
+  }
+
+  @Post('import')
+  @Roles(UserRole.DEVELOPER)
+  @ApiOperation({
+    summary: 'Импортировать клиентов из CSV/XLSX (только DEVELOPER)',
+    description:
+      'Колонки: «Имя», «Фамилия», «Телефон», «Дата рождения», «Заметки», «Бонусы», «Скидка», «Баланс», «Уровень» ' +
+      '(BRONZE/SILVER/GOLD/DIAMOND). Обязательные: Имя и Телефон. Клиенты с уже существующим в организации телефоном ' +
+      'пропускаются — импорт идемпотентен. `dryRun=true` — проверить файл без записи в БД.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiQuery({
+    name: 'organizationId',
+    required: true,
+    description: 'ID организации, в которую импортируются клиенты',
+  })
+  @ApiQuery({
+    name: 'dryRun',
+    required: false,
+    description: 'true — проверить файл без записи в БД',
+  })
+  @ApiResponse({ status: 201, description: 'Импорт выполнен' })
+  @ApiResponse({ status: 400, description: 'Ошибка формата файла / данных' })
+  @ApiResponse({ status: 403, description: 'Доступно только DEVELOPER' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        const ok =
+          /(\.csv|\.xlsx|\.xls|\.xlsm|\.xlsb)$/i.test(file.originalname) ||
+          /csv|excel|spreadsheet|sheet|octet-stream/i.test(file.mimetype);
+        if (!ok) {
+          return cb(
+            new BadRequestException('Разрешены только CSV или Excel (xlsx/xls) файлы'),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async importClients(
+    @UploadedFile() file: Express.Multer.File,
+    @Query('organizationId') organizationId: string | undefined,
+    @Query('dryRun') dryRun: string | undefined,
+    @CurrentUser() user?: any,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Файл не передан');
+    }
+    const orgId = (organizationId ?? '').trim() || user?.organizationId;
+    if (!orgId) {
+      throw new BadRequestException('Укажите organizationId в query');
+    }
+    return this.clientsImportService.importFromFile(file, user?.role, orgId, {
+      dryRun: dryRun === 'true' || dryRun === '1',
+    });
   }
 
   @Post()
