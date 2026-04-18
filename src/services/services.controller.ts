@@ -279,4 +279,32 @@ export class ServicesController {
       user?.organizationId,
     );
   }
+
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Удалить услугу из каталога организации',
+    description:
+      'Удаление доступно только для услуг без исторических связей (без записей/апсейлов/no-show). Иначе вернётся 400.',
+  })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 400, description: 'Service has history and cannot be deleted' })
+  @ApiResponse({ status: 404, description: 'Service not found' })
+  remove(
+    @Param('id') id: string,
+    @Query('organizationId') organizationId: string | undefined,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.delete(
+      id,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+      organizationId,
+    );
+  }
 }

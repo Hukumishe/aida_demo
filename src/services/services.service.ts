@@ -491,4 +491,52 @@ export class ServicesService {
     });
     return { success: true };
   }
+
+  async delete(
+    id: string,
+    userRole?: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
+  ) {
+    this.assertOrganizationCatalogAccess(userRole, userStudioId);
+
+    const organizationId = await this.resolveOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
+
+    const service = await this.prisma.service.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            appointments: true,
+            appointmentUpsells: true,
+            noShowIncomes: true,
+          },
+        },
+      },
+    });
+    if (!service || service.organizationId !== organizationId) {
+      throw new NotFoundException('Service not found in this organization');
+    }
+
+    const hasHistory =
+      service._count.appointments > 0 ||
+      service._count.appointmentUpsells > 0 ||
+      service._count.noShowIncomes > 0;
+
+    if (hasHistory) {
+      throw new BadRequestException(
+        'Нельзя удалить услугу: она уже используется в истории. Отключите услугу (isActive=false) вместо удаления.',
+      );
+    }
+
+    await this.prisma.service.delete({
+      where: { id },
+    });
+    return { success: true };
+  }
 }
