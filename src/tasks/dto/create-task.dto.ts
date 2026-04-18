@@ -31,4 +31,21 @@ export class CreateStudioTaskDto {
   @ApiProperty({ description: 'Крайний срок (ISO 8601)' })
   @IsDateString()
   deadlineAt: string;
+
+  @ApiPropertyOptional({
+    description: 'Привязка к клиенту организации (для перехода в карточку клиента)',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  clientId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Привязка к записи в этом филиале (studioId); клиент подставится из записи, если не указан clientId',
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  appointmentId?: string;
 }

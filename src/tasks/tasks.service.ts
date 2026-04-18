@@ -61,6 +61,53 @@ export class TasksService {
     }
   }
 
+  /**
+   * Проверяет клиента и запись в организации филиала; запись должна быть в этом studioId.
+   * Если указана только запись — clientId берётся из записи.
+   */
+  private async resolveTaskLinks(
+    studioId: string,
+    organizationId: string,
+    clientIdInput?: string | null,
+    appointmentIdInput?: string | null,
+  ): Promise<{ clientId: string | null; appointmentId: string | null }> {
+    const appointmentId = appointmentIdInput?.trim() || null;
+    let clientId = clientIdInput?.trim() || null;
+
+    if (appointmentId) {
+      const appt = await this.prisma.appointment.findUnique({
+        where: { id: appointmentId },
+        include: { studio: { select: { organizationId: true } } },
+      });
+      if (!appt) {
+        throw new BadRequestException('Запись не найдена');
+      }
+      if (appt.studio.organizationId !== organizationId) {
+        throw new BadRequestException('Запись не принадлежит организации этого филиала');
+      }
+      if (appt.studioId !== studioId) {
+        throw new BadRequestException(
+          'Запись относится к другому филиалу; укажите запись из текущего филиала',
+        );
+      }
+      if (clientId && clientId !== appt.clientId) {
+        throw new BadRequestException('Указанный клиент не совпадает с клиентом записи');
+      }
+      clientId = appt.clientId;
+    }
+
+    if (clientId) {
+      const client = await this.prisma.client.findFirst({
+        where: { id: clientId, organizationId },
+      });
+      if (!client) {
+        throw new BadRequestException('Клиент не найден в этой организации');
+      }
+    }
+
+    return { clientId, appointmentId };
+  }
+
   private taskInclude() {
     return {
       assignee: {
@@ -75,6 +122,25 @@ export class TasksService {
           id: true,
           role: true,
           staffProfile: { select: { firstName: true, lastName: true } },
+        },
+      },
+      client: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+        },
+      },
+      appointment: {
+        select: {
+          id: true,
+          studioId: true,
+          clientId: true,
+          startAt: true,
+          endAt: true,
+          status: true,
+          service: { select: { id: true, name: true } },
         },
       },
       controllers: {
@@ -142,6 +208,13 @@ export class TasksService {
       throw new BadRequestException('Некорректная дата deadlineAt');
     }
 
+    const links = await this.resolveTaskLinks(
+      studioId,
+      organizationId,
+      dto.clientId ?? null,
+      dto.appointmentId ?? null,
+    );
+
     const task = await this.prisma.studioTask.create({
       data: {
         id: generateId(IdPrefix.StudioTask),
@@ -152,6 +225,8 @@ export class TasksService {
         createdByUserId,
         deadlineAt,
         status: TaskStatus.OPEN,
+        clientId: links.clientId,
+        appointmentId: links.appointmentId,
         controllers: {
           create: (dto.controllerUserIds ?? []).map((uid) => ({
             id: generateId(IdPrefix.StudioTaskController),
@@ -227,7 +302,9 @@ export class TasksService {
         throw new ForbiddenException('Можно менять только свои задачи');
       }
       const allowedKeys = ['status', 'rejectionComment'];
-      const keys = Object.keys(dto).filter((k) => (dto as any)[k] !== undefined);
+      const keys = Object.keys(dto).filter(
+        (k) => (dto as Record<string, unknown>)[k] !== undefined,
+      );
       const bad = keys.filter((k) => !allowedKeys.includes(k));
       if (bad.length) {
         throw new ForbiddenException(
@@ -276,6 +353,24 @@ export class TasksService {
     if (dto.rejectionComment !== undefined) data.rejectionComment = dto.rejectionComment.trim();
     if (dto.status !== undefined && dto.status !== TaskStatus.CANCELLED) {
       data.rejectionComment = null;
+    }
+
+    if (!isMaster && (dto.clientId !== undefined || dto.appointmentId !== undefined)) {
+      let effClient: string | null | undefined =
+        dto.clientId !== undefined ? dto.clientId : task.clientId;
+      let effAppt: string | null | undefined =
+        dto.appointmentId !== undefined ? dto.appointmentId : task.appointmentId;
+      if (dto.clientId === null) effClient = null;
+      if (dto.appointmentId === null) effAppt = null;
+
+      const links = await this.resolveTaskLinks(
+        studioId,
+        organizationId,
+        effClient ?? null,
+        effAppt ?? null,
+      );
+      data.clientId = links.clientId;
+      data.appointmentId = links.appointmentId;
     }
 
     await this.prisma.$transaction(async (tx) => {

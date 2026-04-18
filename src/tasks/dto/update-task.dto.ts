@@ -4,9 +4,11 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsNotEmpty,
   IsOptional,
   IsString,
   ArrayUnique,
+  ValidateIf,
 } from 'class-validator';
 
 export class UpdateStudioTaskDto {
@@ -48,4 +50,22 @@ export class UpdateStudioTaskDto {
   @IsOptional()
   @IsString()
   rejectionComment?: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Привязка к клиенту; передайте null чтобы снять',
+  })
+  @ValidateIf((_, v) => v !== undefined && v !== null)
+  @IsString()
+  @IsNotEmpty()
+  clientId?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Привязка к записи; передайте null чтобы снять',
+  })
+  @ValidateIf((_, v) => v !== undefined && v !== null)
+  @IsString()
+  @IsNotEmpty()
+  appointmentId?: string | null;
 }

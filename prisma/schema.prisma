@@ -408,6 +408,7 @@ model Client {
   blacklistRequests  BlacklistRequest[]
   bonusHistory       BonusHistoryEntry[]
   studioLoyalties    ClientStudioLoyalty[]
+  studioTasks        StudioTask[]
 
   @@unique([organizationId, phone])
   @@unique([organizationId, referralCode])
@@ -707,6 +708,7 @@ model Appointment {
   service       Service             @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   arrivedByUser User?               @relation("ArrivedByUser", fields: [arrivedByUserId], references: [id])
   upsells       AppointmentUpsell[]
+  studioTasks   StudioTask[]
 
   @@index([studioId, staffUserId, startAt])
   @@index([studioId, startAt])
@@ -818,6 +820,10 @@ model StudioTask {
   deadlineAt             DateTime
   status                 TaskStatus @default(OPEN)
   deadlineReminderSentAt DateTime?
+  /// Опциональная привязка к клиенту организации
+  clientId               String?
+  /// Опциональная привязка к записи (тот же филиал, что и в URL создания задачи)
+  appointmentId          String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -825,12 +831,16 @@ model StudioTask {
   organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignee     User                   @relation("StudioTaskAssignee", fields: [assigneeUserId], references: [id], onDelete: Cascade)
   createdBy    User                   @relation("StudioTaskCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  client       Client?                @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  appointment  Appointment?           @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   controllers  StudioTaskController[]
 
   @@index([organizationId])
   @@index([assigneeUserId])
   @@index([deadlineAt])
   @@index([organizationId, status])
+  @@index([clientId])
+  @@index([appointmentId])
   @@map("studio_tasks")
 }
 
