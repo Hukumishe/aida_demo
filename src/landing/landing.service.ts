@@ -17,7 +17,7 @@ import {
   getDisabledCategoryIdsForStudio,
   isServiceOfferedInStudio,
 } from '../common/service-studio-offering';
-import { isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { ServicesService } from '../services/services.service';
 
 @Injectable()
@@ -46,16 +46,14 @@ export class LandingService {
     );
   }
 
-  // --- Promotions ---
+  // --- Promotions (organization-level) ---
 
-  async getPromotions(
-    studioId: string,
-    userOrganizationId?: string,
-    userRole?: string,
-  ) {
-    await assertUserOrganizationMatchesStudio(this.prisma, studioId, userOrganizationId, userRole);
-
-    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+  /**
+   * Список активных акций организации. Акции общие по всей сети — studioId не нужен.
+   * Публичный вызов (лендинг): `organizationId` передаётся в query.
+   */
+  async getPromotionsForOrganization(organizationId: string) {
+    await this.assertOrganizationExists(organizationId);
     const now = new Date();
     return this.prisma.landingPromotion.findMany({
       where: {
@@ -72,12 +70,34 @@ export class LandingService {
     });
   }
 
-  async resolvePromotionCode(studioId: string, rawCode: string) {
-    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
-    const [disabledServiceIds, disabledCategoryIds] = await Promise.all([
-      getDisabledServiceIdsForStudio(this.prisma, studioId),
-      getDisabledCategoryIdsForStudio(this.prisma, studioId),
-    ]);
+  /**
+   * Проверить промокод в рамках организации.
+   * @param studioIdForFilter — опциональный id филиала. Если задан, услуги в ответе
+   *   фильтруются по тому, что реально доступно для записи в филиале
+   *   (учёт StudioDisabledService / StudioDisabledCategory). Если не задан —
+   *   возвращаем все услуги организации, на которые распространяется акция.
+   */
+  async resolvePromotionCodeForOrganization(
+    organizationId: string,
+    rawCode: string,
+    studioIdForFilter?: string,
+  ) {
+    await this.assertOrganizationExists(organizationId);
+    if (studioIdForFilter) {
+      const studio = await this.prisma.studio.findUnique({
+        where: { id: studioIdForFilter },
+        select: { organizationId: true },
+      });
+      if (!studio || studio.organizationId !== organizationId) {
+        throw new BadRequestException('studioId не принадлежит этой организации');
+      }
+    }
+    const [disabledServiceIds, disabledCategoryIds] = studioIdForFilter
+      ? await Promise.all([
+          getDisabledServiceIdsForStudio(this.prisma, studioIdForFilter),
+          getDisabledCategoryIdsForStudio(this.prisma, studioIdForFilter),
+        ])
+      : [new Set<string>(), new Set<string>()];
     const code = rawCode?.trim().toUpperCase();
     if (!code) {
       throw new BadRequestException('Promo code is required');
@@ -236,15 +256,11 @@ export class LandingService {
     throw new BadRequestException('Unsupported promotion type');
   }
 
-  async createPromotion(
-    studioId: string,
+  async createPromotionForOrganization(
+    organizationId: string,
     dto: CreateLandingPromotionDto,
-    userRole?: string,
-    userStudioId?: string,
   ) {
-    this.ensureStudioAccess(studioId, userRole, userStudioId);
-
-    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    await this.assertOrganizationExists(organizationId);
 
     if (dto.type === 'DISCOUNT') {
       if (!dto.discountPercent || !dto.serviceIds || dto.serviceIds.length === 0) {
@@ -315,16 +331,12 @@ export class LandingService {
     });
   }
 
-  async updatePromotion(
-    studioId: string,
+  async updatePromotionForOrganization(
+    organizationId: string,
     id: string,
     dto: UpdateLandingPromotionDto,
-    userRole?: string,
-    userStudioId?: string,
   ) {
-    this.ensureStudioAccess(studioId, userRole, userStudioId);
-
-    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    await this.assertOrganizationExists(organizationId);
 
     const existing = await this.prisma.landingPromotion.findFirst({
       where: { id, organizationId },
@@ -391,15 +403,8 @@ export class LandingService {
     return updated;
   }
 
-  async deletePromotion(
-    studioId: string,
-    id: string,
-    userRole?: string,
-    userStudioId?: string,
-  ) {
-    this.ensureStudioAccess(studioId, userRole, userStudioId);
-
-    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+  async deletePromotionForOrganization(organizationId: string, id: string) {
+    await this.assertOrganizationExists(organizationId);
 
     const existing = await this.prisma.landingPromotion.findFirst({
       where: { id, organizationId },
@@ -622,6 +627,37 @@ export class LandingService {
       if (userStudioId !== studioId) {
         throw new ForbiddenException('Access denied to this studio');
       }
+    }
+  }
+
+  /**
+   * Преобразует пользователя + query-параметр `organizationId` в валидный organizationId.
+   * DEVELOPER может передать `?organizationId=` чтобы работать в чужой организации.
+   * Для прочих ролей organizationId всегда берётся из JWT.
+   */
+  async resolveOrganizationIdForPromotion(
+    userRole: string | undefined,
+    userOrganizationId: string | undefined,
+    organizationIdQuery: string | undefined,
+  ): Promise<string> {
+    if (isDeveloperRole(userRole) && organizationIdQuery?.trim()) {
+      const organizationId = organizationIdQuery.trim();
+      await this.assertOrganizationExists(organizationId);
+      return organizationId;
+    }
+    if (!userOrganizationId?.trim()) {
+      throw new BadRequestException('Organization context required');
+    }
+    return userOrganizationId.trim();
+  }
+
+  private async assertOrganizationExists(organizationId: string): Promise<void> {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { id: true },
+    });
+    if (!org) {
+      throw new NotFoundException(`Organization with ID ${organizationId} not found`);
     }
   }
 

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -6,6 +7,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -13,6 +15,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { LandingService } from './landing.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -34,88 +37,112 @@ import { ResolvePromotionCodeDto } from './dto/resolve-promotion-code.dto';
 export class LandingController {
   constructor(private readonly landingService: LandingService) {}
 
-  // --- Promotions ---
+  // --- Promotions (organization-level) ---
+  // Акции действуют на всю организацию (сеть салонов). studioId больше не требуется.
 
-  // Публичный список акций для лендинга
   @Public()
-  @Get('studios/:studioId/landing/promotions')
-  @ApiOperation({ summary: 'Список акций для лендинга по студии' })
-  @ApiResponse({ status: 200, description: 'Список акций с промокодами и услугами' })
-  async getPromotions(
-    @Param('studioId') studioId: string,
-  ) {
-    return this.landingService.getPromotions(studioId);
+  @Get('landing/promotions')
+  @ApiOperation({
+    summary: 'Список активных акций организации (публично)',
+    description:
+      'Возвращает акции организации с их промокодами и услугами. Акции общие на всю сеть, поэтому ' +
+      'фильтрация по филиалу не делается. Публичный эндпоинт — `organizationId` обязателен в query.',
+  })
+  @ApiQuery({ name: 'organizationId', required: true, description: 'ID организации' })
+  @ApiResponse({ status: 200, description: 'Список акций' })
+  async listPromotions(@Query('organizationId') organizationId: string | undefined) {
+    const orgId = (organizationId ?? '').trim();
+    if (!orgId) {
+      throw new BadRequestException('Query parameter organizationId is required');
+    }
+    return this.landingService.getPromotionsForOrganization(orgId);
   }
 
-  @Post('studios/:studioId/landing/promotions')
-  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
-  @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
-  @ApiOperation({ summary: 'Создать акцию для лендинга (скидка / 1+1 / bundle, с on/off)' })
-  @ApiResponse({ status: 201, description: 'Акция создана' })
-  async createPromotion(
-    @Param('studioId') studioId: string,
-    @Body() dto: CreateLandingPromotionDto,
-    @CurrentUser() user: any,
-  ) {
-    return this.landingService.createPromotion(
-      studioId,
-      dto,
-      user?.role,
-      user?.studioId,
+  @Public()
+  @Post('landing/promotions/resolve-code')
+  @ApiOperation({
+    summary: 'Проверить промокод и получить автоподстановку услуг/цены',
+    description:
+      'Публичный эндпоинт. В body обязательно `code` и `organizationId`. Опциональный `studioId` ' +
+      '— чтобы отфильтровать услуги по тому, что доступно для записи в конкретном филиале.',
+  })
+  @ApiResponse({ status: 200, description: 'Данные акции для автозаполнения формы записи' })
+  async resolvePromotionCode(@Body() dto: ResolvePromotionCodeDto) {
+    const orgId = (dto.organizationId ?? '').trim();
+    if (!orgId) {
+      throw new BadRequestException('Body field organizationId is required');
+    }
+    return this.landingService.resolvePromotionCodeForOrganization(
+      orgId,
+      dto.code,
+      dto.studioId?.trim() || undefined,
     );
   }
 
-  @Post('studios/:studioId/landing/promotions/resolve-code')
-  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @Post('landing/promotions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Проверить промокод и получить автоподстановку услуг/цены для записи' })
-  @ApiResponse({ status: 200, description: 'Данные акции для автозаполнения формы записи' })
-  async resolvePromotionCode(
-    @Param('studioId') studioId: string,
-    @Body() dto: ResolvePromotionCodeDto,
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @ApiOperation({
+    summary: 'Создать акцию (скидка / 1+1 / bundle, с on/off)',
+    description:
+      'Акция создаётся в рамках организации пользователя. DEVELOPER может передать ' +
+      '`?organizationId=<id>`, чтобы создать акцию в другой организации.',
+  })
+  @ApiQuery({ name: 'organizationId', required: false, description: 'Только DEVELOPER — id чужой организации' })
+  @ApiResponse({ status: 201, description: 'Акция создана' })
+  async createPromotion(
+    @Body() dto: CreateLandingPromotionDto,
+    @Query('organizationId') organizationIdQuery: string | undefined,
+    @CurrentUser() user: any,
   ) {
-    return this.landingService.resolvePromotionCode(studioId, dto.code);
+    const organizationId = await this.landingService.resolveOrganizationIdForPromotion(
+      user?.role,
+      user?.organizationId,
+      organizationIdQuery,
+    );
+    return this.landingService.createPromotionForOrganization(organizationId, dto);
   }
 
-  @Patch('studios/:studioId/landing/promotions/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @Patch('landing/promotions/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
   @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Обновить акцию (в т.ч. on/off через isActive)' })
+  @ApiQuery({ name: 'organizationId', required: false, description: 'Только DEVELOPER — id чужой организации' })
   @ApiResponse({ status: 200, description: 'Акция обновлена' })
   async updatePromotion(
-    @Param('studioId') studioId: string,
     @Param('id') id: string,
     @Body() dto: UpdateLandingPromotionDto,
+    @Query('organizationId') organizationIdQuery: string | undefined,
     @CurrentUser() user: any,
   ) {
-    return this.landingService.updatePromotion(
-      studioId,
-      id,
-      dto,
+    const organizationId = await this.landingService.resolveOrganizationIdForPromotion(
       user?.role,
-      user?.studioId,
+      user?.organizationId,
+      organizationIdQuery,
     );
+    return this.landingService.updatePromotionForOrganization(organizationId, id, dto);
   }
 
-  @Delete('studios/:studioId/landing/promotions/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @Delete('landing/promotions/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
   @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
   @ApiOperation({ summary: 'Удалить акцию' })
+  @ApiQuery({ name: 'organizationId', required: false, description: 'Только DEVELOPER — id чужой организации' })
   @ApiResponse({ status: 200, description: 'Акция удалена' })
   async deletePromotion(
-    @Param('studioId') studioId: string,
     @Param('id') id: string,
+    @Query('organizationId') organizationIdQuery: string | undefined,
     @CurrentUser() user: any,
   ) {
-    return this.landingService.deletePromotion(
-      studioId,
-      id,
+    const organizationId = await this.landingService.resolveOrganizationIdForPromotion(
       user?.role,
-      user?.studioId,
+      user?.organizationId,
+      organizationIdQuery,
     );
+    return this.landingService.deletePromotionForOrganization(organizationId, id);
   }
 
   // --- Masters ---
