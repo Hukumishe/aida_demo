@@ -21,7 +21,7 @@ import { UpdateServiceDto } from './dto/update-service.dto';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto';
 import { UpdateServiceCategoryDto } from './dto/update-service-category.dto';
 import { UserRole, isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
-import { ServiceAudience } from '@prisma/client';
+import { AppointmentStatus, ServiceAudience } from '@prisma/client';
 
 @Injectable()
 export class ServicesService {
@@ -509,28 +509,20 @@ export class ServicesService {
 
     const service = await this.prisma.service.findUnique({
       where: { id },
-      include: {
-        _count: {
-          select: {
-            appointments: true,
-            appointmentUpsells: true,
-            noShowIncomes: true,
-          },
-        },
-      },
     });
     if (!service || service.organizationId !== organizationId) {
       throw new NotFoundException('Service not found in this organization');
     }
 
-    const hasHistory =
-      service._count.appointments > 0 ||
-      service._count.appointmentUpsells > 0 ||
-      service._count.noShowIncomes > 0;
-
-    if (hasHistory) {
+    const activeAppointments = await this.prisma.appointment.count({
+      where: {
+        serviceId: id,
+        status: { in: [AppointmentStatus.BOOKED, AppointmentStatus.ARRIVED] },
+      },
+    });
+    if (activeAppointments > 0) {
       throw new BadRequestException(
-        'Нельзя удалить услугу: она уже используется в истории. Отключите услугу (isActive=false) вместо удаления.',
+        'Нельзя удалить услугу: по ней есть активные записи (BOOKED/ARRIVED).',
       );
     }
 

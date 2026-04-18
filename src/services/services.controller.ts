@@ -284,7 +284,7 @@ export class ServicesController {
   @ApiOperation({
     summary: 'Удалить услугу из каталога организации',
     description:
-      'Удаление доступно только для услуг без исторических связей (без записей/апсейлов/no-show). Иначе вернётся 400.',
+      'Удаление запрещено только если есть активные записи по услуге (BOOKED/ARRIVED).',
   })
   @ApiQuery({
     name: 'organizationId',
@@ -292,7 +292,7 @@ export class ServicesController {
     description: 'Только DEVELOPER',
   })
   @ApiResponse({ status: 200 })
-  @ApiResponse({ status: 400, description: 'Service has history and cannot be deleted' })
+  @ApiResponse({ status: 400, description: 'Service has active appointments and cannot be deleted' })
   @ApiResponse({ status: 404, description: 'Service not found' })
   remove(
     @Param('id') id: string,
