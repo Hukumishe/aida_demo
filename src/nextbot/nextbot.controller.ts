@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -35,41 +36,43 @@ import { NextbotSurveyDto } from './dto/nextbot-survey.dto';
  */
 @ApiTags('nextbot')
 @Controller('nextbot')
-@UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class NextbotController {
   constructor(private readonly nextbotService: NextbotService) {}
 
   // --- get_company_context ---
   @Get('context')
-  @ApiOperation({ summary: 'get_company_context' })
+  @ApiOperation({
+    summary: 'get_company_context',
+    description:
+      'Возвращает { organizationId, studios } — слой организации и список филиалов (как в панели). У каждой студии в массиве также есть своё поле organizationId.',
+  })
   @ApiResponse({ status: 200 })
   getContext(@CurrentUser() user: CurrentUserPayload) {
     return this.nextbotService.getCompanyContext(user);
   }
 
   // --- verify_client_status ---
-  @Get('studios/:studioId/clients/verify')
+  @Get('clients/verify')
   @ApiOperation({ summary: 'verify_client_status' })
   @ApiQuery({ name: 'q', required: false })
   verifyClient(
-    @Param('studioId') studioId: string,
     @Query('q') q: string | undefined,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.nextbotService.verifyClient(studioId, q, user);
+    return this.nextbotService.verifyClient(q, user);
   }
 
   // --- register_new_client ---
-  @Post('studios/:studioId/clients/register')
+  @Post('clients/register')
   @ApiOperation({ summary: 'register_new_client' })
   @ApiResponse({ status: 201 })
   registerClient(
-    @Param('studioId') studioId: string,
     @Body() dto: CreateClientDto,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.nextbotService.registerClient(studioId, dto, user);
+    return this.nextbotService.registerClient(dto, user);
   }
 
   // --- process_survey_answers ---
@@ -96,48 +99,56 @@ export class NextbotController {
   }
 
   // --- get_services_and_prices ---
-  @Get('studios/:studioId/services')
+  @Get('services')
   @ApiOperation({ summary: 'get_services_and_prices' })
+  @ApiQuery({
+    name: 'studioId',
+    required: true,
+    description: 'Филиал для флага isOfferedInStudio в ответе',
+  })
   getServices(
-    @Param('studioId') studioId: string,
+    @Query('studioId') studioId: string,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.nextbotService.getServices(studioId, user);
+    if (!studioId?.trim()) {
+      throw new BadRequestException('Query parameter studioId is required');
+    }
+    return this.nextbotService.getServices(studioId.trim(), user);
   }
 
   // --- get_active_promotions ---
   @Get('studios/:studioId/landing/promotions')
+  @UseGuards(StudioAccessGuard)
   @ApiOperation({ summary: 'get_active_promotions' })
   getPromotions(@Param('studioId') studioId: string) {
     return this.nextbotService.getPromotions(studioId);
   }
 
   // --- check_loyalty_status ---
-  @Get('studios/:studioId/clients/loyalty')
+  @Get('clients/loyalty')
   @ApiOperation({ summary: 'check_loyalty_status' })
   @ApiQuery({ name: 'q', required: false })
   loyalty(
-    @Param('studioId') studioId: string,
     @Query('q') q: string | undefined,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.nextbotService.loyaltySummary(studioId, q, user);
+    return this.nextbotService.loyaltySummary(q, user);
   }
 
   // --- get_referral_code ---
-  @Get('studios/:studioId/clients/referral')
+  @Get('clients/referral')
   @ApiOperation({ summary: 'get_referral_code' })
   @ApiQuery({ name: 'q', required: false })
   referral(
-    @Param('studioId') studioId: string,
     @Query('q') q: string | undefined,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.nextbotService.referralSummary(studioId, q, user);
+    return this.nextbotService.referralSummary(q, user);
   }
 
   // --- check_availability ---
   @Get('studios/:studioId/availability-raw')
+  @UseGuards(StudioAccessGuard)
   @ApiOperation({
     summary: 'check_availability',
     description:
@@ -192,6 +203,7 @@ export class NextbotController {
 
   // --- create_booking_request ---
   @Post('studios/:studioId/appointments')
+  @UseGuards(StudioAccessGuard)
   @ApiOperation({ summary: 'create_booking_request' })
   @ApiResponse({ status: 201 })
   createAppointment(

@@ -1,10 +1,11 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
   Get,
-  Post,
-  Body,
-  Patch,
   Param,
+  Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -21,110 +22,133 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { BonusAdjustmentDto } from './dto/bonus-adjustment.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { StudioAccessGuard } from '../common/guards/studio-access.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('clients')
-@Controller()
-@UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+@Controller('clients')
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
-  @Get('studios/:studioId/clients')
-  @ApiOperation({ summary: 'Get all clients for a studio' })
+  @Get()
+  @ApiOperation({ summary: 'Get all clients for the organization' })
   @ApiQuery({ name: 'q', required: false, description: 'Search query' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER: список клиентов указанной организации',
+  })
   @ApiResponse({ status: 200, description: 'List of clients' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAll(
-    @Param('studioId') studioId: string,
     @Query('q') query?: string,
+    @Query('organizationId') organizationId?: string,
     @CurrentUser() user?: any,
   ) {
-    return this.clientsService.findAll(studioId, query, user?.role, user?.studioId);
+    return this.clientsService.findAll(
+      query,
+      user?.role,
+      user?.organizationId,
+      organizationId,
+    );
   }
 
-  @Get('studios/:studioId/clients/segments')
-  @ApiOperation({ summary: 'Get client segment counts (New, Never visited, Sleeping, Missing)' })
+  @Get('segments')
+  @ApiOperation({
+    summary: 'Get client segment counts (New, Never visited, Sleeping, Missing)',
+    description:
+      'Сегменты считаются по последнему визиту в выбранный филиал — укажите studioId в query.',
+  })
+  @ApiQuery({
+    name: 'studioId',
+    required: true,
+    description: 'Филиал для расчёта сегментов (последний визит в эту студию)',
+  })
   @ApiResponse({ status: 200, description: 'Segment counts' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getSegments(
-    @Param('studioId') studioId: string,
+    @Query('studioId') studioId: string,
     @CurrentUser() user?: any,
   ) {
-    return this.clientsService.getClientSegments(studioId, user?.role, user?.studioId);
+    if (!studioId?.trim()) {
+      throw new BadRequestException('Query parameter studioId is required');
+    }
+    return this.clientsService.getClientSegments(
+      studioId.trim(),
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+    );
   }
 
-  @Get('studios/:studioId/clients/referred')
+  @Get('referred')
   @ApiOperation({ summary: 'List referred clients (who was referred, by whom)' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER: другая организация',
+  })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getReferredClients(
-    @Param('studioId') studioId: string,
+    @Query('organizationId') organizationId?: string,
     @CurrentUser() user?: any,
   ) {
-    return this.clientsService.getReferredClients(studioId, user?.role, user?.studioId);
+    return this.clientsService.getReferredClients(
+      user?.role,
+      user?.organizationId,
+      organizationId,
+    );
   }
 
-  @Get('studios/:studioId/clients/referrers')
-  @ApiOperation({ summary: 'List referrers (people whose codes were used) with referred count — for dashboard table' })
-  @ApiResponse({ status: 200, description: 'List of clients who referred someone, with referredCount; click row → open client profile' })
+  @Get('referrers')
+  @ApiOperation({
+    summary:
+      'List referrers (people whose codes were used) with referred count — for dashboard table',
+  })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER: другая организация',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'List of clients who referred someone, with referredCount; click row → open client profile',
+  })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async getReferrers(
-    @Param('studioId') studioId: string,
+    @Query('organizationId') organizationId?: string,
     @CurrentUser() user?: any,
   ) {
-    return this.clientsService.getReferrers(studioId, user?.role, user?.studioId);
+    return this.clientsService.getReferrers(
+      user?.role,
+      user?.organizationId,
+      organizationId,
+    );
   }
 
-  @Post('studios/:studioId/clients')
+  @Post()
   @ApiOperation({ summary: 'Create a new client' })
   @ApiResponse({ status: 201, description: 'Client created' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async create(
-    @Param('studioId') studioId: string,
     @Body() createClientDto: CreateClientDto,
     @CurrentUser() user?: any,
   ) {
-    return this.clientsService.create(studioId, createClientDto, user?.role, user?.studioId);
+    return this.clientsService.create(
+      createClientDto,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+    );
   }
 
-  @Get('clients/:id')
-  @ApiOperation({ summary: 'Get client by ID' })
-  @ApiResponse({ status: 200, description: 'Client details' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Client not found' })
-  @ApiQuery({
-    name: 'studioId',
-    required: false,
-    description:
-      'Устарело: лояльность и рефералка считаются по организации клиента; параметр не влияет на ответ.',
-  })
-  async findOne(
-    @Param('id') id: string,
-    @Query('studioId') _studioId: string | undefined,
-    @CurrentUser() user?: any,
-  ) {
-    return this.clientsService.findOne(id, user?.role, user?.studioId);
-  }
-
-  @Patch('clients/:id')
-  @ApiOperation({ summary: 'Update client' })
-  @ApiResponse({ status: 200, description: 'Client updated' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Client not found' })
-  async update(
-    @Param('id') id: string,
-    @Body() updateClientDto: UpdateClientDto,
-    @CurrentUser() user?: any,
-  ) {
-    return this.clientsService.update(id, updateClientDto, user?.role, user?.studioId);
-  }
-
-  @Get('clients/:id/statistics')
+  @Get(':id/statistics')
   @ApiOperation({ summary: 'Get client statistics (visits, average check)' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Client statistics',
     schema: {
       type: 'object',
@@ -144,13 +168,13 @@ export class ClientsController {
     return this.clientsService.getClientStatistics(id, user?.role, user?.studioId);
   }
 
-  @Get('clients/:id/appointments')
+  @Get(':id/appointments')
   @ApiOperation({ summary: 'Get client appointments' })
-  @ApiQuery({ 
-    name: 'upcoming', 
-    required: false, 
+  @ApiQuery({
+    name: 'upcoming',
+    required: false,
     type: Boolean,
-    description: 'Get only upcoming appointments (default: false)' 
+    description: 'Get only upcoming appointments (default: false)',
   })
   @ApiResponse({ status: 200, description: 'List of client appointments' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -169,7 +193,7 @@ export class ClientsController {
     );
   }
 
-  @Get('clients/:id/bonus-history')
+  @Get(':id/bonus-history')
   @ApiOperation({ summary: 'Get client bonus history (accruals and deductions)' })
   @ApiResponse({ status: 200, description: 'List of bonus history entries' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -181,7 +205,35 @@ export class ClientsController {
     return this.clientsService.getBonusHistory(id, user?.role, user?.studioId);
   }
 
-  @Post('clients/:id/bonus-adjustment')
+  @Get(':id')
+  @ApiOperation({ summary: 'Get client by ID' })
+  @ApiResponse({ status: 200, description: 'Client details' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Client not found' })
+  async findOne(@Param('id') id: string, @CurrentUser() user?: any) {
+    return this.clientsService.findOne(id, user?.role, user?.studioId, user?.organizationId);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update client' })
+  @ApiResponse({ status: 200, description: 'Client updated' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Client not found' })
+  async update(
+    @Param('id') id: string,
+    @Body() updateClientDto: UpdateClientDto,
+    @CurrentUser() user?: any,
+  ) {
+    return this.clientsService.update(
+      id,
+      updateClientDto,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+    );
+  }
+
+  @Post(':id/bonus-adjustment')
   @ApiOperation({ summary: 'Manual bonus adjustment (Owner only)' })
   @ApiResponse({ status: 201, description: 'Adjustment applied' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -202,7 +254,3 @@ export class ClientsController {
     );
   }
 }
-
-
-
-

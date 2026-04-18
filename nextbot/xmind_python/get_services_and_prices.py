@@ -10,8 +10,8 @@ headers = {
   "X-Organization-Id": args.get("organization_id", ""),
   "Accept": "application/json",
 }
-url = base + "/nextbot/studios/" + sid + "/services"
-r = requests.get(url, headers=headers, timeout=15)
+url = base + "/nextbot/services"
+r = requests.get(url, headers=headers, params={"studioId": sid}, timeout=15)
 try:
   data = r.json() if r.ok else r.text
 except Exception:

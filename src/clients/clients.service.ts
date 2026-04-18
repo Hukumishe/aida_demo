@@ -5,10 +5,15 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import {
+  assertUserOrganizationMatchesClientOrganizationId,
+  assertUserOrganizationMatchesStudio,
+  assertUserOrganizationMatchesStudioOrganizationId,
+} from '../common/organization-scope';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { UserRole, isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import {
   getCashbackPercent,
   getLevelProgress,
@@ -51,31 +56,62 @@ export class ClientsService {
     throw new BadRequestException('Could not generate unique referral code');
   }
 
-  async findAll(studioId: string, query?: string, userRole?: string, userStudioId?: string) {
-    // Check access
-    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
-    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      // ADMIN can only access their own studio
-      if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
-        throw new ForbiddenException('Access denied to this studio');
+  /**
+   * Организация для списков клиентов: JWT / X-Organization-Id, либо query organizationId (только DEVELOPER).
+   */
+  private async resolveListOrganizationId(
+    userRole: string | undefined,
+    userOrganizationId: string | undefined,
+    organizationIdQuery: string | undefined,
+  ): Promise<string> {
+    if (isDeveloperRole(userRole) && organizationIdQuery?.trim()) {
+      const organizationId = organizationIdQuery.trim();
+      const org = await this.prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { id: true },
+      });
+      if (!org) {
+        throw new NotFoundException(`Organization with ID ${organizationId} not found`);
       }
-      // MASTER should not access client list directly (only through appointments)
+      return organizationId;
+    }
+    if (!userOrganizationId?.trim()) {
+      throw new BadRequestException('Organization context required');
+    }
+    const organizationId = userOrganizationId.trim();
+    assertUserOrganizationMatchesStudioOrganizationId(
+      organizationId,
+      userOrganizationId,
+      userRole,
+    );
+    return organizationId;
+  }
+
+  /**
+   * Список клиентов организации. Путь без studioId — контекст организации из JWT / X-Organization-Id.
+   * Query organizationId — только для роли DEVELOPER (другая организация).
+   */
+  async findAll(
+    query?: string,
+    userRole?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
+  ) {
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       if (userRole === UserRole.MASTER) {
         throw new ForbiddenException('Masters cannot access client list');
       }
     }
 
-    const studio = await this.prisma.studio.findUnique({
-      where: { id: studioId },
-      select: { organizationId: true },
-    });
-    if (!studio) {
-      throw new NotFoundException(`Studio with ID ${studioId} not found`);
-    }
+    const organizationId = await this.resolveListOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
 
     const where: Record<string, unknown> = {
       isBlacklisted: false,
-      organizationId: studio.organizationId,
+      organizationId,
     };
 
     if (query) {
@@ -138,30 +174,25 @@ export class ClientsService {
    * @deprecated Для таблицы на дэшборде используйте getReferrers — там показываются владельцы кодов со счётчиком.
    */
   async getReferredClients(
-    studioId: string,
     userRole?: string,
-    userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
   ) {
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
-        throw new ForbiddenException('Access denied to this studio');
-      }
       if (userRole === UserRole.MASTER) {
         throw new ForbiddenException('Masters cannot access referred clients list');
       }
     }
 
-    const studio = await this.prisma.studio.findUnique({
-      where: { id: studioId },
-      select: { organizationId: true },
-    });
-    if (!studio) {
-      throw new NotFoundException(`Studio with ID ${studioId} not found`);
-    }
+    const organizationId = await this.resolveListOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
 
     const clients = await this.prisma.client.findMany({
       where: {
-        organizationId: studio.organizationId,
+        organizationId,
         referredByClientId: { not: null },
       },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
@@ -199,30 +230,25 @@ export class ClientsService {
    * Каждая строка — владелец кода + счётчик приведённых. По клику открывается профиль этого клиента.
    */
   async getReferrers(
-    studioId: string,
     userRole?: string,
-    userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
   ) {
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
-        throw new ForbiddenException('Access denied to this studio');
-      }
       if (userRole === UserRole.MASTER) {
         throw new ForbiddenException('Masters cannot access referrers list');
       }
     }
 
-    const studio = await this.prisma.studio.findUnique({
-      where: { id: studioId },
-      select: { organizationId: true },
-    });
-    if (!studio) {
-      throw new NotFoundException(`Studio with ID ${studioId} not found`);
-    }
+    const organizationId = await this.resolveListOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
 
     const clients = await this.prisma.client.findMany({
       where: {
-        organizationId: studio.organizationId,
+        organizationId,
         referredClients: { some: {} },
       },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
@@ -247,32 +273,27 @@ export class ClientsService {
   }
 
   async create(
-    studioId: string,
     createClientDto: CreateClientDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    // Check access
-    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      // ADMIN can only create clients in their own studio
-      if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
-        throw new ForbiddenException('Access denied to this studio');
-      }
-      // MASTER cannot create clients
       if (userRole === UserRole.MASTER) {
         throw new ForbiddenException('Masters cannot create clients');
       }
     }
 
-    const studio = await this.prisma.studio.findUnique({
-      where: { id: studioId },
-      select: { organizationId: true },
-    });
-    if (!studio) {
-      throw new NotFoundException(`Studio with ID ${studioId} not found`);
+    if (!userOrganizationId?.trim()) {
+      throw new BadRequestException('Organization context required');
     }
-    const organizationId = studio.organizationId;
+    const organizationId = userOrganizationId.trim();
+
+    assertUserOrganizationMatchesStudioOrganizationId(
+      organizationId,
+      userOrganizationId,
+      userRole,
+    );
 
     const existingClient = await this.prisma.client.findUnique({
       where: {
@@ -371,7 +392,7 @@ export class ClientsService {
     }
   }
 
-  async findOne(id: string, userRole?: string, userStudioId?: string) {
+  async findOne(id: string, userRole?: string, userStudioId?: string, userOrganizationId?: string) {
     const client = await this.prisma.client.findUnique({
       where: { id },
       include: {
@@ -393,6 +414,12 @@ export class ClientsService {
     if (!client) {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
+
+    assertUserOrganizationMatchesClientOrganizationId(
+      client.organizationId,
+      userOrganizationId,
+      userRole,
+    );
 
     // Check access (клиенты общие для всех салонов; ADMIN/MASTER как раньше)
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
@@ -672,6 +699,7 @@ export class ClientsService {
     updateClientDto: UpdateClientDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
     const {
       customLoyaltyOrganizationId,
@@ -688,6 +716,12 @@ export class ClientsService {
     if (!client) {
       throw new NotFoundException(`Client with ID ${id} not found`);
     }
+
+    assertUserOrganizationMatchesClientOrganizationId(
+      client.organizationId,
+      userOrganizationId,
+      userRole,
+    );
 
     // Check access (клиенты общие для всех салонов)
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
@@ -804,6 +838,7 @@ export class ClientsService {
     studioId: string,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
@@ -813,6 +848,13 @@ export class ClientsService {
         throw new ForbiddenException('Masters cannot access client segments');
       }
     }
+
+    await assertUserOrganizationMatchesStudio(
+      this.prisma,
+      studioId,
+      userOrganizationId,
+      userRole,
+    );
 
     const studio = await this.prisma.studio.findUnique({
       where: { id: studioId },

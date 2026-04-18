@@ -18,11 +18,11 @@ def register_new_client(
   balance: Optional[int] = None,
 ) -> Dict[str, Any]:
   """
-  POST /nextbot/studios/:studioId/clients/register — то же создание клиента, что в панели.
+  POST /nextbot/clients/register — то же создание клиента, что в панели.
 
   birth_date: YYYY-MM-DD (как в CreateClientDto).
   """
-  url = f"{nextbot_api_root(cfg)}/studios/{cfg.studio_id}/clients/register"
+  url = f"{nextbot_api_root(cfg)}/clients/register"
   payload: Dict[str, Any] = {
     "firstName": first_name,
     "phone": phone,

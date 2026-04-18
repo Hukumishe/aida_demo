@@ -189,15 +189,19 @@ This ensures:
 - `PATCH /staff/:userId` - Update staff member
 
 ### Clients
-- `GET /studios/:studioId/clients?q=` - Get clients (with optional search)
-- `POST /studios/:studioId/clients` - Create client
+- `GET /clients?q=` - List clients for the caller’s organization (optional `organizationId` for DEVELOPER)
+- `GET /clients/segments?studioId=` - Segment counts (per studio; last visit in that branch)
+- `GET /clients/referred` / `GET /clients/referrers` - Referral tables
+- `POST /clients` - Create client
 - `GET /clients/:id` - Get client by ID
 - `PATCH /clients/:id` - Update client
 
 ### Services
-- `GET /studios/:studioId/services` - Get all services
-- `POST /studios/:studioId/services` - Create service
+- `GET /services` - Organization catalog (optional `studioId` for `isOfferedInStudio`; optional `organizationId` for DEVELOPER)
+- `GET /services/categories` - Service categories (optional `organizationId` for DEVELOPER)
+- `POST /services` / `POST /services/categories` - Create
 - `PATCH /services/:id` - Update service
+- `PATCH /services/:id/studio-offering` - Body `{ studioId, offered }` — toggle offering per branch
 
 ### Schedule
 - `GET /studios/:studioId/schedule?date=YYYY-MM-DD` - Get schedule

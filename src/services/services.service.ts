@@ -5,7 +5,11 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { getOrganizationIdForStudio } from '../common/organization-scope';
+import {
+  assertUserOrganizationMatchesStudio,
+  assertUserOrganizationMatchesStudioOrganizationId,
+  getOrganizationIdForStudio,
+} from '../common/organization-scope';
 import {
   getDisabledServiceIdsForStudio,
   isServiceOfferedInStudio,
@@ -15,17 +19,52 @@ import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto';
 import { UpdateServiceCategoryDto } from './dto/update-service-category.dto';
-import { isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { UserRole, isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { ServiceAudience } from '@prisma/client';
 
 @Injectable()
 export class ServicesService {
   constructor(private prisma: PrismaService) {}
 
-  private assertStudioAccess(studioId: string, userRole?: string, userStudioId?: string) {
-    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
-      throw new ForbiddenException('Access denied to this studio');
+  /** Доступ к редактированию каталога услуг организации (как раньше при совпадении studio в пути). */
+  private assertOrganizationCatalogAccess(userRole?: string, userStudioId?: string) {
+    if (isOwnerLevelRole(userRole) || userRole === UserRole.MANAGER) {
+      return;
     }
+    if (userRole === UserRole.ADMIN || userRole === UserRole.MASTER) {
+      if (userStudioId) {
+        return;
+      }
+    }
+    throw new ForbiddenException('Access denied');
+  }
+
+  private async resolveOrganizationId(
+    userRole: string | undefined,
+    userOrganizationId: string | undefined,
+    organizationIdQuery: string | undefined,
+  ): Promise<string> {
+    if (isDeveloperRole(userRole) && organizationIdQuery?.trim()) {
+      const organizationId = organizationIdQuery.trim();
+      const org = await this.prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { id: true },
+      });
+      if (!org) {
+        throw new NotFoundException(`Organization with ID ${organizationId} not found`);
+      }
+      return organizationId;
+    }
+    if (!userOrganizationId?.trim()) {
+      throw new BadRequestException('Organization context required');
+    }
+    const organizationId = userOrganizationId.trim();
+    assertUserOrganizationMatchesStudioOrganizationId(
+      organizationId,
+      userOrganizationId,
+      userRole,
+    );
+    return organizationId;
   }
 
   private async assertCategoryBelongsToOrganization(
@@ -40,25 +79,44 @@ export class ServicesService {
     }
   }
 
-  async findAll(studioId: string, userRole?: string, userStudioId?: string) {
+  /**
+   * Каталог услуг организации (один на все филиалы).
+   * Query `studioId` — опционально: добавить `isOfferedInStudio` для выбранного филиала.
+   * Query `organizationId` — только DEVELOPER: чужая организация.
+   */
+  async findAll(
+    userRole?: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
+    studioIdForOffering?: string,
+  ) {
     try {
-      this.assertStudioAccess(studioId, userRole, userStudioId);
+      const organizationId = await this.resolveOrganizationId(
+        userRole,
+        userOrganizationId,
+        organizationIdQuery,
+      );
 
-      if (!studioId) {
-        throw new NotFoundException('Studio ID is required');
+      const services = await this.prisma.service.findMany({
+        where: { organizationId },
+        include: { category: true },
+        orderBy: [{ name: 'asc' }],
+      });
+
+      if (!studioIdForOffering?.trim()) {
+        return services;
       }
 
-      const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+      const sid = studioIdForOffering.trim();
+      await assertUserOrganizationMatchesStudio(
+        this.prisma,
+        sid,
+        userOrganizationId,
+        userRole,
+      );
 
-      const [services, disabledIds] = await Promise.all([
-        this.prisma.service.findMany({
-          where: { organizationId },
-          include: { category: true },
-          orderBy: [{ name: 'asc' }],
-        }),
-        getDisabledServiceIdsForStudio(this.prisma, studioId),
-      ]);
-
+      const disabledIds = await getDisabledServiceIdsForStudio(this.prisma, sid);
       return services.map((s) => ({
         ...s,
         isOfferedInStudio: isServiceOfferedInStudio(s, disabledIds, s.id),
@@ -73,14 +131,19 @@ export class ServicesService {
   }
 
   async create(
-    studioId: string,
     createServiceDto: CreateServiceDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
   ) {
-    this.assertStudioAccess(studioId, userRole, userStudioId);
+    this.assertOrganizationCatalogAccess(userRole, userStudioId);
 
-    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const organizationId = await this.resolveOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
 
     await this.assertCategoryBelongsToOrganization(createServiceDto.categoryId, organizationId);
 
@@ -103,15 +166,20 @@ export class ServicesService {
   }
 
   async update(
-    studioId: string,
     id: string,
     updateServiceDto: UpdateServiceDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
   ) {
-    this.assertStudioAccess(studioId, userRole, userStudioId);
+    this.assertOrganizationCatalogAccess(userRole, userStudioId);
 
-    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const organizationId = await this.resolveOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
 
     const service = await this.prisma.service.findUnique({
       where: { id },
@@ -122,7 +190,7 @@ export class ServicesService {
     }
 
     if (service.organizationId !== organizationId) {
-      throw new NotFoundException('Service not found in this studio');
+      throw new NotFoundException('Service not found in this organization');
     }
 
     const { defaultDurationMin, categoryId, ...rest } = updateServiceDto as UpdateServiceDto & {
@@ -141,17 +209,11 @@ export class ServicesService {
       data.categoryId = categoryId;
     }
 
-    const updated = await this.prisma.service.update({
+    return this.prisma.service.update({
       where: { id },
       data: data as any,
       include: { category: true },
     });
-
-    const disabledIds = await getDisabledServiceIdsForStudio(this.prisma, studioId);
-    return {
-      ...updated,
-      isOfferedInStudio: isServiceOfferedInStudio(updated, disabledIds, updated.id),
-    };
   }
 
   /**
@@ -159,13 +221,29 @@ export class ServicesService {
    * Каталог организации (`Service.isActive`) и другие филиалы не затрагиваются.
    */
   async setStudioServiceOffering(
-    studioId: string,
     serviceId: string,
+    studioId: string,
     offered: boolean,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    this.assertStudioAccess(studioId, userRole, userStudioId);
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
+      if (userRole === UserRole.ADMIN || userRole === UserRole.MASTER) {
+        if (userStudioId !== studioId) {
+          throw new ForbiddenException('Access denied to this studio');
+        }
+      } else {
+        throw new ForbiddenException('Access denied');
+      }
+    }
+
+    await assertUserOrganizationMatchesStudio(
+      this.prisma,
+      studioId,
+      userOrganizationId,
+      userRole,
+    );
 
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
@@ -173,7 +251,7 @@ export class ServicesService {
       where: { id: serviceId },
     });
     if (!service || service.organizationId !== organizationId) {
-      throw new NotFoundException('Service not found in this studio');
+      throw new NotFoundException('Service not found in this organization');
     }
 
     if (offered) {
@@ -197,9 +275,17 @@ export class ServicesService {
     };
   }
 
-  async findCategories(studioId: string, userRole?: string, userStudioId?: string) {
-    this.assertStudioAccess(studioId, userRole, userStudioId);
-    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+  async findCategories(
+    userRole?: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
+  ) {
+    const organizationId = await this.resolveOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
     return this.prisma.serviceCategory.findMany({
       where: { organizationId },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -207,14 +293,19 @@ export class ServicesService {
   }
 
   async createCategory(
-    studioId: string,
     dto: CreateServiceCategoryDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
   ) {
-    this.assertStudioAccess(studioId, userRole, userStudioId);
+    this.assertOrganizationCatalogAccess(userRole, userStudioId);
 
-    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const organizationId = await this.resolveOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
 
     return this.prisma.serviceCategory.create({
       data: {
@@ -227,15 +318,20 @@ export class ServicesService {
   }
 
   async updateCategory(
-    studioId: string,
     categoryId: string,
     dto: UpdateServiceCategoryDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
   ) {
-    this.assertStudioAccess(studioId, userRole, userStudioId);
+    this.assertOrganizationCatalogAccess(userRole, userStudioId);
 
-    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const organizationId = await this.resolveOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
 
     const cat = await this.prisma.serviceCategory.findUnique({
       where: { id: categoryId },
@@ -254,14 +350,19 @@ export class ServicesService {
   }
 
   async deleteCategory(
-    studioId: string,
     categoryId: string,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
   ) {
-    this.assertStudioAccess(studioId, userRole, userStudioId);
+    this.assertOrganizationCatalogAccess(userRole, userStudioId);
 
-    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const organizationId = await this.resolveOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
 
     const cat = await this.prisma.serviceCategory.findUnique({
       where: { id: categoryId },

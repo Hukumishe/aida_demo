@@ -60,7 +60,13 @@ export class AppointmentsController {
     @Body() createAppointmentDto: CreateAppointmentDto,
     @CurrentUser() user?: any,
   ) {
-    return this.appointmentsService.create(studioId, createAppointmentDto, user?.role, user?.studioId);
+    return this.appointmentsService.create(
+      studioId,
+      createAppointmentDto,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+    );
   }
 
   @Patch('appointments/:id')
@@ -80,6 +86,7 @@ export class AppointmentsController {
       user?.role,
       user?.studioId,
       user?.userId,
+      user?.organizationId,
     );
   }
 

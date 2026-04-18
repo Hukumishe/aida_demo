@@ -52,29 +52,41 @@ export class NextbotService {
     );
   }
 
-  /** get_company_context */
-  getCompanyContext(user: CurrentUserPayload) {
-    return this.studiosService.findAll(user.role, user.studioId, user.organizationId);
+  /** get_company_context — явный слой организации + список филиалов (у каждой студии своё organizationId в полях Prisma). */
+  async getCompanyContext(user: CurrentUserPayload) {
+    const studios = await this.studiosService.findAll(
+      user.role,
+      user.studioId,
+      user.organizationId,
+    );
+    return {
+      organizationId: user.organizationId,
+      studios,
+    };
   }
 
   /** verify_client_status */
-  async verifyClient(studioId: string, q: string | undefined, user: CurrentUserPayload) {
+  async verifyClient(q: string | undefined, user: CurrentUserPayload) {
     const list = await this.clientsService.findAll(
-      studioId,
       q,
       user.role,
-      user.studioId,
+      user.organizationId,
     );
     if (!list.length) {
       return { found: false, client: null as null };
     }
-    const profile = await this.clientsService.findOne(list[0].id, user.role, user.studioId);
+    const profile = await this.clientsService.findOne(
+      list[0].id,
+      user.role,
+      user.studioId,
+      user.organizationId,
+    );
     return { found: true, client: profile };
   }
 
   /** check_loyalty_status */
-  async loyaltySummary(studioId: string, q: string | undefined, user: CurrentUserPayload) {
-    const status = await this.verifyClient(studioId, q, user);
+  async loyaltySummary(q: string | undefined, user: CurrentUserPayload) {
+    const status = await this.verifyClient(q, user);
     if (!status.found || !status.client) {
       return {
         found: false,
@@ -101,8 +113,8 @@ export class NextbotService {
   }
 
   /** get_referral_code */
-  async referralSummary(studioId: string, q: string | undefined, user: CurrentUserPayload) {
-    const status = await this.verifyClient(studioId, q, user);
+  async referralSummary(q: string | undefined, user: CurrentUserPayload) {
+    const status = await this.verifyClient(q, user);
     if (!status.found || !status.client) {
       return { found: false, clientId: null, referralCode: null, rawClient: null };
     }
@@ -116,12 +128,8 @@ export class NextbotService {
   }
 
   /** register_new_client */
-  registerClient(
-    studioId: string,
-    dto: CreateClientDto,
-    user: CurrentUserPayload,
-  ) {
-    return this.clientsService.create(studioId, dto, user.role, user.studioId);
+  registerClient(dto: CreateClientDto, user: CurrentUserPayload) {
+    return this.clientsService.create(dto, user.role, user.studioId, user.organizationId);
   }
 
   /** process_survey_answers */
@@ -139,6 +147,7 @@ export class NextbotService {
         clientId,
         user.role,
         user.studioId,
+        user.organizationId,
       );
       const old = ((existing as { notes?: string | null }).notes ?? '').trim();
       newNotes = old ? `${old}\n\n${block}`.trim() : block;
@@ -149,12 +158,19 @@ export class NextbotService {
       { notes: newNotes },
       user.role,
       user.studioId,
+      user.organizationId,
     );
   }
 
   /** get_services_and_prices */
   getServices(studioId: string, user: CurrentUserPayload) {
-    return this.servicesService.findAll(studioId, user.role, user.studioId);
+    return this.servicesService.findAll(
+      user.role,
+      user.studioId,
+      user.organizationId,
+      undefined,
+      studioId,
+    );
   }
 
   /** get_active_promotions */
@@ -209,6 +225,7 @@ export class NextbotService {
       dto,
       user.role,
       user.studioId,
+      user.organizationId,
     );
   }
 
@@ -227,6 +244,7 @@ export class NextbotService {
       user.role,
       user.studioId,
       user.userId,
+      user.organizationId,
     );
   }
 }

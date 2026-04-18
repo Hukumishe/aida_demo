@@ -163,7 +163,7 @@ export class LandingController {
   @ApiOperation({
     summary: 'Каталог услуг для выбора в карточке лендинга (админка)',
     description:
-      'Тот же состав, что GET /studios/:studioId/services (с полем isOfferedInStudio). Для селекта «Услуга» в модалке добавления карточки.',
+      'Тот же состав, что GET /services?studioId=… (с полем isOfferedInStudio). Для селекта «Услуга» в модалке добавления карточки.',
   })
   @ApiResponse({ status: 200 })
   async getServiceCatalogForLanding(
@@ -174,6 +174,7 @@ export class LandingController {
       studioId,
       user?.role,
       user?.studioId,
+      user?.organizationId,
     );
   }
 

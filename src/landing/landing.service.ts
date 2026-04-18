@@ -7,7 +7,10 @@ import { CreateLandingServiceCardDto } from './dto/create-service-card.dto';
 import { UpdateLandingServiceCardDto } from './dto/update-service-card.dto';
 import { ReorderLandingServiceCardsDto } from './dto/reorder-service-cards.dto';
 import { generateId, IdPrefix } from '../common/id-generator';
-import { getOrganizationIdForStudio } from '../common/organization-scope';
+import {
+  assertUserOrganizationMatchesStudio,
+  getOrganizationIdForStudio,
+} from '../common/organization-scope';
 import { getDisabledServiceIdsForStudio } from '../common/service-studio-offering';
 import { isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { ServicesService } from '../services/services.service';
@@ -27,13 +30,26 @@ export class LandingService {
     studioId: string,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    return this.servicesService.findAll(studioId, userRole, userStudioId);
+    return this.servicesService.findAll(
+      userRole,
+      userStudioId,
+      userOrganizationId,
+      undefined,
+      studioId,
+    );
   }
 
   // --- Promotions ---
 
-  async getPromotions(studioId: string) {
+  async getPromotions(
+    studioId: string,
+    userOrganizationId?: string,
+    userRole?: string,
+  ) {
+    await assertUserOrganizationMatchesStudio(this.prisma, studioId, userOrganizationId, userRole);
+
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     const now = new Date();
     return this.prisma.landingPromotion.findMany({

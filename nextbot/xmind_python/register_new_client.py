@@ -1,17 +1,16 @@
 # xmind: register_new_client
-# args: base_url, api_key, organization_id, studio_id
+# args: base_url, api_key, organization_id
 # тело: либо payload_json (строка JSON CreateClientDto), либо отдельные first_name, phone, last_name, birth_date, notes, ...
 # Без import json: json.loads и requests(..., json=...) доступны в среде Nextbot.
 
 base = args.get("base_url", "").rstrip("/")
-sid = str(args.get("studio_id", ""))
 headers = {
   "X-API-Key": args.get("api_key", ""),
   "X-Organization-Id": args.get("organization_id", ""),
   "Accept": "application/json",
   "Content-Type": "application/json",
 }
-url = base + "/nextbot/studios/" + sid + "/clients/register"
+url = base + "/nextbot/clients/register"
 pj = args.get("payload_json", None)
 if pj:
   body = json.loads(pj) if isinstance(pj, str) else pj

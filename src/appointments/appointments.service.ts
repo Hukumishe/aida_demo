@@ -23,6 +23,10 @@ import {
   findReferrerByClientReferralCode,
   normalizeReferralCodeInput,
 } from '../common/referral-code.util';
+import {
+  assertUserOrganizationMatchesStudio,
+  assertUserOrganizationMatchesStudioOrganizationId,
+} from '../common/organization-scope';
 
 @Injectable()
 export class AppointmentsService {
@@ -116,6 +120,7 @@ export class AppointmentsService {
     createAppointmentDto: CreateAppointmentDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
     // Check access
     // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
@@ -134,6 +139,11 @@ export class AppointmentsService {
     if (!studio) {
       throw new NotFoundException(`Studio with ID ${studioId} not found`);
     }
+    assertUserOrganizationMatchesStudioOrganizationId(
+      studio.organizationId,
+      userOrganizationId,
+      userRole,
+    );
     const org = studio.organization;
 
     // Verify staff user exists and belongs to studio
@@ -305,6 +315,7 @@ export class AppointmentsService {
     userRole?: string,
     userStudioId?: string,
     userStaffId?: string,
+    userOrganizationId?: string,
   ) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
@@ -316,6 +327,13 @@ export class AppointmentsService {
     if (!appointment) {
       throw new NotFoundException(`Appointment with ID ${id} not found`);
     }
+
+    await assertUserOrganizationMatchesStudio(
+      this.prisma,
+      appointment.studioId,
+      userOrganizationId,
+      userRole,
+    );
 
     // Check access
     // OWNER, DEPUTY_OWNER and MANAGER have access to all studios

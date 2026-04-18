@@ -1,5 +1,22 @@
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+
+def parse_company_context_json(raw: Any) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+  """
+  Нормализует тело GET /nextbot/context:
+  - новый формат: { "organizationId": "...", "studios": [...] }
+  - старый: голый массив студий (без корневого organizationId)
+  """
+  if isinstance(raw, list):
+    return raw, None
+  if isinstance(raw, dict):
+    org = raw.get("organizationId")
+    studios = raw.get("studios")
+    if isinstance(studios, list):
+      oid = org.strip() if isinstance(org, str) else None
+      return studios, oid or None
+  return [], None
 
 
 @dataclass
@@ -31,5 +48,5 @@ def build_headers(cfg: AidaConfig) -> Dict[str, str]:
 
 
 def nextbot_api_root(cfg: AidaConfig) -> str:
-  """Базовый URL префикса Nest: `GET {root}/context`, `GET {root}/studios/:id/services`, …"""
+  """Базовый URL префикса Nest: `GET {root}/context`, `GET {root}/services?studioId=…`, …"""
   return f"{cfg.base_url.rstrip('/')}/nextbot"

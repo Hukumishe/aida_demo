@@ -6,6 +6,7 @@ import {
   Patch,
   Delete,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -13,6 +14,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/create-service.dto';
@@ -22,27 +24,144 @@ import { UpdateServiceCategoryDto } from './dto/update-service-category.dto';
 import { SetServiceStudioOfferingDto } from './dto/set-service-studio-offering.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { StudioAccessGuard } from '../common/guards/studio-access.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @ApiTags('services')
-@Controller()
-@UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+@Controller('services')
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
 
-  @Get('studios/:studioId/services')
-  @ApiOperation({ summary: 'Get all services for a studio' })
+  // --- Категории (статические пути до :id) ---
+
+  @Get('categories')
+  @ApiOperation({ summary: 'Список категорий услуг организации' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER: категории указанной организации',
+  })
+  @ApiResponse({ status: 200 })
+  listCategories(
+    @Query('organizationId') organizationId: string | undefined,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.findCategories(
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+      organizationId,
+    );
+  }
+
+  @Post('categories')
+  @ApiOperation({ summary: 'Создать категорию услуг' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER: создать в указанной организации',
+  })
+  @ApiResponse({ status: 201 })
+  createCategory(
+    @Body() dto: CreateServiceCategoryDto,
+    @Query('organizationId') organizationId: string | undefined,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.createCategory(
+      dto,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+      organizationId,
+    );
+  }
+
+  @Patch('categories/:categoryId')
+  @ApiOperation({ summary: 'Изменить категорию услуг' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 404 })
+  updateCategory(
+    @Param('categoryId') categoryId: string,
+    @Body() dto: UpdateServiceCategoryDto,
+    @Query('organizationId') organizationId: string | undefined,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.updateCategory(
+      categoryId,
+      dto,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+      organizationId,
+    );
+  }
+
+  @Delete('categories/:categoryId')
+  @ApiOperation({
+    summary: 'Удалить категорию',
+    description: 'У услуг с этой категорией поле categoryId станет null',
+  })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 404 })
+  deleteCategory(
+    @Param('categoryId') categoryId: string,
+    @Query('organizationId') organizationId: string | undefined,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.deleteCategory(
+      categoryId,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+      organizationId,
+    );
+  }
+
+  // --- Каталог услуг (один на организацию) ---
+
+  @Get()
+  @ApiOperation({
+    summary: 'Список услуг организации',
+    description:
+      'Опционально `studioId` в query — добавить `isOfferedInStudio` для выбранного филиала.',
+  })
+  @ApiQuery({
+    name: 'studioId',
+    required: false,
+    description: 'Филиал для флага isOfferedInStudio (переключение доступа — отдельный PATCH studio-offering)',
+  })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER: каталог указанной организации',
+  })
   @ApiResponse({ status: 200, description: 'List of services' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async findAll(
-    @Param('studioId') studioId: string,
+    @Query('studioId') studioId: string | undefined,
+    @Query('organizationId') organizationId: string | undefined,
     @CurrentUser() user?: any,
   ) {
     try {
-      return await this.servicesService.findAll(studioId, user?.role, user?.studioId);
+      return await this.servicesService.findAll(
+        user?.role,
+        user?.studioId,
+        user?.organizationId,
+        organizationId,
+        studioId,
+      );
     } catch (error) {
       console.error('Error in ServicesController.findAll:', {
         studioId,
@@ -55,118 +174,75 @@ export class ServicesController {
     }
   }
 
-  @Post('studios/:studioId/services')
-  @ApiOperation({ summary: 'Create a new service' })
+  @Post()
+  @ApiOperation({ summary: 'Создать услугу в каталоге организации' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER',
+  })
   @ApiResponse({ status: 201, description: 'Service created' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async create(
-    @Param('studioId') studioId: string,
     @Body() createServiceDto: CreateServiceDto,
+    @Query('organizationId') organizationId: string | undefined,
     @CurrentUser() user?: any,
   ) {
-    return this.servicesService.create(studioId, createServiceDto, user?.role, user?.studioId);
+    return this.servicesService.create(
+      createServiceDto,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+      organizationId,
+    );
   }
 
-  @Patch('studios/:studioId/services/:id')
-  @ApiOperation({ summary: 'Update service' })
+  @Patch(':id')
+  @ApiOperation({ summary: 'Обновить услугу' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER',
+  })
   @ApiResponse({ status: 200, description: 'Service updated' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Service not found' })
   async update(
-    @Param('studioId') studioId: string,
     @Param('id') id: string,
     @Body() updateServiceDto: UpdateServiceDto,
+    @Query('organizationId') organizationId: string | undefined,
     @CurrentUser() user?: any,
   ) {
-    return this.servicesService.update(studioId, id, updateServiceDto, user?.role, user?.studioId);
+    return this.servicesService.update(
+      id,
+      updateServiceDto,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+      organizationId,
+    );
   }
 
-  @Patch('studios/:studioId/services/:id/studio-offering')
+  @Patch(':id/studio-offering')
   @ApiOperation({
-    summary: 'Включить/выключить услугу только в этом филиале',
+    summary: 'Включить/выключить услугу только в выбранном филиале',
     description:
-      'Не меняет каталог организации и другие филиалы. Поле `isActive` у услуги — отдельно (на всю сеть).',
+      'Тело: `studioId` + `offered`. Не меняет каталог организации и другие филиалы.',
   })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 404 })
   setStudioOffering(
-    @Param('studioId') studioId: string,
     @Param('id') id: string,
     @Body() dto: SetServiceStudioOfferingDto,
     @CurrentUser() user?: any,
   ) {
     return this.servicesService.setStudioServiceOffering(
-      studioId,
       id,
+      dto.studioId,
       dto.offered,
       user?.role,
       user?.studioId,
-    );
-  }
-
-  // --- Категории услуг ---
-
-  @Get('studios/:studioId/service-categories')
-  @ApiOperation({ summary: 'Список категорий услуг студии' })
-  @ApiResponse({ status: 200 })
-  listCategories(
-    @Param('studioId') studioId: string,
-    @CurrentUser() user?: any,
-  ) {
-    return this.servicesService.findCategories(studioId, user?.role, user?.studioId);
-  }
-
-  @Post('studios/:studioId/service-categories')
-  @ApiOperation({ summary: 'Создать категорию услуг' })
-  @ApiResponse({ status: 201 })
-  createCategory(
-    @Param('studioId') studioId: string,
-    @Body() dto: CreateServiceCategoryDto,
-    @CurrentUser() user?: any,
-  ) {
-    return this.servicesService.createCategory(studioId, dto, user?.role, user?.studioId);
-  }
-
-  @Patch('studios/:studioId/service-categories/:categoryId')
-  @ApiOperation({ summary: 'Изменить категорию услуг' })
-  @ApiResponse({ status: 200 })
-  @ApiResponse({ status: 404 })
-  updateCategory(
-    @Param('studioId') studioId: string,
-    @Param('categoryId') categoryId: string,
-    @Body() dto: UpdateServiceCategoryDto,
-    @CurrentUser() user?: any,
-  ) {
-    return this.servicesService.updateCategory(
-      studioId,
-      categoryId,
-      dto,
-      user?.role,
-      user?.studioId,
-    );
-  }
-
-  @Delete('studios/:studioId/service-categories/:categoryId')
-  @ApiOperation({
-    summary: 'Удалить категорию',
-    description: 'У услуг с этой категорией поле categoryId станет null',
-  })
-  @ApiResponse({ status: 200 })
-  @ApiResponse({ status: 404 })
-  deleteCategory(
-    @Param('studioId') studioId: string,
-    @Param('categoryId') categoryId: string,
-    @CurrentUser() user?: any,
-  ) {
-    return this.servicesService.deleteCategory(
-      studioId,
-      categoryId,
-      user?.role,
-      user?.studioId,
+      user?.organizationId,
     );
   }
 }
-
-
-
-

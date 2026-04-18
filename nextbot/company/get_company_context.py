@@ -2,18 +2,19 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from ..config import AidaConfig, build_headers, nextbot_api_root
+from ..config import AidaConfig, build_headers, nextbot_api_root, parse_company_context_json
 
 
 def get_company_context(cfg: AidaConfig) -> Dict[str, Any]:
   """
-  GET /nextbot/context — список студий (как в панели) и текущая по cfg.studio_id.
+  GET /nextbot/context — organizationId, список студий и текущая по cfg.studio_id.
   """
   url = f"{nextbot_api_root(cfg)}/context"
   resp = requests.get(url, headers=build_headers(cfg), timeout=10)
   resp.raise_for_status()
   raw = resp.json()
-  studios: List[Dict[str, Any]] = raw if isinstance(raw, list) else []
+  studios, organization_id_from_api = parse_company_context_json(raw)
+  effective_org_id = organization_id_from_api or cfg.organization_id
 
   current_studio: Optional[Dict[str, Any]] = None
   if cfg.studio_id:
@@ -23,6 +24,7 @@ def get_company_context(cfg: AidaConfig) -> Dict[str, Any]:
     )
 
   out: Dict[str, Any] = {
+    "organizationId": effective_org_id,
     "studios": studios,
     "currentStudio": current_studio,
   }
