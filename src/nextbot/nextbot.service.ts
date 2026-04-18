@@ -1,4 +1,12 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { ServiceAudience } from '@prisma/client';
+import {
+  assertUserOrganizationMatchesStudio,
+} from '../common/organization-scope';
+import {
+  getDisabledCategoryIdsForStudio,
+  getDisabledServiceIdsForStudio,
+} from '../common/service-studio-offering';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { StudiosService } from '../studios/studios.service';
 import { ClientsService } from '../clients/clients.service';
@@ -33,6 +41,35 @@ export const NEXTBOT_GET_SERVICE_CATEGORIES_PROMPT = [
   'ПРОВЕРКА ДОСТУПНОСТИ (КРИТИЧНО): В массиве "categories" у каждой услуги есть параметр "available_in" со списком ID филиалов. Если клиент выбрал услугу, которая доступна НЕ во всех студиях (например, только в одной), ты ОБЯЗАН предупредить его об этом и предложить только доступные варианты, опираясь на названия из справочника локаций в твоем базовом контексте.',
   'ПЕРЕХОД К ПРАЙСУ: Как только клиент определится с категорией (зафиксируй её "id") и ты будешь точно знать нужный прайс, вызывай функцию get_services_and_prices для получения конкретных услуг.',
 ].join('\n');
+
+/**
+ * Фолбэк-промпт для get_services_and_prices.
+ * Бэкенд уже отдаёт уже отфильтрованный прайс (по студии, категории и полу),
+ * поэтому инструкция — короткая и прямая.
+ */
+export const NEXTBOT_GET_SERVICES_AND_PRICES_PROMPT = [
+  'СИСТЕМНОЕ СООБЩЕНИЕ: Отфильтрованный прайс-лист успешно загружен в массиве "data".',
+  '',
+  'ТВОИ ДЕЙСТВИЯ:',
+  'ПРЕЗЕНТАЦИЯ УСЛУГ: Озвучь клиенту названия доступных процедур ("name") и их стоимость ("defaultPrice").',
+  'ВЫБОР И ФИКСАЦИЯ: Помоги клиенту выбрать нужные услуги. Обязательно зафиксируй в памяти "id" выбранных услуг и их общую длительность ("defaultDurationMin") для дальнейшего расчета времени.',
+  'ПЕРЕХОД К РАСПИСАНИЮ: После утверждения списка услуг, уточни у клиента пожелания по дате и времени визита, после чего вызывай функцию check_availability для проверки свободных окон.',
+].join('\n');
+
+/** Нормализация пола/аудитории из оркестратора в ServiceAudience (MEN/WOMEN). */
+function parseAudience(raw?: string): ServiceAudience | undefined {
+  const v = (raw ?? '').trim().toLowerCase();
+  if (!v) return undefined;
+  if (['men', 'man', 'male', 'm', 'м', 'муж', 'мужской', 'мужчина'].includes(v)) {
+    return ServiceAudience.MEN;
+  }
+  if (
+    ['women', 'woman', 'female', 'f', 'w', 'ж', 'жен', 'женский', 'женщина'].includes(v)
+  ) {
+    return ServiceAudience.WOMEN;
+  }
+  return undefined;
+}
 
 /** Имена функций из системного промпта xmind (aida_xmind.pdf). */
 export type NextbotXmindFunction =
@@ -280,18 +317,103 @@ export class NextbotService {
     );
   }
 
-  /** get_services_and_prices */
-  async getServices(studioId: string, user: CurrentUserPayload) {
-    const data = await this.servicesService.findAll(
-      user.role,
-      user.studioId,
-      user.organizationId,
-      undefined,
+  /**
+   * get_services_and_prices — целевой срез прайса конкретной студии.
+   *
+   * Оркестратор уже собрал фильтры (studioId, organizationId, category, audience) и
+   * передаёт их единым пакетом — бэкенд на своей стороне отсекает услуги, которые:
+   *   • отключены в выбранном филиале (StudioDisabledService / StudioDisabledCategory);
+   *   • помечены `isActive = false` у самой услуги или её категории;
+   *   • не совпадают с выбранной категорией (принимается id или имя);
+   *   • не совпадают с выбранной аудиторией (MEN / WOMEN).
+   *
+   * Боту возвращается минимальный набор полей: id, name, defaultPrice, defaultDurationMin.
+   */
+  async getServices(
+    studioId: string,
+    user: CurrentUserPayload,
+    opts: { category?: string; audience?: string } = {},
+  ) {
+    await assertUserOrganizationMatchesStudio(
+      this.prisma,
       studioId,
+      user.organizationId,
+      user.role,
     );
-    return this.withNextbotPrompt(user.organizationId, 'get_services_and_prices', {
-      data,
+
+    const audience = parseAudience(opts.audience);
+    const categoryRaw = (opts.category ?? '').trim();
+
+    let categoryId: string | undefined;
+    if (categoryRaw) {
+      const byId = await this.prisma.serviceCategory.findFirst({
+        where: {
+          id: categoryRaw,
+          organizationId: user.organizationId,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      if (byId) {
+        categoryId = byId.id;
+      } else {
+        const byName = await this.prisma.serviceCategory.findFirst({
+          where: {
+            organizationId: user.organizationId,
+            isActive: true,
+            name: { equals: categoryRaw, mode: 'insensitive' },
+          },
+          select: { id: true },
+        });
+        if (byName) {
+          categoryId = byName.id;
+        } else {
+          // Категория не найдена — возвращаем пустой прайс, а не 404,
+          // чтобы бот корректно отработал ответ через свой субпромпт.
+          return this.withNextbotPrompt(
+            user.organizationId,
+            'get_services_and_prices',
+            { data: [] },
+            NEXTBOT_GET_SERVICES_AND_PRICES_PROMPT,
+          );
+        }
+      }
+    }
+
+    const [disabledServiceIds, disabledCategoryIds] = await Promise.all([
+      getDisabledServiceIdsForStudio(this.prisma, studioId),
+      getDisabledCategoryIdsForStudio(this.prisma, studioId),
+    ]);
+
+    const services = await this.prisma.service.findMany({
+      where: {
+        organizationId: user.organizationId,
+        isActive: true,
+        category: { isActive: true },
+        ...(categoryId ? { categoryId } : {}),
+        ...(audience ? { audience } : {}),
+        ...(disabledServiceIds.size > 0
+          ? { id: { notIn: Array.from(disabledServiceIds) } }
+          : {}),
+        ...(disabledCategoryIds.size > 0
+          ? { categoryId: { notIn: Array.from(disabledCategoryIds) } }
+          : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        defaultPrice: true,
+        defaultDurationMin: true,
+      },
+      orderBy: [{ name: 'asc' }],
     });
+
+    return this.withNextbotPrompt(
+      user.organizationId,
+      'get_services_and_prices',
+      { data: services },
+      NEXTBOT_GET_SERVICES_AND_PRICES_PROMPT,
+    );
   }
 
   /** get_active_promotions */

@@ -137,21 +137,77 @@ export class NextbotController {
   }
 
   // --- get_services_and_prices ---
-  @Get('services')
-  @ApiOperation({ summary: 'get_services_and_prices' })
-  @ApiQuery({
-    name: 'studioId',
-    required: true,
-    description: 'Филиал для флага isOfferedInStudio в ответе',
+  // Основной путь, который использует xmind-обёртка:
+  //   GET /nextbot/studios/:studioId/services?organizationId=...&category=...&audience=...
+  // Бэкенд сам отсекает услуги, недоступные в студии / в неактивной категории,
+  // и фильтрует по выбранной категории и полу клиента (аудитории).
+  @Get('studios/:studioId/services')
+  @ApiOperation({
+    summary: 'get_services_and_prices',
+    description:
+      'Возвращает целевой срез прайса выбранного филиала. Бэкенд сам отсекает услуги, ' +
+      'отключённые в этом филиале (StudioDisabledService/Category) и неактивные, ' +
+      'а также фильтрует по `category` (id или имя) и `audience` (MEN/WOMEN). ' +
+      'Ответу намеренно оставлены только поля id / name / defaultPrice / defaultDurationMin.',
   })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description:
+      'Необязательно. Принимается для совместимости; фактически организация определяется по JWT/API-ключу.',
+  })
+  @ApiQuery({
+    name: 'category',
+    required: false,
+    description: 'ID или название категории услуг (например, "Лазерная эпиляция").',
+  })
+  @ApiQuery({
+    name: 'audience',
+    required: false,
+    description: 'Пол клиента / аудитория прайса: MEN | WOMEN (допустимы также "мужской" / "женский").',
+  })
+  getServicesForStudio(
+    @Param('studioId') studioId: string,
+    @Query('category') category: string | undefined,
+    @Query('audience') audience: string | undefined,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    if (!studioId?.trim()) {
+      throw new BadRequestException('Path parameter studioId is required');
+    }
+    return this.nextbotService.getServices(studioId.trim(), user, {
+      category,
+      audience,
+    });
+  }
+
+  /**
+   * Устаревший путь `GET /nextbot/services?studioId=...` оставлен ради обратной совместимости
+   * (старые версии xmind-обёртки).
+   * Новый код должен использовать `/nextbot/studios/:studioId/services`.
+   */
+  @Get('services')
+  @ApiOperation({
+    summary: 'get_services_and_prices (legacy alias)',
+    description:
+      'Устаревший путь. Используйте `/nextbot/studios/:studioId/services`.',
+  })
+  @ApiQuery({ name: 'studioId', required: true })
+  @ApiQuery({ name: 'category', required: false })
+  @ApiQuery({ name: 'audience', required: false })
   getServices(
     @Query('studioId') studioId: string,
+    @Query('category') category: string | undefined,
+    @Query('audience') audience: string | undefined,
     @CurrentUser() user: CurrentUserPayload,
   ) {
     if (!studioId?.trim()) {
       throw new BadRequestException('Query parameter studioId is required');
     }
-    return this.nextbotService.getServices(studioId.trim(), user);
+    return this.nextbotService.getServices(studioId.trim(), user, {
+      category,
+      audience,
+    });
   }
 
   // --- get_active_promotions (org-level) ---
