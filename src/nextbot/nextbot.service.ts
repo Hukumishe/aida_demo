@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { ServiceAudience } from '@prisma/client';
+import { ServiceAudience, WaitlistEntrySource } from '@prisma/client';
 import {
   assertUserOrganizationMatchesStudio,
 } from '../common/organization-scope';
@@ -558,7 +558,11 @@ export class NextbotService {
   ) {
     const created = await this.appointmentsService.create(
       studioId,
-      dto,
+      {
+        ...dto,
+        preferWaitlist: true,
+        waitlistSource: WaitlistEntrySource.NEXTBOT,
+      },
       user.role,
       user.studioId,
       user.organizationId,

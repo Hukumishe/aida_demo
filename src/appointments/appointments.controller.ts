@@ -15,6 +15,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
+import { WaitlistEntryStatus } from '@prisma/client';
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -47,6 +48,81 @@ export class AppointmentsController {
       user?.role,
       user?.studioId,
       user?.userId,
+    );
+  }
+
+  @Get('studios/:studioId/waitlist-entries')
+  @ApiOperation({
+    summary: 'Лист ожидания',
+    description:
+      'Заявки с лендинга/Nextbot, когда желаемый слот занят (пересечение по полной длительности услуги). По умолчанию только PENDING.',
+  })
+  @ApiQuery({ name: 'date', required: false, description: 'YYYY-MM-DD — фильтр по дате желаемого начала' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    description: 'PENDING | FULFILLED | CANCELLED или all — все статусы',
+  })
+  @ApiResponse({ status: 200 })
+  async findWaitlistEntries(
+    @Param('studioId') studioId: string,
+    @Query('date') date?: string,
+    @Query('status') statusRaw?: string,
+    @CurrentUser() user?: any,
+  ) {
+    let status: WaitlistEntryStatus | 'all' | undefined;
+    if (statusRaw === 'all') {
+      status = 'all';
+    } else if (statusRaw && Object.values(WaitlistEntryStatus).includes(statusRaw as WaitlistEntryStatus)) {
+      status = statusRaw as WaitlistEntryStatus;
+    }
+    return this.appointmentsService.findWaitlistEntries(
+      studioId,
+      user?.role,
+      user?.studioId,
+      user?.userId,
+      {
+        date,
+        status: status === 'all' ? 'all' : status === undefined ? undefined : status,
+      },
+    );
+  }
+
+  @Post('studios/:studioId/waitlist-entries/:entryId/cancel')
+  @ApiOperation({ summary: 'Отменить заявку в листе ожидания' })
+  @ApiResponse({ status: 200 })
+  async cancelWaitlistEntry(
+    @Param('studioId') studioId: string,
+    @Param('entryId') entryId: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.appointmentsService.cancelWaitlistEntry(
+      studioId,
+      entryId,
+      user?.role,
+      user?.studioId,
+      user?.userId,
+    );
+  }
+
+  @Post('studios/:studioId/waitlist-entries/:entryId/convert')
+  @ApiOperation({
+    summary: 'Создать запись из листа ожидания',
+    description:
+      'Пытается создать запись на то же время/мастера/услугу. При успехе заявка переводится в FULFILLED. Если слот всё ещё занят — 409.',
+  })
+  @ApiResponse({ status: 409, description: 'Слот по-прежнему недоступен' })
+  async convertWaitlistEntry(
+    @Param('studioId') studioId: string,
+    @Param('entryId') entryId: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.appointmentsService.convertWaitlistEntryToAppointment(
+      studioId,
+      entryId,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
     );
   }
 

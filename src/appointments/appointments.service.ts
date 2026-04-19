@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { generateId, IdPrefix } from '../common/id-generator';
@@ -17,7 +18,12 @@ import {
 import { resolveAutoTierForTotalPaid } from '../common/loyalty/studio-loyalty.util';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { AppointmentStatus, ClientLevel } from '@prisma/client';
+import {
+  AppointmentStatus,
+  ClientLevel,
+  WaitlistEntrySource,
+  WaitlistEntryStatus,
+} from '@prisma/client';
 import {
   assertReferralCodeIsNotLandingPromo,
   findReferrerByClientReferralCode,
@@ -197,13 +203,41 @@ export class AppointmentsService {
     const startAt = new Date(createAppointmentDto.startAt);
     const endAt = this.calculateEndAt(startAt, durationMinutes);
 
-    // Check availability
-    await this.availabilityService.checkAppointmentAvailability(
-      studioId,
-      createAppointmentDto.staffUserId,
-      startAt,
-      endAt,
-    );
+    const preferWaitlist = !!createAppointmentDto.preferWaitlist;
+    const waitlistSource =
+      createAppointmentDto.waitlistSource ?? WaitlistEntrySource.CRM;
+
+    // Проверка доступности слота: пересечение по полному [startAt, endAt] с записями, busy, перерывом (см. AvailabilityService).
+    if (preferWaitlist) {
+      try {
+        await this.availabilityService.checkAppointmentAvailability(
+          studioId,
+          createAppointmentDto.staffUserId,
+          startAt,
+          endAt,
+        );
+      } catch (e) {
+        if (e instanceof ConflictException) {
+          const entry = await this.createWaitlistEntry(
+            studioId,
+            org.id,
+            createAppointmentDto,
+            startAt,
+            endAt,
+            waitlistSource,
+          );
+          return { outcome: 'waitlist' as const, waitlistEntry: entry };
+        }
+        throw e;
+      }
+    } else {
+      await this.availabilityService.checkAppointmentAvailability(
+        studioId,
+        createAppointmentDto.staffUserId,
+        startAt,
+        endAt,
+      );
+    }
 
     // Create appointment in transaction
     return this.prisma.$transaction(async (tx) => {
@@ -295,8 +329,215 @@ export class AppointmentsService {
         console.error('Failed to create notification:', error);
       }
 
+      if (preferWaitlist) {
+        return { outcome: 'booked' as const, appointment };
+      }
       return appointment;
     });
+  }
+
+  private async createWaitlistEntry(
+    studioId: string,
+    organizationId: string,
+    dto: CreateAppointmentDto,
+    requestedStartAt: Date,
+    requestedEndAt: Date,
+    source: WaitlistEntrySource,
+  ) {
+    return this.prisma.waitlistEntry.create({
+      data: {
+        id: generateId(IdPrefix.WaitlistEntry),
+        studioId,
+        organizationId,
+        staffUserId: dto.staffUserId,
+        clientId: dto.clientId,
+        serviceId: dto.serviceId,
+        requestedStartAt,
+        requestedEndAt,
+        status: WaitlistEntryStatus.PENDING,
+        source,
+      },
+      include: {
+        staff: {
+          include: {
+            staffProfile: true,
+          },
+        },
+        client: true,
+        service: true,
+      },
+    });
+  }
+
+  /**
+   * Лист ожидания по филиалу (журнал записей — отдельная вкладка на фронте).
+   */
+  async findWaitlistEntries(
+    studioId: string,
+    userRole?: string,
+    userStudioId?: string,
+    userStaffId?: string,
+    options?: { date?: string; status?: WaitlistEntryStatus | 'all' },
+  ) {
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
+      if (userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
+    }
+
+    const where: Record<string, unknown> = { studioId };
+    if (options?.status === 'all') {
+      // без фильтра по статусу
+    } else if (options?.status) {
+      where.status = options.status;
+    } else {
+      where.status = WaitlistEntryStatus.PENDING;
+    }
+
+    if (options?.date) {
+      const dateStr = options.date.includes('T') ? options.date.split('T')[0] : options.date;
+      const dateStart = new Date(dateStr + 'T00:00:00+06:00');
+      const dateEnd = new Date(dateStr + 'T23:59:59.999+06:00');
+      where.requestedStartAt = { gte: dateStart, lte: dateEnd };
+    }
+
+    if (userRole === UserRole.MASTER && userStaffId) {
+      where.staffUserId = userStaffId;
+    }
+
+    const rows = await this.prisma.waitlistEntry.findMany({
+      where,
+      include: {
+        staff: { include: { staffProfile: true } },
+        client: true,
+        service: true,
+      },
+      orderBy: { requestedStartAt: 'asc' },
+    });
+
+    if (userRole === UserRole.MASTER) {
+      return rows.map((r) => ({
+        ...r,
+        client: { ...r.client, phone: undefined },
+      }));
+    }
+    return rows;
+  }
+
+  async cancelWaitlistEntry(
+    studioId: string,
+    entryId: string,
+    userRole?: string,
+    userStudioId?: string,
+    userStaffId?: string,
+  ) {
+    const entry = await this.prisma.waitlistEntry.findFirst({
+      where: { id: entryId, studioId },
+    });
+    if (!entry) {
+      throw new NotFoundException('Waitlist entry not found');
+    }
+    if (entry.status !== WaitlistEntryStatus.PENDING) {
+      throw new BadRequestException('Only PENDING waitlist entries can be cancelled');
+    }
+
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
+      if (userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
+      if (userRole === UserRole.MASTER && userStaffId && entry.staffUserId !== userStaffId) {
+        throw new ForbiddenException('Masters can only cancel own waitlist entries');
+      }
+    }
+
+    return this.prisma.waitlistEntry.update({
+      where: { id: entryId },
+      data: { status: WaitlistEntryStatus.CANCELLED },
+      include: {
+        staff: { include: { staffProfile: true } },
+        client: true,
+        service: true,
+      },
+    });
+  }
+
+  /**
+   * Попытка перенести заявку из листа ожидания в реальную запись (тот же слот/услуга/мастер).
+   */
+  async convertWaitlistEntryToAppointment(
+    studioId: string,
+    entryId: string,
+    userRole?: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+  ) {
+    const entry = await this.prisma.waitlistEntry.findFirst({
+      where: { id: entryId, studioId },
+    });
+    if (!entry) {
+      throw new NotFoundException('Waitlist entry not found');
+    }
+    if (entry.status !== WaitlistEntryStatus.PENDING) {
+      throw new BadRequestException('Only PENDING waitlist entries can be converted');
+    }
+
+    const dto: CreateAppointmentDto = {
+      staffUserId: entry.staffUserId,
+      clientId: entry.clientId,
+      serviceId: entry.serviceId,
+      startAt: entry.requestedStartAt.toISOString(),
+      preferWaitlist: false,
+    };
+
+    try {
+      const created = await this.create(
+        studioId,
+        dto,
+        userRole,
+        userStudioId,
+        userOrganizationId,
+      );
+
+      if (created && typeof created === 'object' && 'outcome' in created) {
+        const wrapped = created as { outcome: 'booked' | 'waitlist'; appointment?: { id: string } };
+        if (wrapped.outcome === 'waitlist') {
+          throw new ConflictException(
+            'Slot is still unavailable; waitlist entry remains pending',
+            'WAITLIST_CONVERT_CONFLICT',
+          );
+        }
+        const appt = wrapped.appointment;
+        if (!appt?.id) {
+          throw new BadRequestException('Unexpected create response');
+        }
+        await this.prisma.waitlistEntry.update({
+          where: { id: entryId },
+          data: {
+            status: WaitlistEntryStatus.FULFILLED,
+            fulfilledAppointmentId: appt.id,
+          },
+        });
+        return wrapped.appointment;
+      }
+
+      const appt = created as { id: string };
+      await this.prisma.waitlistEntry.update({
+        where: { id: entryId },
+        data: {
+          status: WaitlistEntryStatus.FULFILLED,
+          fulfilledAppointmentId: appt.id,
+        },
+      });
+      return created;
+    } catch (e) {
+      if (e instanceof ConflictException) {
+        throw new ConflictException(
+          'Slot is still unavailable; waitlist entry remains pending',
+          'WAITLIST_CONVERT_CONFLICT',
+        );
+      }
+      throw e;
+    }
   }
 
   async update(

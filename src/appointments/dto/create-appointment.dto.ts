@@ -5,8 +5,11 @@ import {
   IsInt,
   IsOptional,
   Min,
+  IsBoolean,
+  IsEnum,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { WaitlistEntrySource } from '@prisma/client';
 
 export class CreateAppointmentDto {
   @ApiProperty({ example: 'user-uuid' })
@@ -56,6 +59,22 @@ export class CreateAppointmentDto {
   @IsOptional()
   @IsString()
   promoCode?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Если true и выбранный слот занят (пересечение с другой записью/перерывом/busy по полной длительности услуги) — создаётся заявка в листе ожидания вместо ответа 409. Для лендинга и Nextbot.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  preferWaitlist?: boolean;
+
+  @ApiPropertyOptional({
+    enum: WaitlistEntrySource,
+    description: 'Откуда заявка при preferWaitlist (по умолчанию CRM, если не передано).',
+  })
+  @IsOptional()
+  @IsEnum(WaitlistEntrySource)
+  waitlistSource?: WaitlistEntrySource;
 }
 
 

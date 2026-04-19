@@ -297,12 +297,12 @@ export class AvailabilityService {
       throw new NotFoundException('Studio not found');
     }
 
-    let durationMinutes = options.durationMinutes ?? 60;
-    if (options.serviceId) {
+    let durationMinutes: number;
+    if (options.serviceId?.trim()) {
       const service = await assertServiceBookableAtStudio(
         this.prisma,
         studioId,
-        options.serviceId,
+        options.serviceId.trim(),
         studioRow.organizationId,
       );
       durationMinutes = service.defaultDurationMin;
@@ -312,7 +312,7 @@ export class AvailabilityService {
             studioId_staffUserId_serviceId: {
               studioId,
               staffUserId: options.staffUserId,
-              serviceId: options.serviceId,
+              serviceId: options.serviceId.trim(),
             },
           },
         });
@@ -320,6 +320,16 @@ export class AvailabilityService {
           durationMinutes = ov.durationMin;
         }
       }
+    } else if (
+      options.durationMinutes != null &&
+      !Number.isNaN(options.durationMinutes) &&
+      options.durationMinutes > 0
+    ) {
+      durationMinutes = options.durationMinutes;
+    } else {
+      throw new BadRequestException(
+        'Укажите serviceId (длительность из карточки услуги и при необходимости override мастера) или durationMinutes.',
+      );
     }
     durationMinutes = Math.min(Math.max(durationMinutes, 5), 8 * 60);
 
