@@ -8,8 +8,11 @@ import {
   Body,
   Param,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { Request } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -35,7 +38,30 @@ import { ResolvePromotionCodeDto } from './dto/resolve-promotion-code.dto';
 @ApiTags('landing')
 @Controller()
 export class LandingController {
-  constructor(private readonly landingService: LandingService) {}
+  constructor(
+    private readonly landingService: LandingService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  /**
+   * Пытается достать organizationId из Authorization: Bearer <jwt> без падения.
+   * Нужен для "опционально авторизованных" публичных эндпоинтов: лендингу
+   * передают `?organizationId=`, а админка владельца ходит с JWT — и мы
+   * извлекаем org из токена без обязательного query-параметра.
+   */
+  private tryGetOrganizationIdFromBearer(req: Request): string | undefined {
+    const auth = req.headers.authorization;
+    if (typeof auth !== 'string' || !auth.startsWith('Bearer ')) return undefined;
+    const token = auth.slice(7).trim();
+    if (!token) return undefined;
+    try {
+      const payload = this.jwtService.verify<{ organizationId?: string }>(token);
+      const orgId = (payload?.organizationId ?? '').trim();
+      return orgId || undefined;
+    } catch {
+      return undefined;
+    }
+  }
 
   // --- Promotions (organization-level) ---
   // Акции действуют на всю организацию (сеть салонов). studioId больше не требуется.
@@ -43,17 +69,32 @@ export class LandingController {
   @Public()
   @Get('landing/promotions')
   @ApiOperation({
-    summary: 'Список активных акций организации (публично)',
+    summary: 'Список активных акций организации (публично + админка)',
     description:
-      'Возвращает акции организации с их промокодами и услугами. Акции общие на всю сеть, поэтому ' +
-      'фильтрация по филиалу не делается. Публичный эндпоинт — `organizationId` обязателен в query.',
+      'Возвращает акции организации с их промокодами и услугами. Акции общие на всю сеть. ' +
+      'Лендинг передаёт `?organizationId=` в query. Админка владельца может не передавать ' +
+      'query — `organizationId` будет взят из JWT (Authorization: Bearer).',
   })
-  @ApiQuery({ name: 'organizationId', required: true, description: 'ID организации' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description:
+      'ID организации. Обязателен для публичных вызовов без JWT. Если пользователь ' +
+      'авторизован (Bearer-токен), можно не передавать — возьмём из токена.',
+  })
   @ApiResponse({ status: 200, description: 'Список акций' })
-  async listPromotions(@Query('organizationId') organizationId: string | undefined) {
-    const orgId = (organizationId ?? '').trim();
+  async listPromotions(
+    @Query('organizationId') organizationId: string | undefined,
+    @Req() req: Request,
+  ) {
+    let orgId = (organizationId ?? '').trim();
     if (!orgId) {
-      throw new BadRequestException('Query parameter organizationId is required');
+      orgId = this.tryGetOrganizationIdFromBearer(req) ?? '';
+    }
+    if (!orgId) {
+      throw new BadRequestException(
+        'organizationId is required (query parameter or Bearer JWT with organizationId)',
+      );
     }
     return this.landingService.getPromotionsForOrganization(orgId);
   }
