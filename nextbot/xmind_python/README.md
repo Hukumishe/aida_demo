@@ -62,18 +62,18 @@
 |------|------------|
 | `get_company_context.py` | контекст / список студий |
 | `verify_client_status.py` | клиент по `q` |
-| `get_client_appointments.py` | предстоящие записи клиента (`GET /clients/:id/appointments?upcoming=true`) |
+| `get_client_appointments.py` | предстоящие записи; можно без `client_id` — тогда по `phone` / `phone_lookup` и verify |
 | `register_new_client.py` | регистрация |
-| `update_old_client_profile.py` | обновление профиля (`PATCH /nextbot/clients/:id/update`, промпт с портала) |
+| `update_old_client_profile.py` | обновление профиля (`PATCH /nextbot/clients/:id/update`); без `client_id` — поиск по `phone` / `phone_lookup` |
 | `process_survey_answers.py` | анкета |
 | `get_services_and_prices.py` | услуги и цены |
 | `get_active_promotions.py` | акции |
 | `check_loyalty_status.py` | лояльность |
-| `get_referral_code.py` | реферальный код |
+| `get_referral_code.py` | реферальный код по `phone` (client_id не нужен; имя только в диалоге) |
 | `check_availability.py` | сырые слоты |
 | `create_booking_request.py` | создание записи |
 | `modify_booking.py` | любые правки записи (тело `patch_json`) |
-| `cancel_booking.py` | отмена → `status: CANCELLED` (обёртка над тем же URL) |
+| `cancel_booking.py` | отмена `POST .../appointments/:id/update`, в result только `data.id`, `data.status` и `prompt` |
 | `reschedule_booking.py` | перенос → `startAt` (обёртка) |
 | `process_survey_answers_failed.py` | заглушка 501 |
 | `add_to_waitlist.py` | заглушка 501 |

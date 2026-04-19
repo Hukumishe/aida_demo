@@ -628,6 +628,29 @@ export class AppointmentsService {
         );
       }
 
+      /** Поздняя отмена (< 4 ч до начала): сгоревшая предоплата на записи → дашборд (forfeitedPrepaymentAmount). Без NoShowIncome — иначе двойной учёт в revenue. */
+      let forfeitedToSet: number | undefined;
+      const effectiveStart = updateAppointmentDto.startAt ? startAt : appointment.startAt;
+      if (updateAppointmentDto.status === AppointmentStatus.CANCELLED) {
+        if (appointment.status === AppointmentStatus.DONE) {
+          throw new BadRequestException('Cannot cancel a completed appointment');
+        }
+        if (appointment.status === AppointmentStatus.CANCELLED) {
+          throw new BadRequestException('Appointment is already cancelled');
+        }
+        const now = new Date();
+        const hoursUntilStart =
+          (new Date(effectiveStart).getTime() - now.getTime()) / (1000 * 60 * 60);
+        if (hoursUntilStart < 4) {
+          const alreadyForfeited = (appointment.forfeitedPrepaymentAmount ?? 0) > 0;
+          const amountToForfeit =
+            appointment.prepaymentAmount ?? appointment.service.defaultPrice ?? 0;
+          if (amountToForfeit > 0 && !alreadyForfeited) {
+            forfeitedToSet = amountToForfeit;
+          }
+        }
+      }
+
       const updated = await tx.appointment.update({
         where: { id },
         data: {
@@ -635,6 +658,7 @@ export class AppointmentsService {
           endAt: updateAppointmentDto.startAt ? endAt : undefined,
           prepaymentAmount: updateAppointmentDto.prepaymentAmount,
           status: updateAppointmentDto.status,
+          ...(forfeitedToSet !== undefined ? { forfeitedPrepaymentAmount: forfeitedToSet } : {}),
         },
         include: {
           staff: {
