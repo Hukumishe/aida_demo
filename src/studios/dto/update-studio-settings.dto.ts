@@ -122,4 +122,52 @@ export class UpdateStudioSettingsDto {
   @IsString()
   @MaxLength(128)
   paymentKaspiCardHolder?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Ночной режим Nextbot: сколько МИНУТ держится предварительная бронь (TENTATIVE) до авто-отмены кроном, ' +
+      'если клиент не прислал чек. Разумный диапазон 5..120. null → используется дефолт 30.',
+    minimum: 1,
+    maximum: 1440,
+    example: 30,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  nightHoldMinutes?: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Дневной путь request_manager_invoice: дедлайн задачи менеджеру на выставление счёта Kaspi, в ЧАСАХ ' +
+      'от момента создания. Разумный диапазон 1..8. null → используется дефолт 2.',
+    minimum: 1,
+    maximum: 48,
+    example: 2,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsInt()
+  @Min(1)
+  @Max(48)
+  dayInvoiceTaskDeadlineHours?: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Ночной путь verify_receipt_nighttime: дедлайн утренней задачи менеджеру на сверку чека с выпиской Kaspi, ' +
+      'в ЧАСАХ от момента создания. Разумный диапазон 4..24. null → используется дефолт 12.',
+    minimum: 1,
+    maximum: 48,
+    example: 12,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsInt()
+  @Min(1)
+  @Max(48)
+  nightReceiptTaskDeadlineHours?: number | null;
 }

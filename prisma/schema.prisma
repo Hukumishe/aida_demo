@@ -164,6 +164,15 @@ model Organization {
   /// Статичные реквизиты Kaspi для ночного промпта оплаты Nextbot.
   paymentKaspiPhone              String?
   paymentKaspiCardHolder         String?
+  /// Ночной режим Nextbot: сколько минут удерживается предварительная бронь (TENTATIVE)
+  /// до авто-отмены кроном, если клиент не прислал чек. null → используется дефолт 30.
+  nightHoldMinutes               Int?
+  /// Дневной путь request_manager_invoice: дедлайн задачи менеджеру на выставление
+  /// счёта Kaspi (часы от момента создания задачи). null → используется дефолт 2.
+  dayInvoiceTaskDeadlineHours    Int?
+  /// Ночной путь verify_receipt_nighttime: дедлайн утренней задачи менеджеру на
+  /// сверку чека с выпиской Kaspi (часы от момента создания). null → дефолт 12.
+  nightReceiptTaskDeadlineHours  Int?
   createdAt                      DateTime                       @default(now())
   updatedAt                      DateTime                       @updatedAt
 

@@ -104,6 +104,9 @@ export class StudiosService {
             marketingHoursEndHour: true,
             paymentKaspiPhone: true,
             paymentKaspiCardHolder: true,
+            nightHoldMinutes: true,
+            dayInvoiceTaskDeadlineHours: true,
+            nightReceiptTaskDeadlineHours: true,
           },
         },
       },
@@ -125,6 +128,9 @@ export class StudiosService {
       marketingHoursEndHour: org.marketingHoursEndHour,
       paymentKaspiPhone: org.paymentKaspiPhone,
       paymentKaspiCardHolder: org.paymentKaspiCardHolder,
+      nightHoldMinutes: org.nightHoldMinutes,
+      dayInvoiceTaskDeadlineHours: org.dayInvoiceTaskDeadlineHours,
+      nightReceiptTaskDeadlineHours: org.nightReceiptTaskDeadlineHours,
     };
   }
 
@@ -141,6 +147,9 @@ export class StudiosService {
       marketingHoursEndHour?: number | null;
       paymentKaspiPhone?: string | null;
       paymentKaspiCardHolder?: string | null;
+      nightHoldMinutes?: number | null;
+      dayInvoiceTaskDeadlineHours?: number | null;
+      nightReceiptTaskDeadlineHours?: number | null;
     },
     userRole: string,
   ) {
@@ -237,6 +246,17 @@ export class StudiosService {
     if (Object.prototype.hasOwnProperty.call(dto, 'paymentKaspiCardHolder')) {
       const v = dto.paymentKaspiCardHolder;
       data.paymentKaspiCardHolder = v == null || v.trim() === '' ? null : v.trim();
+    }
+
+    // Тайминги Nextbot-потока оплаты. Все — nullable; null/undefined = «сбросить к дефолту в коде».
+    if (Object.prototype.hasOwnProperty.call(dto, 'nightHoldMinutes')) {
+      data.nightHoldMinutes = dto.nightHoldMinutes ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(dto, 'dayInvoiceTaskDeadlineHours')) {
+      data.dayInvoiceTaskDeadlineHours = dto.dayInvoiceTaskDeadlineHours ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(dto, 'nightReceiptTaskDeadlineHours')) {
+      data.nightReceiptTaskDeadlineHours = dto.nightReceiptTaskDeadlineHours ?? null;
     }
 
     return this.prisma.organization.update({

@@ -100,6 +100,32 @@ function parseAudience(raw?: string): ServiceAudience | undefined {
   return undefined;
 }
 
+/**
+ * Безопасные дефолты таймингов Nextbot-потока оплаты на случай,
+ * если в Organization соответствующие поля ещё не заполнены.
+ * Значения можно переопределять в CRM (вкладка «Маркетинг», настройки студии).
+ */
+export const NEXTBOT_DEFAULT_NIGHT_HOLD_MINUTES = 30;
+export const NEXTBOT_DEFAULT_DAY_INVOICE_TASK_DEADLINE_HOURS = 2;
+export const NEXTBOT_DEFAULT_NIGHT_RECEIPT_TASK_DEADLINE_HOURS = 12;
+
+/**
+ * Обрезает значение в разумный диапазон. Возвращает fallback, если значение не число,
+ * не конечное, вне [min, max] или null/undefined. Используется для чтения настроек
+ * таймингов из Organization, чтобы ни при каких условиях не выставить некорректный дедлайн.
+ */
+function clampOrDefault(
+  value: number | null | undefined,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  if (value == null || !Number.isFinite(value)) return fallback;
+  if (value < min) return fallback;
+  if (value > max) return fallback;
+  return Math.floor(value);
+}
+
 /** Имена функций из системного промпта xmind (aida_xmind.pdf). */
 export type NextbotXmindFunction =
   | 'add_to_waitlist'
@@ -817,10 +843,15 @@ export class NextbotService {
     );
     const isNight = !isDay;
 
-    const HOLD_MINUTES = 30;
+    const holdMinutes = clampOrDefault(
+      organization.nightHoldMinutes,
+      1,
+      24 * 60,
+      NEXTBOT_DEFAULT_NIGHT_HOLD_MINUTES,
+    );
 
     if (isNight) {
-      const holdExpiresAt = new Date(now.getTime() + HOLD_MINUTES * 60_000);
+      const holdExpiresAt = new Date(now.getTime() + holdMinutes * 60_000);
       await this.prisma.appointment.update({
         where: { id: appointment.id },
         data: { holdExpiresAt },
@@ -829,7 +860,7 @@ export class NextbotService {
       const fallback = this.buildNightInvoicePrompt({
         kaspiPhone: organization.paymentKaspiPhone,
         kaspiCardHolder: organization.paymentKaspiCardHolder,
-        holdMinutes: HOLD_MINUTES,
+        holdMinutes,
       });
 
       return this.withNextbotPrompt(
@@ -862,7 +893,13 @@ export class NextbotService {
       );
     }
 
-    const deadlineAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // +2 часа
+    const dayInvoiceDeadlineHours = clampOrDefault(
+      organization.dayInvoiceTaskDeadlineHours,
+      1,
+      48,
+      NEXTBOT_DEFAULT_DAY_INVOICE_TASK_DEADLINE_HOURS,
+    );
+    const deadlineAt = new Date(now.getTime() + dayInvoiceDeadlineHours * 60 * 60 * 1000);
     const phoneInfo = (dto.phone ?? '').trim();
     const description = [
       `Kaspi (со слов клиента): ${kaspiDetails}`,
@@ -955,7 +992,13 @@ export class NextbotService {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id: appointmentId },
       include: {
-        studio: { select: { id: true, organizationId: true } },
+        studio: {
+          select: {
+            id: true,
+            organizationId: true,
+            organization: { select: { nightReceiptTaskDeadlineHours: true } },
+          },
+        },
         client: { select: { id: true, phone: true } },
       },
     });
@@ -979,6 +1022,13 @@ export class NextbotService {
         `Cannot verify receipt: appointment status is ${appointment.status}`,
       );
     }
+
+    const nightReceiptDeadlineHours = clampOrDefault(
+      appointment.studio.organization?.nightReceiptTaskDeadlineHours,
+      1,
+      48,
+      NEXTBOT_DEFAULT_NIGHT_RECEIPT_TASK_DEADLINE_HOURS,
+    );
 
     const fallback = this.buildVerifyReceiptNighttimePrompt();
 
@@ -1027,7 +1077,7 @@ export class NextbotService {
     let taskId: string | null = null;
     if (assignee) {
       const now = new Date();
-      const deadlineAt = new Date(now.getTime() + 12 * 60 * 60 * 1000); // +12 часов
+      const deadlineAt = new Date(now.getTime() + nightReceiptDeadlineHours * 60 * 60 * 1000);
       const clientPhone = (dto.phone ?? '').trim() || appointment.client?.phone || '';
       const description = [
         'Ночная оплата через Nextbot. Чек получен, визуально сверен ассистентом.',
