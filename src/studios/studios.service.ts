@@ -107,6 +107,8 @@ export class StudiosService {
             nightHoldMinutes: true,
             dayInvoiceTaskDeadlineHours: true,
             nightReceiptTaskDeadlineHours: true,
+            highPriorityGapMinutes: true,
+            normalPriorityToleranceMinutes: true,
           },
         },
       },
@@ -131,6 +133,8 @@ export class StudiosService {
       nightHoldMinutes: org.nightHoldMinutes,
       dayInvoiceTaskDeadlineHours: org.dayInvoiceTaskDeadlineHours,
       nightReceiptTaskDeadlineHours: org.nightReceiptTaskDeadlineHours,
+      highPriorityGapMinutes: org.highPriorityGapMinutes,
+      normalPriorityToleranceMinutes: org.normalPriorityToleranceMinutes,
     };
   }
 
@@ -150,6 +154,8 @@ export class StudiosService {
       nightHoldMinutes?: number | null;
       dayInvoiceTaskDeadlineHours?: number | null;
       nightReceiptTaskDeadlineHours?: number | null;
+      highPriorityGapMinutes?: number | null;
+      normalPriorityToleranceMinutes?: number | null;
     },
     userRole: string,
   ) {
@@ -257,6 +263,13 @@ export class StudiosService {
     }
     if (Object.prototype.hasOwnProperty.call(dto, 'nightReceiptTaskDeadlineHours')) {
       data.nightReceiptTaskDeadlineHours = dto.nightReceiptTaskDeadlineHours ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(dto, 'highPriorityGapMinutes')) {
+      data.highPriorityGapMinutes = dto.highPriorityGapMinutes ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(dto, 'normalPriorityToleranceMinutes')) {
+      data.normalPriorityToleranceMinutes =
+        dto.normalPriorityToleranceMinutes ?? null;
     }
 
     return this.prisma.organization.update({

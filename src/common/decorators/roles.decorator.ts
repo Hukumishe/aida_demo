@@ -8,6 +8,7 @@ export enum UserRole {
   ADMIN = 'ADMIN',
   MANAGER = 'MANAGER',
   MASTER = 'MASTER',
+  MARKETER = 'MARKETER', // Маркетолог: управление лендингом, акциями, FAQ на уровне организации
 }
 
 export const ROLES_KEY = 'roles';

@@ -9,7 +9,12 @@ import { assertServiceBookableAtStudio } from '../common/service-studio-offering
 
 /** Промпт для ИИ: возвращается в теле ответа Nextbot под ключом `check_availability`. */
 export const NEXTBOT_CHECK_AVAILABILITY_PROMPT =
-  'Используй только массив freeSlots: startAt, endAt (ISO), priority — exact | high | normal | low. exact — щель ≈ длительности услуги (±5 мин). high — окно строго между двумя подряд записями. normal — только первое свободное окно сразу после последней записи мастера в этот день (хвост дня). low — всё остальное. При услуге < 30 мин часто сетка 30 мин. durationMinutes — длительность услуги из CRM. Не выдумывай слоты вне freeSlots.';
+  'Используй только массив freeSlots: startAt, endAt (ISO), priority — exact | high | normal | low. ' +
+  'exact — щель ≈ длительности услуги (±5 мин). ' +
+  'high — слот полностью внутри «плотного» окна между двумя подряд записями одного мастера, длина которого ≤ highPriorityGapMinutes (настройка организации). Если настройка null, high не выдаётся вовсе. ' +
+  'normal — слот прилегает к записи мастера: его end не дальше normalPriorityToleranceMinutes от старта записи или его start не дальше того же допуска от конца записи (по умолчанию 0 — впритык); при этом НЕ внутри «плотного» окна. ' +
+  'low — всё остальное. ' +
+  'При услуге < 30 мин часто сетка 30 мин. durationMinutes — длительность услуги из CRM. Не выдумывай слоты вне freeSlots.';
 
 @Injectable()
 export class AvailabilityService {
@@ -258,17 +263,50 @@ export class AvailabilityService {
   }
 
   /**
-   * Окно целиком в промежутке между двумя подряд записями (не «хвост» после последней).
+   * Слот полностью внутри «плотного» окна: между двумя соседними записями мастера,
+   * у которых длина окна (next.start − prev.end) ≤ gapLimitMs. Используется для high-приоритета.
+   * Если gapLimitMs === null — high никогда не выдаётся (фича выключена).
    */
-  private isSlotBetweenTwoAppointments(
+  private isSlotInsideTightGap(
     slotStartMs: number,
     slotEndMs: number,
     sortedAppts: { start: number; end: number }[],
+    gapLimitMs: number | null,
   ): boolean {
+    if (gapLimitMs == null) return false;
     for (let i = 0; i < sortedAppts.length - 1; i++) {
       const prevEnd = sortedAppts[i].end;
       const nextStart = sortedAppts[i + 1].start;
+      if (nextStart - prevEnd > gapLimitMs) continue;
       if (slotStartMs >= prevEnd && slotEndMs <= nextStart) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Слот прилегает к какой-либо записи мастера:
+   *   • слот СВЕРХУ записи: slotEnd ≤ appt.start И (appt.start − slotEnd) ≤ tolMs;
+   *   • слот СНИЗУ записи: slotStart ≥ appt.end И (slotStart − appt.end) ≤ tolMs.
+   * Допуск НЕ даёт слоту «залезть» внутрь записи — только расширяет гэп со стороны
+   * свободного времени. tolMs = max(userTolerance, 60 сек) — пол 60 сек на
+   * округления шага сетки. userToleranceMs = 0 → поведение «только впритык».
+   */
+  private isSlotAdjacentToAppointment(
+    slotStartMs: number,
+    slotEndMs: number,
+    sortedAppts: { start: number; end: number }[],
+    userToleranceMs: number,
+  ): boolean {
+    const tolMs = Math.max(userToleranceMs, 60 * 1000);
+    for (const a of sortedAppts) {
+      // слот сверху: ни одной миллисекунды оверлапа с записью
+      if (slotEndMs <= a.start + 60 * 1000 && a.start - slotEndMs <= tolMs) {
+        return true;
+      }
+      // слот снизу
+      if (slotStartMs + 60 * 1000 >= a.end && slotStartMs - a.end <= tolMs) {
         return true;
       }
     }
@@ -310,11 +348,24 @@ export class AvailabilityService {
 
     const studioRow = await this.prisma.studio.findUnique({
       where: { id: studioId },
-      select: { organizationId: true },
+      select: {
+        organizationId: true,
+        organization: {
+          select: {
+            highPriorityGapMinutes: true,
+            normalPriorityToleranceMinutes: true,
+          },
+        },
+      },
     });
     if (!studioRow) {
       throw new NotFoundException('Studio not found');
     }
+    const rawGap = studioRow.organization?.highPriorityGapMinutes ?? null;
+    const highPriorityGapMs =
+      rawGap != null && rawGap > 0 ? rawGap * 60 * 1000 : null;
+    const rawTol = studioRow.organization?.normalPriorityToleranceMinutes ?? 0;
+    const normalToleranceMs = rawTol > 0 ? rawTol * 60 * 1000 : 0;
 
     let durationMinutes: number;
     if (options.serviceId?.trim()) {
@@ -505,28 +556,6 @@ export class AvailabilityService {
       }
     }
 
-    /** Первое по времени начало слота в «хвосте» дня после последней записи мастера — единственный normal (на мастера). */
-    const minTailStartByStaff = new Map<string, number>();
-    for (const slot of freeSlots) {
-      if (slot.exactFit) {
-        continue;
-      }
-      const sid = slot.staffUserId;
-      const sorted = apptsByStaff.get(sid) ?? [];
-      if (sorted.length === 0) {
-        continue;
-      }
-      const lastEnd = sorted[sorted.length - 1].end;
-      const t = new Date(slot.startAt).getTime();
-      if (t < lastEnd) {
-        continue;
-      }
-      const cur = minTailStartByStaff.get(sid);
-      if (cur === undefined || t < cur) {
-        minTailStartByStaff.set(sid, t);
-      }
-    }
-
     const PRI: Record<'exact' | 'high' | 'normal' | 'low', number> = {
       exact: 0,
       high: 1,
@@ -546,7 +575,9 @@ export class AvailabilityService {
           priority: 'exact' as const,
         };
       }
-      if (this.isSlotBetweenTwoAppointments(s, e, sorted)) {
+      // high: слот полностью внутри «плотного» окна (≤ highPriorityGapMinutes)
+      // между двумя подряд записями мастера. Если настройка null — high выключен.
+      if (this.isSlotInsideTightGap(s, e, sorted, highPriorityGapMs)) {
         return {
           staffUserId: slot.staffUserId,
           staffName: slot.staffName,
@@ -555,14 +586,10 @@ export class AvailabilityService {
           priority: 'high' as const,
         };
       }
-      const lastEnd = sorted.length > 0 ? sorted[sorted.length - 1].end : null;
-      const minTail = minTailStartByStaff.get(slot.staffUserId);
-      if (
-        lastEnd != null &&
-        minTail !== undefined &&
-        s === minTail &&
-        s >= lastEnd
-      ) {
+      // normal: слот вплотную прилегает к какой-то записи мастера (сверху или снизу),
+      // но НЕ попал в high (либо окно шире порога, либо окна нет — «одинокая» запись
+      // в начале/конце дня).
+      if (this.isSlotAdjacentToAppointment(s, e, sorted, normalToleranceMs)) {
         return {
           staffUserId: slot.staffUserId,
           staffName: slot.staffName,

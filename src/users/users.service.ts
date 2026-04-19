@@ -22,6 +22,7 @@ const NETWORK_STAFF_ROLES: UserRole[] = [
   UserRole.DEPUTY_OWNER,
   UserRole.SERVICE,
   UserRole.MANAGER,
+  UserRole.MARKETER,
 ];
 
 @Injectable()
@@ -183,6 +184,7 @@ export class UsersService {
       UserRole.OWNER,
       UserRole.DEPUTY_OWNER,
       UserRole.SERVICE,
+      UserRole.MARKETER,
     ];
     const assignStudioId = orgWideRoles.includes(createStaffDto.role) ? null : studioId;
 

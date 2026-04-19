@@ -19,6 +19,7 @@ import { BlacklistModule } from './blacklist/blacklist.module';
 import { WarehouseModule } from './warehouse/warehouse.module';
 import { PromptsModule } from './prompts/prompts.module';
 import { LandingModule } from './landing/landing.module';
+import { FaqModule } from './faq/faq.module';
 import { NextbotModule } from './nextbot/nextbot.module';
 import { TasksModule } from './tasks/tasks.module';
 import { ReferralLinksModule } from './referral-links/referral-links.module';
@@ -51,6 +52,7 @@ import { AppController } from './app.controller';
     WarehouseModule,
     PromptsModule,
     LandingModule,
+    FaqModule,
     NextbotModule,
     TasksModule,
     ReferralLinksModule,

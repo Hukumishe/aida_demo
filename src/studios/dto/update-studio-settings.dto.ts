@@ -170,4 +170,41 @@ export class UpdateStudioSettingsDto {
   @Min(1)
   @Max(48)
   nightReceiptTaskDeadlineHours?: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Плотность записей: максимальная длина «окна» между двумя подряд записями одного мастера (в МИНУТАХ), ' +
+      'при которой все свободные слоты внутри этого окна получают high-приоритет в check_availability. ' +
+      'Сравнение по ≤. Если окно длиннее — внутри него остаются только normal (слоты, прилегающие к записям) ' +
+      'и low (всё остальное), high не присваивается. null → «плотность» выключена: high вообще не используется, ' +
+      'все слоты получают только exact / normal / low.',
+    minimum: 15,
+    maximum: 240,
+    example: 60,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsInt()
+  @Min(15)
+  @Max(240)
+  highPriorityGapMinutes?: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Допуск прилегания для normal-приоритета (в МИНУТАХ). Расширяет область normal у границ записей мастера: ' +
+      'слот получает normal, если его граница отстоит от границы записи не более чем на это значение ' +
+      '(в сторону свободного гэпа, без пересечения с записью). 0 или null — «только впритык» (текущее поведение). ' +
+      'High по-прежнему побеждает normal в плотных окнах.',
+    minimum: 0,
+    maximum: 30,
+    example: 10,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsInt()
+  @Min(0)
+  @Max(30)
+  normalPriorityToleranceMinutes?: number | null;
 }

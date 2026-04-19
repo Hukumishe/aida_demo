@@ -17,6 +17,7 @@ enum UserRole {
   ADMIN
   MANAGER
   MASTER
+  MARKETER // Маркетолог: управление лендингом, акциями, FAQ (на уровне организации)
   DEVELOPER // Платформа: создание организаций, полный доступ ко всем тенантам
 }
 
@@ -173,6 +174,16 @@ model Organization {
   /// Ночной путь verify_receipt_nighttime: дедлайн утренней задачи менеджеру на
   /// сверку чека с выпиской Kaspi (часы от момента создания). null → дефолт 12.
   nightReceiptTaskDeadlineHours  Int?
+  /// Интервал «плотности записей» в минутах для расчёта приоритета свободных слотов
+  /// в check_availability. Если между двумя соседними записями одного мастера гэп ≤
+  /// этого значения — все слоты внутри получают high-приоритет. Если null — high
+  /// вообще не используется: остаются только exact / normal / low. Сравнение по ≤.
+  highPriorityGapMinutes         Int?
+  /// Допуск прилегания для normal-приоритета (минуты). Слот получает normal, если
+  /// его граница отстоит от границы записи мастера не более чем на это значение
+  /// (в сторону свободного гэпа, без пересечения с записью). 0/null → только
+  /// «впритык» с техническим полом 60 сек на округление шага. High побеждает normal.
+  normalPriorityToleranceMinutes Int?
   createdAt                      DateTime                       @default(now())
   updatedAt                      DateTime                       @updatedAt
 
@@ -293,19 +304,25 @@ model Prompt {
   @@map("prompts")
 }
 
-/// FAQ / база знаний для дообучения агента (на уровне организации)
+/// FAQ организации. Редактируется владельцем и разработчиком в админке,
+/// публикуется на лендинге. answer хранится в Markdown (рендерится на фронте).
+/// category — произвольный тег для группировки на лендинге. isPublished
+/// позволяет спрятать элемент от публики, не удаляя его.
 model OrganizationFaq {
   id             String   @id
   organizationId String
   question       String
   answer         String
+  category       String?
+  isPublished    Boolean  @default(true)
   sortOrder      Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@index([organizationId])
+  @@index([organizationId, sortOrder])
+  @@index([organizationId, isPublished])
   @@map("organization_faqs")
 }
 
