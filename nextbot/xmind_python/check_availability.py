@@ -6,7 +6,8 @@
 # Args: base_url, api_key, organization_id, studio_id, date, serviceId (или service_id);
 # опционально staffUserId (или staff_user_id).
 # result: ok, status, data { durationMinutes, freeSlots[] }, prompt
-# У каждого элемента freeSlots: staffUserId, staffName, startAt, endAt, priority (high|normal|low) — считает бэкенд.
+# У каждого элемента freeSlots: staffUserId, staffName, startAt, endAt,
+# priority (exact|high|normal|low). exact — щель ≈ длительности услуги (±5 мин); при услуге <30 мин иначе сетка 30 мин.
 
 try:
   AP = args
@@ -16,9 +17,9 @@ if AP is None:
   AP = {}
 
 DEFAULT_PROMPT = (
-  "СИСТЕМНОЕ СООБЩЕНИЕ (правило «Тетрис»): в каждом элементе freeSlots есть priority: "
-  "high — между двумя записями; normal — после последней записи дня; low — остальное. "
-  "Сначала предлагай high, потом normal; из каждой группы не больше 2–3 окон. Не выдумывай слоты вне freeSlots."
+  "СИСТЕМНОЕ СООБЩЕНИЕ: priority exact — самый важный (щель по длительности услуги ±5 мин); "
+  "далее high / normal / low (Тетрис). При услуге короче 30 мин в списке обычно окна по 30 мин, кроме exact. "
+  "Предлагай сначала exact и high, по 2–3 варианта. Не выдумывай слоты вне freeSlots."
 )
 
 base = str(AP.get("base_url") or AP.get("baseUrl") or "").rstrip("/")

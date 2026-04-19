@@ -9,7 +9,7 @@ import { assertServiceBookableAtStudio } from '../common/service-studio-offering
 
 /** Промпт для ИИ: возвращается в теле ответа Nextbot под ключом `check_availability`. */
 export const NEXTBOT_CHECK_AVAILABILITY_PROMPT =
-  'Используй только массив freeSlots. У каждого элемента: startAt, endAt (ISO 8601), priority — high | normal | low (Тетрис: high = окно строго между двумя записями; normal = после последней записи мастера в этот день; low = остальное, напр. до первой записи). Сначала предлагай high, затем normal; low — по необходимости. Не выдумывай слоты вне freeSlots. Если массив пуст — скажи, что окон нет. durationMinutes — длительность услуги в минутах. Если клиент не выбрал мастера, список уже отсортирован: при равном priority сначала мастера с меньшим числом записей на эту дату.';
+  'Используй только массив freeSlots: startAt, endAt (ISO), priority — exact | high | normal | low. exact — щель по длине ≈ длительности услуги (±5 мин), самый приоритет; далее Тетрис (high между двумя записями, normal после последней записи дня, low остальное). Если длительность услуги < 30 мин, в ответе окна по 30 минут, кроме exact-слотов (они по реальной длительности). Если ≥ 30 мин — окна равны длительности услуги. durationMinutes в корне — длительность услуги из CRM. Не выдумывай слоты вне freeSlots.';
 
 @Injectable()
 export class AvailabilityService {
@@ -307,7 +307,7 @@ export class AvailabilityService {
       staffName: string | null;
       startAt: string;
       endAt: string;
-      priority: 'high' | 'normal' | 'low';
+      priority: 'exact' | 'high' | 'normal' | 'low';
     }>;
   }> {
     const dateStr = dateInput.includes('T') ? dateInput.split('T')[0] : dateInput;
@@ -405,11 +405,17 @@ export class AvailabilityService {
 
     const durationMs = durationMinutes * 60 * 1000;
     const stepMs = slotStep * 60 * 1000;
+    /** Услуги < 30 мин: в ответе сетка окон по 30 мин; щель ≈ длительности услуги (±5 мин) — отдельный слот exact. */
+    const shortServiceUsesHalfHourGrid = durationMinutes < 30;
+    const displayBlockMs = 30 * 60 * 1000;
+    const exactLengthToleranceMs = 5 * 60 * 1000;
+
     const freeSlots: Array<{
       staffUserId: string;
       staffName: string | null;
       startAt: string;
       endAt: string;
+      exactFit?: boolean;
     }> = [];
 
     const apptsByStaff = new Map<string, { start: number; end: number }[]>();
@@ -470,7 +476,34 @@ export class AvailabilityService {
       }
 
       for (const seg of segments) {
-        // Полуинтервал [start, end): конец слота должен быть строго до seg.end (как в checkAppointmentAvailability для closing time).
+        const segLen = seg.end - seg.start;
+
+        if (shortServiceUsesHalfHourGrid) {
+          const snugExact =
+            segLen >= durationMs &&
+            Math.abs(segLen - durationMs) <= exactLengthToleranceMs;
+          if (snugExact) {
+            freeSlots.push({
+              staffUserId,
+              staffName,
+              startAt: new Date(seg.start).toISOString(),
+              endAt: new Date(seg.start + durationMs).toISOString(),
+              exactFit: true,
+            });
+            continue;
+          }
+          for (let t = seg.start; t + displayBlockMs <= seg.end; t += displayBlockMs) {
+            freeSlots.push({
+              staffUserId,
+              staffName,
+              startAt: new Date(t).toISOString(),
+              endAt: new Date(t + displayBlockMs).toISOString(),
+            });
+          }
+          continue;
+        }
+
+        // Длительность услуги ≥ 30 мин: окна длиной duration, шаг slotStep.
         for (let t = seg.start; t + durationMs < seg.end; t += stepMs) {
           freeSlots.push({
             staffUserId,
@@ -482,11 +515,25 @@ export class AvailabilityService {
       }
     }
 
-    const PRI: Record<'high' | 'normal' | 'low', number> = { high: 0, normal: 1, low: 2 };
+    const PRI: Record<'exact' | 'high' | 'normal' | 'low', number> = {
+      exact: 0,
+      high: 1,
+      normal: 2,
+      low: 3,
+    };
     const freeSlotsWithPriority = freeSlots.map((slot) => {
       const s = new Date(slot.startAt).getTime();
       const e = new Date(slot.endAt).getTime();
       const sorted = apptsByStaff.get(slot.staffUserId) ?? [];
+      if (slot.exactFit) {
+        return {
+          staffUserId: slot.staffUserId,
+          staffName: slot.staffName,
+          startAt: slot.startAt,
+          endAt: slot.endAt,
+          priority: 'exact' as const,
+        };
+      }
       return {
         ...slot,
         priority: this.classifyNextbotSlotPriority(s, e, sorted),
@@ -508,11 +555,13 @@ export class AvailabilityService {
       return a.startAt.localeCompare(b.startAt) || a.staffUserId.localeCompare(b.staffUserId);
     });
 
+    const effectiveSlotStepForResponse = shortServiceUsesHalfHourGrid ? 30 : slotStep;
+
     return {
       date: dateStr,
       studioId,
       durationMinutes,
-      slotStepMinutes: slotStep,
+      slotStepMinutes: effectiveSlotStepForResponse,
       freeSlots: freeSlotsWithPriority,
     };
   }
