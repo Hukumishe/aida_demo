@@ -9,7 +9,7 @@ import { assertServiceBookableAtStudio } from '../common/service-studio-offering
 
 /** Промпт для ИИ: возвращается в теле ответа Nextbot под ключом `check_availability`. */
 export const NEXTBOT_CHECK_AVAILABILITY_PROMPT =
-  'Используй только массив freeSlots: startAt, endAt (ISO), priority — exact | high | normal | low. exact — щель по длине ≈ длительности услуги (±5 мин), самый приоритет; далее Тетрис (high между двумя записями, normal после последней записи дня, low остальное). Если длительность услуги < 30 мин, в ответе окна по 30 минут, кроме exact-слотов (они по реальной длительности). Если ≥ 30 мин — окна равны длительности услуги. durationMinutes в корне — длительность услуги из CRM. Не выдумывай слоты вне freeSlots.';
+  'Используй только массив freeSlots: startAt, endAt (ISO), priority — exact | high | normal | low. exact — щель ≈ длительности услуги (±5 мин). high — окно строго между двумя подряд записями. normal — только первое свободное окно сразу после последней записи мастера в этот день (хвост дня). low — всё остальное. При услуге < 30 мин часто сетка 30 мин. durationMinutes — длительность услуги из CRM. Не выдумывай слоты вне freeSlots.';
 
 @Injectable()
 export class AvailabilityService {
@@ -258,31 +258,21 @@ export class AvailabilityService {
   }
 
   /**
-   * Приоритет слота для Nextbot («Тетрис»):
-   * - high: окно целиком лежит строго между двумя подряд идущими записями (CRM);
-   * - normal: начало слота не раньше конца последней записи мастера за день;
-   * - low: остальное (в т.ч. до первой записи, пустой день без записей).
+   * Окно целиком в промежутке между двумя подряд записями (не «хвост» после последней).
    */
-  private classifyNextbotSlotPriority(
+  private isSlotBetweenTwoAppointments(
     slotStartMs: number,
     slotEndMs: number,
     sortedAppts: { start: number; end: number }[],
-  ): 'high' | 'normal' | 'low' {
-    if (sortedAppts.length === 0) {
-      return 'low';
-    }
-    const last = sortedAppts[sortedAppts.length - 1];
-    if (slotStartMs >= last.end) {
-      return 'normal';
-    }
+  ): boolean {
     for (let i = 0; i < sortedAppts.length - 1; i++) {
       const prevEnd = sortedAppts[i].end;
       const nextStart = sortedAppts[i + 1].start;
       if (slotStartMs >= prevEnd && slotEndMs <= nextStart) {
-        return 'high';
+        return true;
       }
     }
-    return 'low';
+    return false;
   }
 
   /**
@@ -515,6 +505,28 @@ export class AvailabilityService {
       }
     }
 
+    /** Первое по времени начало слота в «хвосте» дня после последней записи мастера — единственный normal (на мастера). */
+    const minTailStartByStaff = new Map<string, number>();
+    for (const slot of freeSlots) {
+      if (slot.exactFit) {
+        continue;
+      }
+      const sid = slot.staffUserId;
+      const sorted = apptsByStaff.get(sid) ?? [];
+      if (sorted.length === 0) {
+        continue;
+      }
+      const lastEnd = sorted[sorted.length - 1].end;
+      const t = new Date(slot.startAt).getTime();
+      if (t < lastEnd) {
+        continue;
+      }
+      const cur = minTailStartByStaff.get(sid);
+      if (cur === undefined || t < cur) {
+        minTailStartByStaff.set(sid, t);
+      }
+    }
+
     const PRI: Record<'exact' | 'high' | 'normal' | 'low', number> = {
       exact: 0,
       high: 1,
@@ -534,9 +546,37 @@ export class AvailabilityService {
           priority: 'exact' as const,
         };
       }
+      if (this.isSlotBetweenTwoAppointments(s, e, sorted)) {
+        return {
+          staffUserId: slot.staffUserId,
+          staffName: slot.staffName,
+          startAt: slot.startAt,
+          endAt: slot.endAt,
+          priority: 'high' as const,
+        };
+      }
+      const lastEnd = sorted.length > 0 ? sorted[sorted.length - 1].end : null;
+      const minTail = minTailStartByStaff.get(slot.staffUserId);
+      if (
+        lastEnd != null &&
+        minTail !== undefined &&
+        s === minTail &&
+        s >= lastEnd
+      ) {
+        return {
+          staffUserId: slot.staffUserId,
+          staffName: slot.staffName,
+          startAt: slot.startAt,
+          endAt: slot.endAt,
+          priority: 'normal' as const,
+        };
+      }
       return {
-        ...slot,
-        priority: this.classifyNextbotSlotPriority(s, e, sorted),
+        staffUserId: slot.staffUserId,
+        staffName: slot.staffName,
+        startAt: slot.startAt,
+        endAt: slot.endAt,
+        priority: 'low' as const,
       };
     });
 
