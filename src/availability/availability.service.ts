@@ -9,7 +9,7 @@ import { assertServiceBookableAtStudio } from '../common/service-studio-offering
 
 /** Промпт для ИИ: возвращается в теле ответа Nextbot под ключом `check_availability`. */
 export const NEXTBOT_CHECK_AVAILABILITY_PROMPT =
-  'Используй только массив freeSlots, чтобы предложить клиенту время записи. У каждого элемента поля startAt и endAt — допустимое начало и конец услуги в ISO 8601. Не предлагай другое время, которого нет в freeSlots. Если freeSlots пуст, скажи, что на эту дату подходящих окон нет, и предложи другую дату или другого мастера. Поле durationMinutes — длительность услуги в минутах, под которую подобраны слоты.';
+  'Используй только массив freeSlots. У каждого элемента: startAt, endAt (ISO 8601), priority — high | normal | low (Тетрис: high = окно строго между двумя записями; normal = после последней записи мастера в этот день; low = остальное, напр. до первой записи). Сначала предлагай high, затем normal; low — по необходимости. Не выдумывай слоты вне freeSlots. Если массив пуст — скажи, что окон нет. durationMinutes — длительность услуги в минутах. Если клиент не выбрал мастера, список уже отсортирован: при равном priority сначала мастера с меньшим числом записей на эту дату.';
 
 @Injectable()
 export class AvailabilityService {
@@ -258,6 +258,34 @@ export class AvailabilityService {
   }
 
   /**
+   * Приоритет слота для Nextbot («Тетрис»):
+   * - high: окно целиком лежит строго между двумя подряд идущими записями (CRM);
+   * - normal: начало слота не раньше конца последней записи мастера за день;
+   * - low: остальное (в т.ч. до первой записи, пустой день без записей).
+   */
+  private classifyNextbotSlotPriority(
+    slotStartMs: number,
+    slotEndMs: number,
+    sortedAppts: { start: number; end: number }[],
+  ): 'high' | 'normal' | 'low' {
+    if (sortedAppts.length === 0) {
+      return 'low';
+    }
+    const last = sortedAppts[sortedAppts.length - 1];
+    if (slotStartMs >= last.end) {
+      return 'normal';
+    }
+    for (let i = 0; i < sortedAppts.length - 1; i++) {
+      const prevEnd = sortedAppts[i].end;
+      const nextStart = sortedAppts[i + 1].start;
+      if (slotStartMs >= prevEnd && slotEndMs <= nextStart) {
+        return 'high';
+      }
+    }
+    return 'low';
+  }
+
+  /**
    * Свободные слоты для Nextbot check_availability (только доступные окна, без сырых расписаний).
    */
   async computeNextbotFreeSlots(
@@ -279,6 +307,7 @@ export class AvailabilityService {
       staffName: string | null;
       startAt: string;
       endAt: string;
+      priority: 'high' | 'normal' | 'low';
     }>;
   }> {
     const dateStr = dateInput.includes('T') ? dateInput.split('T')[0] : dateInput;
@@ -383,6 +412,24 @@ export class AvailabilityService {
       endAt: string;
     }> = [];
 
+    const apptsByStaff = new Map<string, { start: number; end: number }[]>();
+    for (const a of appointments) {
+      const list = apptsByStaff.get(a.staffUserId) ?? [];
+      list.push({ start: a.startAt.getTime(), end: a.endAt.getTime() });
+      apptsByStaff.set(a.staffUserId, list);
+    }
+    for (const list of apptsByStaff.values()) {
+      list.sort((x, y) => x.start - y.start);
+    }
+
+    const appointmentCountByStaff = new Map<string, number>();
+    for (const a of appointments) {
+      appointmentCountByStaff.set(
+        a.staffUserId,
+        (appointmentCountByStaff.get(a.staffUserId) ?? 0) + 1,
+      );
+    }
+
     for (const schedule of schedules) {
       if (schedule.isDayOff) continue;
 
@@ -435,16 +482,38 @@ export class AvailabilityService {
       }
     }
 
-    freeSlots.sort(
-      (a, b) => a.startAt.localeCompare(b.startAt) || a.staffUserId.localeCompare(b.staffUserId),
-    );
+    const PRI: Record<'high' | 'normal' | 'low', number> = { high: 0, normal: 1, low: 2 };
+    const freeSlotsWithPriority = freeSlots.map((slot) => {
+      const s = new Date(slot.startAt).getTime();
+      const e = new Date(slot.endAt).getTime();
+      const sorted = apptsByStaff.get(slot.staffUserId) ?? [];
+      return {
+        ...slot,
+        priority: this.classifyNextbotSlotPriority(s, e, sorted),
+      };
+    });
+
+    freeSlotsWithPriority.sort((a, b) => {
+      const d = PRI[a.priority] - PRI[b.priority];
+      if (d !== 0) {
+        return d;
+      }
+      if (!options.staffUserId) {
+        const ca = appointmentCountByStaff.get(a.staffUserId) ?? 0;
+        const cb = appointmentCountByStaff.get(b.staffUserId) ?? 0;
+        if (ca !== cb) {
+          return ca - cb;
+        }
+      }
+      return a.startAt.localeCompare(b.startAt) || a.staffUserId.localeCompare(b.staffUserId);
+    });
 
     return {
       date: dateStr,
       studioId,
       durationMinutes,
       slotStepMinutes: slotStep,
-      freeSlots,
+      freeSlots: freeSlotsWithPriority,
     };
   }
 }
