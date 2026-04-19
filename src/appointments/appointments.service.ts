@@ -286,6 +286,10 @@ export class AppointmentsService {
         endAt,
       );
 
+      const initialStatus = createAppointmentDto.tentative
+        ? AppointmentStatus.TENTATIVE
+        : AppointmentStatus.BOOKED;
+
       const appointment = await tx.appointment.create({
         data: {
           id: generateId(IdPrefix.Appointment),
@@ -296,7 +300,7 @@ export class AppointmentsService {
           startAt,
           endAt,
           prepaymentAmount: createAppointmentDto.prepaymentAmount,
-          status: AppointmentStatus.BOOKED,
+          status: initialStatus,
         },
         include: {
           staff: {
@@ -651,6 +655,22 @@ export class AppointmentsService {
         }
       }
 
+      /**
+       * Таймер удержания предварительной брони (holdExpiresAt) очищаем при переходе в любой стабильный
+       * статус (PENDING_CONFIRMATION, BOOKED, DONE) или при финальной отмене — чтобы крон авто-освобождения
+       * слотов не трогал запись после явного подтверждения/отмены менеджером или агентом.
+       */
+      const clearHoldStatuses: AppointmentStatus[] = [
+        AppointmentStatus.PENDING_CONFIRMATION,
+        AppointmentStatus.BOOKED,
+        AppointmentStatus.DONE,
+        AppointmentStatus.ARRIVED,
+        AppointmentStatus.CANCELLED,
+      ];
+      const shouldClearHold =
+        updateAppointmentDto.status !== undefined &&
+        clearHoldStatuses.includes(updateAppointmentDto.status);
+
       const updated = await tx.appointment.update({
         where: { id },
         data: {
@@ -658,6 +678,7 @@ export class AppointmentsService {
           endAt: updateAppointmentDto.startAt ? endAt : undefined,
           prepaymentAmount: updateAppointmentDto.prepaymentAmount,
           status: updateAppointmentDto.status,
+          ...(shouldClearHold ? { holdExpiresAt: null } : {}),
           ...(forfeitedToSet !== undefined ? { forfeitedPrepaymentAmount: forfeitedToSet } : {}),
         },
         include: {

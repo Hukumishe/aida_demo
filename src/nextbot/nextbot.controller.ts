@@ -30,6 +30,8 @@ import { UpdateClientDto } from '../clients/dto/update-client.dto';
 import { CreateAppointmentDto } from '../appointments/dto/create-appointment.dto';
 import { UpdateAppointmentDto } from '../appointments/dto/update-appointment.dto';
 import { NextbotSurveyDto } from './dto/nextbot-survey.dto';
+import { RequestManagerInvoiceDto } from './dto/request-manager-invoice.dto';
+import { VerifyReceiptNighttimeDto } from './dto/verify-receipt-nighttime.dto';
 
 /**
  * Эндпоинты строго по функциям из системного промпта xmind (aida_xmind.pdf).
@@ -389,12 +391,29 @@ export class NextbotController {
     return this.nextbotService.notImplemented('add_to_waitlist');
   }
 
+  /**
+   * request_manager_invoice — маршрутизатор оплаты Kaspi для предварительной брони.
+   *
+   * Бэкенд сам определяет день/ночь по локальному времени филиала и рабочим часам
+   * отдела маркетинга организации (`marketingHoursStartHour/EndHour`):
+   *   • День  → создаёт `StudioTask` на выставление счёта менеджеру + уведомление.
+   *   • Ночь  → ставит `holdExpiresAt = now + 30 min` на запись и возвращает
+   *             динамический промпт со статичными реквизитами Kaspi;
+   *             по истечении таймера бронь автоматически отменяется,
+   *             если не переведена в PENDING_CONFIRMATION (verify_receipt_nighttime).
+   */
   @Post('request-manager-invoice')
-  @ApiOperation({ summary: 'request_manager_invoice' })
-  @ApiBody({ required: false })
-  @ApiResponse({ status: 501 })
-  requestManagerInvoice(@Body() _body?: Record<string, unknown>) {
-    return this.nextbotService.notImplemented('request_manager_invoice');
+  @ApiOperation({
+    summary: 'request_manager_invoice',
+    description:
+      'Маршрутизатор оплаты Kaspi: день → задача менеджеру; ночь → 30-мин таймер удержания предварительной брони и статичные реквизиты Kaspi.',
+  })
+  @ApiResponse({ status: 200 })
+  requestManagerInvoice(
+    @Body() dto: RequestManagerInvoiceDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.nextbotService.requestManagerInvoice(dto, user);
   }
 
   @Post('generate-payment-link')
@@ -405,12 +424,28 @@ export class NextbotController {
     return this.nextbotService.notImplemented('generate_payment_link');
   }
 
+  /**
+   * verify_receipt_nighttime — финализатор ночной оплаты.
+   *
+   * Агент вызывает этот роут после того, как клиент прислал чек и ассистент
+   * визуально сверил ИП / дату / сумму. Бэкенд переводит запись из TENTATIVE
+   * в PENDING_CONFIRMATION (крон автоотмены больше её не тронет) и создаёт
+   * утреннюю задачу менеджеру на сверку с выпиской Kaspi. Идемпотентен:
+   * повторный вызов для уже PENDING_CONFIRMATION просто вернёт промпт.
+   */
   @Post('verify-receipt-nighttime')
-  @ApiOperation({ summary: 'verify_receipt_nighttime' })
-  @ApiBody({ required: false })
-  @ApiResponse({ status: 501 })
-  verifyReceiptNighttime(@Body() _body?: Record<string, unknown>) {
-    return this.nextbotService.notImplemented('verify_receipt_nighttime');
+  @ApiOperation({
+    summary: 'verify_receipt_nighttime',
+    description:
+      'Завершение ночной ветки оплаты: TENTATIVE → PENDING_CONFIRMATION, ' +
+      'сброс holdExpiresAt, утренняя задача менеджеру на сверку чека с Kaspi-выпиской.',
+  })
+  @ApiResponse({ status: 200 })
+  verifyReceiptNighttime(
+    @Body() dto: VerifyReceiptNighttimeDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.nextbotService.verifyReceiptNighttime(dto, user);
   }
 
   @Post('purchase-certificate')

@@ -1,5 +1,19 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { ServiceAudience, WaitlistEntrySource } from '@prisma/client';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  AppointmentStatus,
+  ServiceAudience,
+  TaskStatus,
+} from '@prisma/client';
+import { generateId, IdPrefix } from '../common/id-generator';
+import { NotificationsService } from '../notifications/notifications.service';
+import { RequestManagerInvoiceDto } from './dto/request-manager-invoice.dto';
+import { VerifyReceiptNighttimeDto } from './dto/verify-receipt-nighttime.dto';
 import {
   assertUserOrganizationMatchesStudio,
 } from '../common/organization-scope';
@@ -109,6 +123,7 @@ export class NextbotService {
     private readonly appointmentsService: AppointmentsService,
     private readonly availabilityService: AvailabilityService,
     private readonly promptsService: PromptsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -588,7 +603,21 @@ export class NextbotService {
     );
   }
 
-  /** create_booking_request */
+  /**
+   * create_booking_request.
+   *
+   * Nextbot всегда создаёт предварительную бронь (`status = TENTATIVE`).
+   * Слот резервируется в расписании (блокируется для других записей), но ждёт
+   * последующего вызова `request_manager_invoice`:
+   *   • дневной путь → задача менеджеру на выставление счёта; бронь остаётся TENTATIVE
+   *     до ручного перевода в BOOKED/PENDING_CONFIRMATION менеджером в CRM;
+   *   • ночной путь → активируется 30-минутный таймер автоотмены (`holdExpiresAt`),
+   *     клиент присылает чек → verify_receipt_nighttime переводит в PENDING_CONFIRMATION
+   *     и очищает таймер.
+   *
+   * При занятом слоте appointmentsService.create бросит 409 Conflict — автоочереди нет,
+   * клиента в лист ожидания ставит отдельная функция add_to_waitlist.
+   */
   async createAppointment(
     studioId: string,
     dto: CreateAppointmentDto,
@@ -596,11 +625,7 @@ export class NextbotService {
   ) {
     const created = await this.appointmentsService.create(
       studioId,
-      {
-        ...dto,
-        preferWaitlist: true,
-        waitlistSource: WaitlistEntrySource.NEXTBOT,
-      },
+      { ...dto, tentative: true },
       user.role,
       user.studioId,
       user.organizationId,
@@ -633,6 +658,424 @@ export class NextbotService {
       user.organizationId,
       'modify_booking',
       updated as unknown as Record<string, unknown>,
+    );
+  }
+
+  // ========== request_manager_invoice ==========
+
+  /** Час в локальной таймзоне студии в диапазоне 0..23. */
+  private currentHourInStudioTimezone(timezone: string, now: Date): number {
+    try {
+      const fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: timezone || 'Asia/Almaty',
+        hour: '2-digit',
+        hour12: false,
+      });
+      const raw = fmt.format(now);
+      const h = parseInt(raw, 10);
+      return Number.isFinite(h) ? h : now.getHours();
+    } catch {
+      return now.getHours();
+    }
+  }
+
+  /**
+   * Попадает ли текущее локальное время студии в рабочий интервал ОТДЕЛА МАРКЕТИНГА.
+   * Интервал [workStart, workEnd) по локальному времени. Поддерживает «переход через полночь»
+   * (например workStart=22, workEnd=6). Если хотя бы одна граница не задана или значения
+   * равны — считаем, что часы маркетинга не настроены и Nextbot всегда идёт по дневному пути.
+   */
+  private isDuringMarketingHours(
+    workStart: number | null | undefined,
+    workEnd: number | null | undefined,
+    studioTimezone: string,
+    now: Date,
+  ): boolean {
+    if (
+      workStart == null ||
+      workEnd == null ||
+      workStart < 0 ||
+      workStart > 23 ||
+      workEnd < 0 ||
+      workEnd > 23 ||
+      workStart === workEnd
+    ) {
+      return true;
+    }
+    const hour = this.currentHourInStudioTimezone(studioTimezone, now);
+    if (workStart < workEnd) {
+      return hour >= workStart && hour < workEnd;
+    }
+    return hour >= workStart || hour < workEnd;
+  }
+
+  private buildDayInvoicePrompt(): string {
+    return [
+      'СИСТЕМНОЕ СООБЩЕНИЕ: Заявка на выставление счёта Kaspi передана менеджеру филиала.',
+      '',
+      'ТВОИ ДЕЙСТВИЯ:',
+      'Коротко и спокойно подтверди клиенту: менеджер уже получил заявку и в ближайшее время выставит счёт в Kaspi по указанным реквизитам.',
+      'Попроси клиента дождаться уведомления/счёта в Kaspi; присылать чек СЕЙЧАС не нужно — оплата пройдёт по официальному счёту.',
+      'Не называй никаких статичных номеров, карт и внутренних идентификаторов — все реквизиты придут клиенту в счёте.',
+      'Если клиент спросит о сроках: «в течение рабочего времени, обычно быстро». Конкретные минуты не обещай.',
+    ].join('\n');
+  }
+
+  private buildNightInvoicePrompt(params: {
+    kaspiPhone: string | null;
+    kaspiCardHolder: string | null;
+    holdMinutes: number;
+  }): string {
+    const { kaspiPhone, kaspiCardHolder, holdMinutes } = params;
+    const hasRequisites = !!(kaspiPhone || kaspiCardHolder);
+    const requisites = hasRequisites
+      ? [
+          'РЕКВИЗИТЫ KASPI для ручного перевода:',
+          kaspiPhone ? `• Номер Kaspi: ${kaspiPhone}` : null,
+          kaspiCardHolder ? `• Получатель: ${kaspiCardHolder}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n')
+      : 'ВНИМАНИЕ: статичные реквизиты Kaspi не настроены в организации. Сообщи клиенту, что ночная оплата временно недоступна, и предложи записаться на другое время или дождаться утра — менеджер свяжется для выставления счёта.';
+
+    return [
+      'СИСТЕМНОЕ СООБЩЕНИЕ: Сейчас ночной режим оплаты. Счёт вручную не выставляем — клиент оплачивает переводом по статичным реквизитам Kaspi.',
+      '',
+      requisites,
+      '',
+      `ВАЖНО — ТАЙМЕР: Предварительная бронь удерживается ровно ${holdMinutes} минут. Если за это время чек не получен и не проверен, бронь будет автоматически отменена, слот освободится.`,
+      '',
+      'ТВОИ ДЕЙСТВИЯ:',
+      hasRequisites ? 'Сообщи клиенту реквизиты Kaspi (номер и получателя) точно, без сокращений.' : 'Не выдумывай реквизиты — их нет.',
+      `Чётко обозначь правило: в течение ${holdMinutes} минут он присылает чек/скриншот оплаты сюда же, иначе бронь снимется.`,
+      'Как только клиент пришлёт чек — вызови функцию verify_receipt_nighttime для визуальной/системной проверки. Не подтверждай оплату до верификации.',
+      'Не обещай окончательное подтверждение записи до проверки чека.',
+    ].join('\n');
+  }
+
+  /**
+   * request_manager_invoice.
+   *
+   * Связующий финансовый узел после создания предварительной брони.
+   * По локальному времени филиала и рабочим часам отдела маркетинга организации
+   * (`marketingHoursStartHour/EndHour`):
+   *   • ДЕНЬ — создаёт `StudioTask` на выставление счёта + уведомление менеджеру;
+   *     запись остаётся TENTATIVE; агенту возвращается дневной промпт.
+   *   • НОЧЬ — ставит `holdExpiresAt = now + 30 min` на запись,
+   *     агенту возвращает промпт со статичными реквизитами Kaspi и инструкцию запросить чек.
+   *
+   * Ответ всегда 200 с обязательным полем `prompt` (поле `data` — минимальный
+   * маршрут без тяжёлых объектов: `mode`, `holdUntilAt?`, `taskId?`).
+   */
+  async requestManagerInvoice(
+    dto: RequestManagerInvoiceDto,
+    user: CurrentUserPayload,
+  ) {
+    const appointmentId = (dto.appointmentId ?? '').trim();
+    const kaspiDetails = (dto.kaspiDetails ?? '').trim();
+    if (!appointmentId) {
+      throw new BadRequestException('appointmentId is required');
+    }
+    if (!kaspiDetails) {
+      throw new BadRequestException('kaspiDetails is required');
+    }
+
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        studio: { include: { organization: true } },
+      },
+    });
+    if (!appointment) {
+      throw new NotFoundException(`Appointment ${appointmentId} not found`);
+    }
+
+    await assertUserOrganizationMatchesStudio(
+      this.prisma,
+      appointment.studioId,
+      user.organizationId,
+      user.role,
+    );
+
+    if (
+      appointment.status === AppointmentStatus.CANCELLED ||
+      appointment.status === AppointmentStatus.DONE
+    ) {
+      throw new BadRequestException(
+        `Cannot request invoice: appointment status is ${appointment.status}`,
+      );
+    }
+
+    const organization = appointment.studio.organization;
+    const studioTimezone = appointment.studio.timezone || 'Asia/Almaty';
+    const now = new Date();
+    const isDay = this.isDuringMarketingHours(
+      organization.marketingHoursStartHour,
+      organization.marketingHoursEndHour,
+      studioTimezone,
+      now,
+    );
+    const isNight = !isDay;
+
+    const HOLD_MINUTES = 30;
+
+    if (isNight) {
+      const holdExpiresAt = new Date(now.getTime() + HOLD_MINUTES * 60_000);
+      await this.prisma.appointment.update({
+        where: { id: appointment.id },
+        data: { holdExpiresAt },
+      });
+
+      const fallback = this.buildNightInvoicePrompt({
+        kaspiPhone: organization.paymentKaspiPhone,
+        kaspiCardHolder: organization.paymentKaspiCardHolder,
+        holdMinutes: HOLD_MINUTES,
+      });
+
+      return this.withNextbotPrompt(
+        user.organizationId,
+        'request_manager_invoice',
+        {
+          mode: 'night_hold' as const,
+          holdUntilAt: holdExpiresAt.toISOString(),
+          appointmentId: appointment.id,
+        },
+        fallback,
+        'request_manager_invoice_night',
+      );
+    }
+
+    // Дневной путь — создаём задачу менеджеру филиала.
+    const assignee = await this.prisma.user.findFirst({
+      where: {
+        studioId: appointment.studioId,
+        role: { in: [UserRole.MANAGER, UserRole.ADMIN] },
+        isActive: true,
+      },
+      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true },
+    });
+
+    if (!assignee) {
+      throw new BadRequestException(
+        'No active MANAGER/ADMIN in studio to assign invoice task',
+      );
+    }
+
+    const deadlineAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // +2 часа
+    const phoneInfo = (dto.phone ?? '').trim();
+    const description = [
+      `Kaspi (со слов клиента): ${kaspiDetails}`,
+      phoneInfo ? `WhatsApp клиента: ${phoneInfo}` : null,
+      `Запись: ${appointment.id} (${appointment.startAt.toISOString()})`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const task = await this.prisma.studioTask.create({
+      data: {
+        id: generateId(IdPrefix.StudioTask),
+        organizationId: appointment.studio.organizationId,
+        title: `Выставить счёт Kaspi по записи ${appointment.id}`,
+        description,
+        assigneeUserId: assignee.id,
+        createdByUserId: assignee.id, // система / ассистент от имени менеджера
+        deadlineAt,
+        status: TaskStatus.OPEN,
+        appointmentId: appointment.id,
+        clientId: appointment.clientId,
+      },
+    });
+
+    try {
+      await this.notificationsService.createNewTaskNotification(
+        appointment.studioId,
+        task.id,
+        assignee.id,
+        task.title,
+        deadlineAt,
+      );
+    } catch {
+      // не блокируем основной ответ при сбое уведомления
+    }
+
+    const fallback = this.buildDayInvoicePrompt();
+
+    return this.withNextbotPrompt(
+      user.organizationId,
+      'request_manager_invoice',
+      {
+        mode: 'manager_task' as const,
+        taskId: task.id,
+        appointmentId: appointment.id,
+      },
+      fallback,
+      'request_manager_invoice_day',
+    );
+  }
+
+  // ========== verify_receipt_nighttime ==========
+
+  private buildVerifyReceiptNighttimePrompt(): string {
+    return [
+      'СИСТЕМНОЕ СООБЩЕНИЕ: Чек принят. Запись переведена в статус «Ожидает подтверждения».',
+      'Менеджер утром сверит поступление с выпиской Kaspi и окончательно подтвердит оплату.',
+      '',
+      'ТВОИ ДЕЙСТВИЯ:',
+      'Коротко и вежливо сообщи клиенту: чек получен, бронь за ним закреплена, таймер автоотмены снят.',
+      'Обозначь ожидания: окончательное подтверждение — после утренней сверки менеджером с банковской выпиской, обычно в первой половине рабочего дня.',
+      'Попроси сохранить чек на случай рассинхрона; если до сверки будут вопросы — менеджер свяжется сам.',
+      'Не называй внутренних идентификаторов и не обещай немедленное подтверждение — финальное решение за менеджером.',
+    ].join('\n');
+  }
+
+  /**
+   * verify_receipt_nighttime.
+   *
+   * Финал ночной ветки оплаты. Агент вызывает после того, как сам визуально сверил
+   * чек клиента (ИП, дата, сумма). Бэкенд:
+   *   • переводит запись TENTATIVE → PENDING_CONFIRMATION (холд снимется в
+   *     AppointmentsService.update автоматически);
+   *   • создаёт утреннюю задачу менеджеру на сверку с выпиской Kaspi;
+   *   • шлёт уведомление менеджеру;
+   *   • возвращает финальный промпт для экологичного закрытия диалога.
+   *
+   * Если запись уже в PENDING_CONFIRMATION (повторный вызов) — возвращаем тот же
+   * промпт без дубля задачи (идемпотентность для ретраев оркестратора).
+   */
+  async verifyReceiptNighttime(
+    dto: VerifyReceiptNighttimeDto,
+    user: CurrentUserPayload,
+  ) {
+    const appointmentId = (dto.appointmentId ?? '').trim();
+    if (!appointmentId) {
+      throw new BadRequestException('appointmentId is required');
+    }
+
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        studio: { select: { id: true, organizationId: true } },
+        client: { select: { id: true, phone: true } },
+      },
+    });
+    if (!appointment) {
+      throw new NotFoundException(`Appointment ${appointmentId} not found`);
+    }
+
+    await assertUserOrganizationMatchesStudio(
+      this.prisma,
+      appointment.studioId,
+      user.organizationId,
+      user.role,
+    );
+
+    if (
+      appointment.status === AppointmentStatus.CANCELLED ||
+      appointment.status === AppointmentStatus.DONE ||
+      appointment.status === AppointmentStatus.ARRIVED
+    ) {
+      throw new BadRequestException(
+        `Cannot verify receipt: appointment status is ${appointment.status}`,
+      );
+    }
+
+    const fallback = this.buildVerifyReceiptNighttimePrompt();
+
+    // Идемпотентность: если уже на верификации — просто возвращаем промпт.
+    if (appointment.status === AppointmentStatus.PENDING_CONFIRMATION) {
+      return this.withNextbotPrompt(
+        user.organizationId,
+        'verify_receipt_nighttime',
+        {
+          status: AppointmentStatus.PENDING_CONFIRMATION as string,
+          appointmentId: appointment.id,
+          alreadyProcessed: true as const,
+        },
+        fallback,
+      );
+    }
+
+    // Принимаем на верификацию только предварительную бронь (ночной путь).
+    if (appointment.status !== AppointmentStatus.TENTATIVE) {
+      throw new BadRequestException(
+        `Cannot verify receipt: appointment status is ${appointment.status}, expected TENTATIVE`,
+      );
+    }
+
+    // Перевод статуса → AppointmentsService.update сам сбросит holdExpiresAt.
+    const updated = await this.appointmentsService.update(
+      appointment.id,
+      { status: AppointmentStatus.PENDING_CONFIRMATION },
+      user.role,
+      user.studioId,
+      user.userId,
+      user.organizationId,
+    );
+
+    // Утренняя задача менеджеру на сверку чека с выпиской Kaspi.
+    const assignee = await this.prisma.user.findFirst({
+      where: {
+        studioId: appointment.studioId,
+        role: { in: [UserRole.MANAGER, UserRole.ADMIN] },
+        isActive: true,
+      },
+      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true },
+    });
+
+    let taskId: string | null = null;
+    if (assignee) {
+      const now = new Date();
+      const deadlineAt = new Date(now.getTime() + 12 * 60 * 60 * 1000); // +12 часов
+      const clientPhone = (dto.phone ?? '').trim() || appointment.client?.phone || '';
+      const description = [
+        'Ночная оплата через Nextbot. Чек получен, визуально сверен ассистентом.',
+        'Проверь поступление в выписке Kaspi и переведи запись в BOOKED.',
+        `Запись: ${appointment.id} (${appointment.startAt.toISOString()})`,
+        clientPhone ? `WhatsApp клиента: ${clientPhone}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const task = await this.prisma.studioTask.create({
+        data: {
+          id: generateId(IdPrefix.StudioTask),
+          organizationId: appointment.studio.organizationId,
+          title: `Сверить ночной чек Kaspi по записи ${appointment.id}`,
+          description,
+          assigneeUserId: assignee.id,
+          createdByUserId: assignee.id,
+          deadlineAt,
+          status: TaskStatus.OPEN,
+          appointmentId: appointment.id,
+          clientId: appointment.clientId,
+        },
+      });
+      taskId = task.id;
+
+      try {
+        await this.notificationsService.createNewTaskNotification(
+          appointment.studioId,
+          task.id,
+          assignee.id,
+          task.title,
+          deadlineAt,
+        );
+      } catch {
+        // уведомления — не критично для основного ответа
+      }
+    }
+
+    return this.withNextbotPrompt(
+      user.organizationId,
+      'verify_receipt_nighttime',
+      {
+        status: (updated as { status?: string })?.status ?? AppointmentStatus.PENDING_CONFIRMATION,
+        appointmentId: appointment.id,
+        taskId,
+      },
+      fallback,
     );
   }
 }

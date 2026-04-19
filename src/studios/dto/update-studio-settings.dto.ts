@@ -1,4 +1,14 @@
-import { IsBoolean, IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  ValidateIf,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ReferFriendInviteeRewardType, ReferFriendReferrerRewardType } from '@prisma/client';
 
@@ -52,4 +62,64 @@ export class UpdateStudioSettingsDto {
   @IsInt()
   @Min(0)
   referFriendReferrerValue?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Рабочие часы ОТДЕЛА МАРКЕТИНГА: ЧАС НАЧАЛА смены по локальному времени студии (0..23). ' +
+      'Nextbot использует интервал [marketingHoursStartHour, marketingHoursEndHour) для маршрутизации оплаты: ' +
+      'внутри интервала — дневной путь (задача маркетинг-менеджеру на выставление счёта Kaspi), вне — ночной путь (статичные реквизиты Kaspi + 30-мин таймер удержания брони). ' +
+      'Передайте null для обоих полей, чтобы выключить ночной режим.',
+    minimum: 0,
+    maximum: 23,
+    example: 9,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  marketingHoursStartHour?: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Рабочие часы ОТДЕЛА МАРКЕТИНГА: ЧАС ОКОНЧАНИЯ смены по локальному времени студии (0..23). ' +
+      'Пара с marketingHoursStartHour; поддерживается переход через полночь (например 22 → 6).',
+    minimum: 0,
+    maximum: 23,
+    example: 22,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  marketingHoursEndHour?: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Статичные реквизиты Kaspi: номер телефона получателя (используется в ночном промпте request_manager_invoice). ' +
+      'Передайте null/пустую строку, чтобы очистить значение.',
+    example: '+77011234567',
+    maxLength: 32,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsString()
+  @MaxLength(32)
+  paymentKaspiPhone?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Статичные реквизиты Kaspi: ФИО держателя карты (как показывать клиенту).',
+    example: 'Иванов И. И.',
+    maxLength: 128,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsString()
+  @MaxLength(128)
+  paymentKaspiCardHolder?: string | null;
 }

@@ -25,6 +25,8 @@ enum AppointmentStatus {
   CANCELLED
   ARRIVED
   DONE
+  TENTATIVE // Предварительная бронь (Nextbot до выставления счёта/оплаты)
+  PENDING_CONFIRMATION // Ожидает подтверждения (после присланного чека ночью — до ручной проверки менеджером)
 }
 
 /// Лист ожидания: желаемое время занято — заявка не в журнале записей, пока не освободится слот или не отменят.
@@ -152,6 +154,16 @@ model Organization {
   referFriendReferrerRewardType  ReferFriendReferrerRewardType?
   referFriendReferrerValue       Int?
   loyaltyMode                    StudioLoyaltyMode              @default(PRESET)
+  /// Рабочие часы ОТДЕЛА МАРКЕТИНГА (не всей студии). Используются Nextbot для маршрутизации оплаты
+  /// после предварительной брони. Интервал [marketingHoursStartHour, marketingHoursEndHour)
+  /// по локальному времени студии = ДЕНЬ: задача маркетинг-менеджеру на выставление счёта Kaspi.
+  /// Вне интервала = НОЧЬ: статичные реквизиты Kaspi + 30-минутный таймер удержания брони.
+  /// Если хотя бы одно значение null — рабочие часы маркетинга не заданы, всегда идёт дневной путь.
+  marketingHoursStartHour        Int?
+  marketingHoursEndHour          Int?
+  /// Статичные реквизиты Kaspi для ночного промпта оплаты Nextbot.
+  paymentKaspiPhone              String?
+  paymentKaspiCardHolder         String?
   createdAt                      DateTime                       @default(now())
   updatedAt                      DateTime                       @updatedAt
 
@@ -724,6 +736,9 @@ model Appointment {
   forfeitedPrepaymentAmount Int? // Предоплата, сгоревшая при поздней отмене
   completedBonusesUsed      Int? // Сколько бонусов списано при завершении (DONE)
   completedMoneyPaid        Int? // Сумма, оплаченная деньгами при DONE (для уровня и кэшбэка)
+  /// Дедлайн авто-отмены для статуса TENTATIVE (Nextbot, ночной путь оплаты).
+  /// При переходе записи в PENDING_CONFIRMATION / BOOKED / DONE очищается.
+  holdExpiresAt             DateTime?
   arrivedAt                 DateTime?
   arrivedByUserId           String?
   createdAt                 DateTime          @default(now())

@@ -75,6 +75,16 @@ export class CreateAppointmentDto {
   @IsOptional()
   @IsEnum(WaitlistEntrySource)
   waitlistSource?: WaitlistEntrySource;
+
+  @ApiPropertyOptional({
+    description:
+      'Создать запись как предварительную бронь (status=TENTATIVE). Используется Nextbot до выставления счёта/оплаты. ' +
+      'Слот резервируется в расписании (не пересекается с другими), но запись может быть автоматически отменена ' +
+      'по таймеру holdExpiresAt на последующем шаге request_manager_invoice (ночной путь).',
+  })
+  @IsOptional()
+  @IsBoolean()
+  tentative?: boolean;
 }
 
 

@@ -9,7 +9,9 @@
 # Опционально: prepayment_amount — в тело как prepaymentAmount; payload_json — полное тело JSON (CreateAppointmentDto), поля выше не собираются.
 #
 # Result: ok, status, data { id, status }, prompt.
-# Ответ бэкенда при Nextbot: часто { outcome, appointment | waitlistEntry }, а не плоская запись — id/status берём из appointment или waitlistEntry.
+# Ответ бэкенда — { outcome: 'booked', appointment } либо плоская запись; id/status берём из appointment.
+# При занятом слоте бэкенд возвращает 409 Conflict — в этом случае отдаём агенту промпт о занятости слота,
+# без автоматической постановки в лист ожидания. Очередь оформляется отдельной функцией add_to_waitlist.
 
 try:
   AP = args
@@ -169,16 +171,10 @@ if body is not None:
         prompt_text = str(prompt_text)
 
       appt = full.get("appointment")
-      wl = full.get("waitlistEntry")
       if isinstance(appt, dict):
         slim = {
           "id": appt.get("id"),
           "status": appt.get("status"),
-        }
-      elif isinstance(wl, dict):
-        slim = {
-          "id": wl.get("id"),
-          "status": wl.get("status"),
         }
       else:
         slim = {
@@ -192,6 +188,23 @@ if body is not None:
           "status": r.status_code,
           "data": slim,
           "prompt": prompt_text,
+        }
+      elif r.status_code == 409:
+        slot_busy_prompt = (
+          "Запрошенный слот занят — запись не создана, и клиент НЕ добавлен в лист ожидания автоматически. "
+          "Сообщи клиенту, что выбранное время недоступно, и предложи альтернативы: другое время в тот же день, "
+          "другого мастера или другой день. "
+          "Если клиент не согласен на альтернативы и хочет ждать именно этот слот/окно — "
+          "получи от него явное согласие на лист ожидания и только после этого вызови функцию add_to_waitlist "
+          "с параметрами желаемого визита (date, time_range, staff_user_id)."
+        )
+        result = {
+          "ok": False,
+          "status": r.status_code,
+          "data": None,
+          "prompt": prompt_text or slot_busy_prompt,
+          "error": "slot_conflict",
+          "raw": full if full else (r.text or None),
         }
       else:
         result = {

@@ -36,7 +36,7 @@
   - Список: **`GET /studios/:studioId/waitlist-entries`** (query: `date`, `status` — по умолчанию на бэкенде **PENDING**; `status=all` — все статусы).
   - Отмена: **`POST .../waitlist-entries/:entryId/cancel`**.
   - Перевод в запись: **`POST .../waitlist-entries/:entryId/convert`** (если слот освободился).
-- Создание записи с фолбэком в лист: в теле **`POST /studios/:studioId/appointments`** для каналов лендинга/бота — **`preferWaitlist: true`**, **`waitlistSource: LANDING`** (или как договоритесь с бэкендом). Ответ может быть **`{ outcome: 'booked', appointment }`** или **`{ outcome: 'waitlist', waitlistEntry }`**. Nextbot на бэкенде уже шлёт **`preferWaitlist`** для **`create_booking_request`**.
+- Создание записи с фолбэком в лист: в теле **`POST /studios/:studioId/appointments`** для каналов лендинга/CRM — **`preferWaitlist: true`**, **`waitlistSource: LANDING`** (или как договоритесь с бэкендом). Ответ может быть **`{ outcome: 'booked', appointment }`** или **`{ outcome: 'waitlist', waitlistEntry }`**. Nextbot с бэкенда **`preferWaitlist`** НЕ шлёт: при занятом слоте **`create_booking_request`** возвращает **409 Conflict** (без авто-очереди), а постановка в очередь выполняется отдельной функцией **`add_to_waitlist`** (`POST /nextbot/add-to-waitlist`) по явному согласию клиента.
 
 ### 5. Запись и слоты: длительность услуги
 

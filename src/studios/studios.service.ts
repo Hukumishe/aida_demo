@@ -100,6 +100,10 @@ export class StudiosService {
             referFriendInviteeValue: true,
             referFriendReferrerRewardType: true,
             referFriendReferrerValue: true,
+            marketingHoursStartHour: true,
+            marketingHoursEndHour: true,
+            paymentKaspiPhone: true,
+            paymentKaspiCardHolder: true,
           },
         },
       },
@@ -117,6 +121,10 @@ export class StudiosService {
       referFriendInviteeValue: org.referFriendInviteeValue,
       referFriendReferrerRewardType: org.referFriendReferrerRewardType,
       referFriendReferrerValue: org.referFriendReferrerValue,
+      marketingHoursStartHour: org.marketingHoursStartHour,
+      marketingHoursEndHour: org.marketingHoursEndHour,
+      paymentKaspiPhone: org.paymentKaspiPhone,
+      paymentKaspiCardHolder: org.paymentKaspiCardHolder,
     };
   }
 
@@ -129,6 +137,10 @@ export class StudiosService {
       referFriendInviteeValue?: number;
       referFriendReferrerRewardType?: ReferFriendReferrerRewardType;
       referFriendReferrerValue?: number;
+      marketingHoursStartHour?: number | null;
+      marketingHoursEndHour?: number | null;
+      paymentKaspiPhone?: string | null;
+      paymentKaspiCardHolder?: string | null;
     },
     userRole: string,
   ) {
@@ -196,6 +208,35 @@ export class StudiosService {
     }
     if (dto.referFriendReferrerValue !== undefined) {
       data.referFriendReferrerValue = dto.referFriendReferrerValue;
+    }
+
+    // Рабочие часы: либо оба часа заданы, либо оба null. Пара «число + null» запрещена.
+    const startProvided = Object.prototype.hasOwnProperty.call(dto, 'marketingHoursStartHour');
+    const endProvided = Object.prototype.hasOwnProperty.call(dto, 'marketingHoursEndHour');
+    if (startProvided || endProvided) {
+      const nextStart = startProvided ? dto.marketingHoursStartHour ?? null : org.marketingHoursStartHour;
+      const nextEnd = endProvided ? dto.marketingHoursEndHour ?? null : org.marketingHoursEndHour;
+      if ((nextStart == null) !== (nextEnd == null)) {
+        throw new BadRequestException(
+          'Задайте оба часа рабочего времени отдела маркетинга (marketingHoursStartHour и marketingHoursEndHour) или оба null',
+        );
+      }
+      if (nextStart != null && nextEnd != null && nextStart === nextEnd) {
+        throw new BadRequestException(
+          'marketingHoursStartHour не может совпадать с marketingHoursEndHour',
+        );
+      }
+      if (startProvided) data.marketingHoursStartHour = nextStart;
+      if (endProvided) data.marketingHoursEndHour = nextEnd;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(dto, 'paymentKaspiPhone')) {
+      const v = dto.paymentKaspiPhone;
+      data.paymentKaspiPhone = v == null || v.trim() === '' ? null : v.trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(dto, 'paymentKaspiCardHolder')) {
+      const v = dto.paymentKaspiCardHolder;
+      data.paymentKaspiCardHolder = v == null || v.trim() === '' ? null : v.trim();
     }
 
     return this.prisma.organization.update({
