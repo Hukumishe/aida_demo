@@ -13,6 +13,32 @@ export class UpdateClientDto {
   @IsOptional()
   lastName?: string;
 
+  @ApiProperty({ example: 'Петрович', required: false, description: 'Отчество. null — очистить.' })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  patronymic?: string | null;
+
+  @ApiProperty({
+    example: '@username',
+    required: false,
+    description: 'Instagram. null — очистить.',
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  instagram?: string | null;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Источник (маркетинговая реферальная ссылка и т.п.). Обычно задаётся сервером при referralLinkId при создании; можно править вручную. null — очистить.',
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  registrationSource?: string | null;
+
   @ApiProperty({ example: '+79991234567', required: false })
   @IsString()
   @IsOptional()

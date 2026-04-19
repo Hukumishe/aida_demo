@@ -22,6 +22,20 @@ export class CreateClientDto {
   @IsOptional()
   lastName?: string;
 
+  @ApiProperty({ example: 'Петрович', required: false, description: 'Отчество' })
+  @IsString()
+  @IsOptional()
+  patronymic?: string;
+
+  @ApiProperty({
+    example: '@username',
+    required: false,
+    description: 'Instagram: @username или полная ссылка',
+  })
+  @IsString()
+  @IsOptional()
+  instagram?: string;
+
   @ApiProperty({ example: '+79991234567' })
   @IsString()
   @IsNotEmpty()

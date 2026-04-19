@@ -131,6 +131,7 @@ export class ClientsService {
       where.OR = [
         { firstName: { contains: query, mode: 'insensitive' } },
         { lastName: { contains: query, mode: 'insensitive' } },
+        { patronymic: { contains: query, mode: 'insensitive' } },
         { phone: { contains: query, mode: 'insensitive' } },
       ];
     }
@@ -358,6 +359,8 @@ export class ClientsService {
             organizationId,
             firstName: createClientDto.firstName,
             lastName: createClientDto.lastName,
+            patronymic: createClientDto.patronymic?.trim() || undefined,
+            instagram: createClientDto.instagram?.trim() || undefined,
             phone: createClientDto.phone,
             gender: createClientDto.gender,
             birthDate: createClientDto.birthDate ? new Date(createClientDto.birthDate) : undefined,

@@ -35,6 +35,8 @@ type NormalizedRow = {
   rowNumber: number;
   firstName: string;
   lastName: string | null;
+  patronymic: string | null;
+  instagram: string | null;
   phone: string;
   gender: ClientGender | null;
   birthDate: Date | null;
@@ -54,6 +56,15 @@ const HEADER_ALIASES: Record<string, string> = {
   фамилия: 'lastName',
   lastname: 'lastName',
   'last name': 'lastName',
+
+  отчество: 'patronymic',
+  patronymic: 'patronymic',
+  middlename: 'patronymic',
+  'middle name': 'patronymic',
+
+  инстаграм: 'instagram',
+  instagram: 'instagram',
+  ig: 'instagram',
 
   телефон: 'phone',
   phone: 'phone',
@@ -300,6 +311,8 @@ export class ClientsImportService {
           organizationId,
           firstName: row.firstName,
           lastName: row.lastName ?? undefined,
+          patronymic: row.patronymic ?? undefined,
+          instagram: row.instagram ?? undefined,
           phone: row.phone,
           gender: row.gender ?? undefined,
           birthDate: row.birthDate ?? undefined,
@@ -401,6 +414,14 @@ export class ClientsImportService {
     const firstName = String(row['firstName'] ?? '').trim();
     const lastName = (() => {
       const v = String(row['lastName'] ?? '').trim();
+      return v === '' ? null : v;
+    })();
+    const patronymic = (() => {
+      const v = String(row['patronymic'] ?? '').trim();
+      return v === '' ? null : v;
+    })();
+    const instagram = (() => {
+      const v = String(row['instagram'] ?? '').trim();
       return v === '' ? null : v;
     })();
     const phone = normalizePhone(row['phone']);
@@ -510,6 +531,8 @@ export class ClientsImportService {
         rowNumber,
         firstName,
         lastName,
+        patronymic,
+        instagram,
         phone,
         gender,
         birthDate: birthDateResult ?? null,

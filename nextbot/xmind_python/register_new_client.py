@@ -1,7 +1,8 @@
 # xmind: register_new_client
 # HTTP: POST {base_url}/nextbot/clients/register  (тело CreateClientDto)
 # Args: base_url, api_key, organization_id
-# Либо payload_json (строка JSON), либо first_name, phone [, last_name, birth_date, notes, bonuses, discount, balance]
+# Либо payload_json (строка JSON), либо first_name, phone [, last_name, patronymic, instagram,
+# referral_link_id (маркетинговая ссылка → источник), birth_date, notes, bonuses, discount, balance]
 # Ответ: созданный клиент + поле "register_new_client" (промпт).
 
 base = args.get("base_url", "").rstrip("/")
@@ -22,6 +23,13 @@ else:
   }
   if args.get("last_name"):
     body["lastName"] = args.get("last_name")
+  if args.get("patronymic"):
+    body["patronymic"] = args.get("patronymic")
+  if args.get("instagram"):
+    body["instagram"] = args.get("instagram")
+  rid = args.get("referral_link_id")
+  if rid:
+    body["referralLinkId"] = rid
   if args.get("birth_date"):
     body["birthDate"] = args.get("birth_date")
   if args.get("notes") is not None:

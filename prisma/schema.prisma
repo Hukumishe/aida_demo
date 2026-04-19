@@ -384,6 +384,8 @@ model Client {
   organizationId                  String
   firstName                       String
   lastName                        String?
+  patronymic                      String? // Отчество
+  instagram                       String? // @username или ссылка
   phone                           String
   notes                           String?
   gender                          ClientGender? // Пол клиента: MALE / FEMALE / null (не указано)
