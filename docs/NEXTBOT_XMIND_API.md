@@ -21,7 +21,8 @@
 |---------------|--------|------|
 | `get_company_context` | GET | `/nextbot/context` |
 | `verify_client_status` | GET | `/nextbot/studios/:studioId/clients/verify?q=` |
-| `register_new_client` | POST | `/nextbot/studios/:studioId/clients/register` |
+| `register_new_client` | POST | `/nextbot/clients/register` |
+| `update_old_client_profile` | PATCH | `/nextbot/clients/:clientId/update` (тело `UpdateClientDto`; в ответе строка **`update_old_client_profile`** — промпт из панели AIDA) |
 | `process_survey_answers` | POST | `/nextbot/clients/:clientId/survey` |
 | `get_services_and_prices` | GET | `/nextbot/studios/:studioId/services` |
 | `get_active_promotions` | GET | `/nextbot/studios/:studioId/landing/promotions` |

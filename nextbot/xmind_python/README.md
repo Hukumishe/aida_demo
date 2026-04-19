@@ -62,7 +62,9 @@
 |------|------------|
 | `get_company_context.py` | контекст / список студий |
 | `verify_client_status.py` | клиент по `q` |
+| `get_client_appointments.py` | предстоящие записи клиента (`GET /clients/:id/appointments?upcoming=true`) |
 | `register_new_client.py` | регистрация |
+| `update_old_client_profile.py` | обновление профиля (`PATCH /nextbot/clients/:id/update`, промпт с портала) |
 | `process_survey_answers.py` | анкета |
 | `get_services_and_prices.py` | услуги и цены |
 | `get_active_promotions.py` | акции |

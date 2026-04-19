@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -25,6 +26,7 @@ import {
 } from '../common/decorators/current-user.decorator';
 import { NextbotService } from './nextbot.service';
 import { CreateClientDto } from '../clients/dto/create-client.dto';
+import { UpdateClientDto } from '../clients/dto/update-client.dto';
 import { CreateAppointmentDto } from '../appointments/dto/create-appointment.dto';
 import { UpdateAppointmentDto } from '../appointments/dto/update-appointment.dto';
 import { NextbotSurveyDto } from './dto/nextbot-survey.dto';
@@ -90,6 +92,35 @@ export class NextbotController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.nextbotService.registerClient(dto, user);
+  }
+
+  // --- update_old_client_profile ---
+  @Patch('clients/:clientId/update')
+  @ApiOperation({
+    summary: 'update_old_client_profile',
+    description:
+      'Обновление профиля существующего клиента (тело как PATCH /clients/:id). В ответе — обновлённый клиент и строка `update_old_client_profile` (промпт из панели AIDA по этому ключу).',
+  })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER: контекст организации, как у GET /clients.',
+  })
+  @ApiResponse({ status: 200, description: 'Client updated' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Client not found' })
+  updateOldClientProfile(
+    @Param('clientId') clientId: string,
+    @Body() dto: UpdateClientDto,
+    @Query('organizationId') organizationId: string | undefined,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.nextbotService.updateOldClientProfile(
+      clientId,
+      dto,
+      user,
+      organizationId,
+    );
   }
 
   // --- process_survey_answers ---

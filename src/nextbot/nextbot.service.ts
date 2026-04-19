@@ -14,6 +14,7 @@ import { ServicesService } from '../services/services.service';
 import { LandingService } from '../landing/landing.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { CreateClientDto } from '../clients/dto/create-client.dto';
+import { UpdateClientDto } from '../clients/dto/update-client.dto';
 import { CreateAppointmentDto } from '../appointments/dto/create-appointment.dto';
 import { UpdateAppointmentDto } from '../appointments/dto/update-appointment.dto';
 import { NextbotSurveyDto } from './dto/nextbot-survey.dto';
@@ -54,6 +55,20 @@ export const NEXTBOT_GET_SERVICES_AND_PRICES_PROMPT = [
   'ПРЕЗЕНТАЦИЯ УСЛУГ: Озвучь клиенту названия доступных процедур ("name") и их стоимость ("defaultPrice").',
   'ВЫБОР И ФИКСАЦИЯ: Помоги клиенту выбрать нужные услуги. Обязательно зафиксируй в памяти "id" выбранных услуг и их общую длительность ("defaultDurationMin") для дальнейшего расчета времени.',
   'ПЕРЕХОД К РАСПИСАНИЮ: После утверждения списка услуг, уточни у клиента пожелания по дате и времени визита, после чего вызывай функцию check_availability для проверки свободных окон.',
+].join('\n');
+
+/**
+ * Фолбэк для update_old_client_profile (обновление данных существующего клиента до анкеты).
+ * В панели промптов AIDA задайте свой текст по ключу `update_old_client_profile` для организации.
+ */
+export const NEXTBOT_UPDATE_OLD_CLIENT_PROFILE_PROMPT = [
+  'СИСТЕМНОЕ СООБЩЕНИЕ: Профиль существующего клиента обновлён в CRM.',
+  '',
+  'СТРОГО ЗАПРЕЩЕНО: предлагать Welcome-бонус, бонусы за регистрацию или «подарки новому клиенту». Не поздравлять с первой регистрацией.',
+  '',
+  'ТВОИ ДЕЙСТВИЯ:',
+  'Кратко подтверди, что контактные данные учтены.',
+  'Переведи диалог к подбору услуги: предложи выбрать направление/услугу или перейти к записи.',
 ].join('\n');
 
 /** Нормализация пола/аудитории из оркестратора в ServiceAudience (MEN/WOMEN). */
@@ -279,6 +294,29 @@ export class NextbotService {
       user.organizationId,
       'register_new_client',
       created as unknown as Record<string, unknown>,
+    );
+  }
+
+  /** update_old_client_profile — то же тело, что PATCH /clients/:id (UpdateClientDto) + промпт под ключом update_old_client_profile */
+  async updateOldClientProfile(
+    clientId: string,
+    dto: UpdateClientDto,
+    user: CurrentUserPayload,
+    organizationIdQuery?: string,
+  ) {
+    const updated = await this.clientsService.update(
+      clientId.trim(),
+      dto,
+      user.role,
+      user.studioId,
+      user.organizationId,
+      organizationIdQuery?.trim() || undefined,
+    );
+    return this.withNextbotPrompt(
+      user.organizationId,
+      'update_old_client_profile',
+      updated as unknown as Record<string, unknown>,
+      NEXTBOT_UPDATE_OLD_CLIENT_PROFILE_PROMPT,
     );
   }
 
