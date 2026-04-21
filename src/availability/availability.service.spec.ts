@@ -2,13 +2,18 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException } from '@nestjs/common';
 import { AvailabilityService } from './availability.service';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { ConflictException as CustomConflictException } from '../common/exceptions/conflict.exception';
 
 describe('AvailabilityService', () => {
   let service: AvailabilityService;
   let prisma: PrismaService;
 
   const mockPrismaService = {
+    studio: {
+      findUnique: jest.fn().mockResolvedValue({
+        timezone: 'Asia/Almaty',
+        organization: { ianaTimezone: 'Asia/Almaty' },
+      }),
+    },
     workScheduleDay: {
       findUnique: jest.fn(),
     },
@@ -42,15 +47,16 @@ describe('AvailabilityService', () => {
   describe('checkAppointmentAvailability', () => {
     const studioId = 'studio-1';
     const staffUserId = 'staff-1';
-    const startAt = new Date('2024-01-15T10:00:00Z');
-    const endAt = new Date('2024-01-15T11:00:00Z');
+    /** 10:00–11:00 по Asia/Almaty (см. Intl в Node для 2024-01-15). */
+    const startAt = new Date('2024-01-15T04:00:00Z');
+    const endAt = new Date('2024-01-15T05:00:00Z');
 
     it('should throw if no schedule exists', async () => {
       mockPrismaService.workScheduleDay.findUnique.mockResolvedValue(null);
 
       await expect(
         service.checkAppointmentAvailability(studioId, staffUserId, startAt, endAt),
-      ).rejects.toThrow(CustomConflictException);
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should throw if day is off', async () => {
@@ -62,7 +68,7 @@ describe('AvailabilityService', () => {
 
       await expect(
         service.checkAppointmentAvailability(studioId, staffUserId, startAt, endAt),
-      ).rejects.toThrow(CustomConflictException);
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should throw if appointment is outside work hours', async () => {
@@ -72,12 +78,12 @@ describe('AvailabilityService', () => {
         endTime: '18:00',
       });
 
-      const earlyStart = new Date('2024-01-15T08:00:00Z');
-      const earlyEnd = new Date('2024-01-15T09:00:00Z');
+      const earlyStart = new Date('2024-01-15T02:00:00Z');
+      const earlyEnd = new Date('2024-01-15T03:00:00Z');
 
       await expect(
         service.checkAppointmentAvailability(studioId, staffUserId, earlyStart, earlyEnd),
-      ).rejects.toThrow(CustomConflictException);
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should throw if appointment overlaps with break', async () => {
@@ -89,12 +95,12 @@ describe('AvailabilityService', () => {
         breakEnd: '14:00',
       });
 
-      const breakStart = new Date('2024-01-15T13:00:00Z');
-      const breakEnd = new Date('2024-01-15T13:30:00Z');
+      const breakStart = new Date('2024-01-15T07:00:00Z');
+      const breakEnd = new Date('2024-01-15T07:30:00Z');
 
       await expect(
         service.checkAppointmentAvailability(studioId, staffUserId, breakStart, breakEnd),
-      ).rejects.toThrow(CustomConflictException);
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should throw if appointment overlaps with busy slot', async () => {
@@ -106,13 +112,13 @@ describe('AvailabilityService', () => {
 
       mockPrismaService.busySlot.findFirst.mockResolvedValue({
         id: 'busy-1',
-        startAt: new Date('2024-01-15T10:00:00Z'),
-        endAt: new Date('2024-01-15T11:00:00Z'),
+        startAt: new Date('2024-01-15T04:00:00Z'),
+        endAt: new Date('2024-01-15T05:00:00Z'),
       });
 
       await expect(
         service.checkAppointmentAvailability(studioId, staffUserId, startAt, endAt),
-      ).rejects.toThrow(CustomConflictException);
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should throw if appointment overlaps with another appointment', async () => {
@@ -125,13 +131,13 @@ describe('AvailabilityService', () => {
       mockPrismaService.busySlot.findFirst.mockResolvedValue(null);
       mockPrismaService.appointment.findFirst.mockResolvedValue({
         id: 'appointment-1',
-        startAt: new Date('2024-01-15T10:00:00Z'),
-        endAt: new Date('2024-01-15T11:00:00Z'),
+        startAt: new Date('2024-01-15T04:00:00Z'),
+        endAt: new Date('2024-01-15T05:00:00Z'),
       });
 
       await expect(
         service.checkAppointmentAvailability(studioId, staffUserId, startAt, endAt),
-      ).rejects.toThrow(CustomConflictException);
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should pass if appointment is available', async () => {
@@ -153,15 +159,15 @@ describe('AvailabilityService', () => {
   describe('checkBusySlotAllowed', () => {
     const studioId = 'studio-1';
     const staffUserId = 'staff-1';
-    const startAt = new Date('2024-01-15T10:00:00Z');
-    const endAt = new Date('2024-01-15T12:00:00Z');
+    const startAt = new Date('2024-01-15T04:00:00Z');
+    const endAt = new Date('2024-01-15T06:00:00Z');
 
     it('should throw if no schedule exists', async () => {
       mockPrismaService.workScheduleDay.findUnique.mockResolvedValue(null);
 
       await expect(
         service.checkBusySlotAllowed(studioId, staffUserId, startAt, endAt),
-      ).rejects.toThrow(CustomConflictException);
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should throw if day is off', async () => {
@@ -173,7 +179,7 @@ describe('AvailabilityService', () => {
 
       await expect(
         service.checkBusySlotAllowed(studioId, staffUserId, startAt, endAt),
-      ).rejects.toThrow(CustomConflictException);
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should throw if busy slot is outside work hours', async () => {
@@ -183,12 +189,12 @@ describe('AvailabilityService', () => {
         endTime: '18:00',
       });
 
-      const earlyStart = new Date('2024-01-15T08:00:00Z');
-      const earlyEnd = new Date('2024-01-15T08:30:00Z');
+      const earlyStart = new Date('2024-01-15T02:00:00Z');
+      const earlyEnd = new Date('2024-01-15T02:30:00Z');
 
       await expect(
         service.checkBusySlotAllowed(studioId, staffUserId, earlyStart, earlyEnd),
-      ).rejects.toThrow(CustomConflictException);
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should throw if busy slot overlaps with break', async () => {
@@ -200,12 +206,12 @@ describe('AvailabilityService', () => {
         breakEnd: '14:00',
       });
 
-      const breakStart = new Date('2024-01-15T13:00:00Z');
-      const breakEnd = new Date('2024-01-15T13:30:00Z');
+      const breakStart = new Date('2024-01-15T07:00:00Z');
+      const breakEnd = new Date('2024-01-15T07:30:00Z');
 
       await expect(
         service.checkBusySlotAllowed(studioId, staffUserId, breakStart, breakEnd),
-      ).rejects.toThrow(CustomConflictException);
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should pass if busy slot is allowed', async () => {

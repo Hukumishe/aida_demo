@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -6,6 +6,7 @@ import { Roles, UserRole } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { OrganizationsService } from './organizations.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
+import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { UsersService } from '../users/users.service';
 import { CreateOrganizationOwnerDto } from '../users/dto/create-organization-owner.dto';
 
@@ -41,6 +42,21 @@ export class OrganizationsController {
   @ApiResponse({ status: 201 })
   create(@Body() dto: CreateOrganizationDto) {
     return this.organizationsService.create(dto);
+  }
+
+  @Patch(':organizationId')
+  @Roles(UserRole.DEVELOPER)
+  @ApiOperation({
+    summary: 'Обновить организацию (только DEVELOPER)',
+    description: 'Частичное обновление; сейчас поддерживается ianaTimezone.',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 404 })
+  update(
+    @Param('organizationId') organizationId: string,
+    @Body() dto: UpdateOrganizationDto,
+  ) {
+    return this.organizationsService.update(organizationId, dto);
   }
 
   @Post(':organizationId/owners')

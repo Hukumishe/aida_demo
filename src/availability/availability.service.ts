@@ -6,6 +6,12 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { assertServiceBookableAtStudio } from '../common/service-studio-offering';
+import { studioWallClockTimezone } from '../common/effective-timezone';
+import {
+  extractLocalTimeHHMM,
+  utcAtWallClockInTimeZone,
+  zonedDayRangeUtc,
+} from '../common/iana-wall-time';
 
 /** Промпт для ИИ: возвращается в теле ответа Nextbot под ключом `check_availability`. */
 export const NEXTBOT_CHECK_AVAILABILITY_PROMPT =
@@ -20,25 +26,23 @@ export const NEXTBOT_CHECK_AVAILABILITY_PROMPT =
 export class AvailabilityService {
   constructor(private prisma: PrismaService) {}
 
+  private async resolveStudioTimeZone(studioId: string): Promise<string> {
+    const row = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: {
+        timezone: true,
+        organization: { select: { ianaTimezone: true } },
+      },
+    });
+    if (!row) {
+      throw new NotFoundException('Studio not found');
+    }
+    return studioWallClockTimezone(row, row.organization);
+  }
+
   private timeToMinutes(time: string): number {
     const [hours, minutes] = time.split(':').map(Number);
     return hours * 60 + minutes;
-  }
-
-  /**
-   * Extract time in HH:MM format from a Date object in Asia/Almaty timezone.
-   * Date object is stored in UTC, so we add 6 hours (Almaty offset) to get local time.
-   * This is more reliable than using toLocaleTimeString which may have timezone data issues.
-   */
-  private extractTime(date: Date): string {
-    // Date object is in UTC, add 6 hours for Asia/Almaty (UTC+6)
-    const almatyDate = new Date(date.getTime() + 6 * 60 * 60 * 1000);
-    
-    // Extract hours and minutes from UTC time (which now represents Almaty time)
-    const hours = String(almatyDate.getUTCHours()).padStart(2, '0');
-    const minutes = String(almatyDate.getUTCMinutes()).padStart(2, '0');
-    
-    return `${hours}:${minutes}`;
   }
 
   private isTimeInRange(time: string, startTime: string, endTime: string): boolean {
@@ -63,9 +67,9 @@ export class AvailabilityService {
     startAt: Date,
     endAt: Date,
   ): Promise<void> {
-    // Normalize date: get the date in Almaty timezone from startAt, then convert to UTC midnight
-    const almatyDateStr = startAt.toLocaleDateString('en-CA', { timeZone: 'Asia/Almaty' }); // Returns YYYY-MM-DD
-    const date = new Date(almatyDateStr + 'T00:00:00.000Z'); // UTC midnight for that date
+    const tz = await this.resolveStudioTimeZone(studioId);
+    const dateStr = startAt.toLocaleDateString('en-CA', { timeZone: tz });
+    const date = new Date(dateStr + 'T00:00:00.000Z');
 
     // Get work schedule for the date
     const schedule = await this.prisma.workScheduleDay.findUnique({
@@ -82,9 +86,8 @@ export class AvailabilityService {
       throw new ConflictException('No work schedule for this date or day is off', 'BUSY_SLOT_NO_SCHEDULE');
     }
 
-    // Check if busy slot is within work hours
-    const startTime = this.extractTime(startAt); // HH:MM
-    const endTime = this.extractTime(endAt);
+    const startTime = extractLocalTimeHHMM(startAt, tz);
+    const endTime = extractLocalTimeHHMM(endAt, tz);
 
     if (
       !this.isTimeInRange(startTime, schedule.startTime, schedule.endTime) ||
@@ -93,12 +96,11 @@ export class AvailabilityService {
       throw new ConflictException('Busy slot is outside work hours', 'BUSY_SLOT_OUTSIDE_HOURS');
     }
 
-    // Check if busy slot overlaps with break
     if (schedule.breakStart && schedule.breakEnd) {
       if (
         this.isTimeRangeOverlapping(
-          new Date(`${date.toISOString().split('T')[0]}T${schedule.breakStart}:00`),
-          new Date(`${date.toISOString().split('T')[0]}T${schedule.breakEnd}:00`),
+          utcAtWallClockInTimeZone(dateStr, schedule.breakStart, tz),
+          utcAtWallClockInTimeZone(dateStr, schedule.breakEnd, tz),
           startAt,
           endAt,
         )
@@ -115,10 +117,9 @@ export class AvailabilityService {
     endAt: Date,
     appointmentId?: string,
   ): Promise<void> {
-    // Normalize date: get the date in Almaty timezone from startAt, then convert to UTC midnight
-    // This ensures we match the date as stored in PostgreSQL (@db.Date)
-    const almatyDateStr = startAt.toLocaleDateString('en-CA', { timeZone: 'Asia/Almaty' }); // Returns YYYY-MM-DD
-    const date = new Date(almatyDateStr + 'T00:00:00.000Z'); // UTC midnight for that date
+    const tz = await this.resolveStudioTimeZone(studioId);
+    const dateStr = startAt.toLocaleDateString('en-CA', { timeZone: tz });
+    const date = new Date(dateStr + 'T00:00:00.000Z');
 
     // 1. Check work schedule
     const schedule = await this.prisma.workScheduleDay.findUnique({
@@ -135,9 +136,8 @@ export class AvailabilityService {
       throw new ConflictException('No work schedule for this date or day is off', 'APPOINTMENT_NO_SCHEDULE');
     }
 
-    // 2. Check if appointment is within work hours
-    const startTime = this.extractTime(startAt); // HH:MM
-    const endTime = this.extractTime(endAt);
+    const startTime = extractLocalTimeHHMM(startAt, tz);
+    const endTime = extractLocalTimeHHMM(endAt, tz);
 
     if (
       !this.isTimeInRange(startTime, schedule.startTime, schedule.endTime) ||
@@ -149,10 +149,9 @@ export class AvailabilityService {
       );
     }
 
-    // 3. Check if appointment overlaps with break
     if (schedule.breakStart && schedule.breakEnd) {
-      const breakStart = new Date(`${date.toISOString().split('T')[0]}T${schedule.breakStart}:00`);
-      const breakEnd = new Date(`${date.toISOString().split('T')[0]}T${schedule.breakEnd}:00`);
+      const breakStart = utcAtWallClockInTimeZone(dateStr, schedule.breakStart, tz);
+      const breakEnd = utcAtWallClockInTimeZone(dateStr, schedule.breakEnd, tz);
 
       if (this.isTimeRangeOverlapping(breakStart, breakEnd, startAt, endAt)) {
         throw new ConflictException('Appointment overlaps with break time', 'APPOINTMENT_IN_BREAK');
@@ -224,22 +223,6 @@ export class AvailabilityService {
     if (conflictingAppointment) {
       throw new ConflictException('Appointment overlaps with another appointment', 'APPOINTMENT_APPOINTMENT_CONFLICT');
     }
-  }
-
-  private padHhMmToIsoTime(raw: string): string {
-    const p = raw.trim().split(':');
-    const h = parseInt(p[0], 10);
-    const m = parseInt(p[1] ?? '0', 10);
-    if (Number.isNaN(h) || Number.isNaN(m)) {
-      throw new BadRequestException(`Invalid time format: ${raw}`);
-    }
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-  }
-
-  /** Момент времени по «настенным» часам филиала (Asia/Almaty +06:00) для календарной даты dateStr (YYYY-MM-DD). */
-  private almatyWallInstant(dateStr: string, hhMm: string): Date {
-    const time = this.padHhMmToIsoTime(hhMm);
-    return new Date(`${dateStr}T${time}+06:00`);
   }
 
   private subtractIntervals(
@@ -350,8 +333,10 @@ export class AvailabilityService {
       where: { id: studioId },
       select: {
         organizationId: true,
+        timezone: true,
         organization: {
           select: {
+            ianaTimezone: true,
             highPriorityGapMinutes: true,
             normalPriorityToleranceMinutes: true,
           },
@@ -361,6 +346,7 @@ export class AvailabilityService {
     if (!studioRow) {
       throw new NotFoundException('Studio not found');
     }
+    const wallTz = studioWallClockTimezone(studioRow, studioRow.organization);
     const rawGap = studioRow.organization?.highPriorityGapMinutes ?? null;
     const highPriorityGapMs =
       rawGap != null && rawGap > 0 ? rawGap * 60 * 1000 : null;
@@ -403,12 +389,14 @@ export class AvailabilityService {
     }
     durationMinutes = Math.min(Math.max(durationMinutes, 5), 8 * 60);
 
-    const dateStart = new Date(`${dateStr}T00:00:00+06:00`);
-    const dateEnd = new Date(`${dateStr}T23:59:59.999+06:00`);
+    const { dayStart: dateStart, nextDayStart: dayAfter } = zonedDayRangeUtc(
+      dateStr,
+      wallTz,
+    );
 
     const busyWhere: Record<string, unknown> = {
       studioId,
-      startAt: { gte: dateStart, lte: dateEnd },
+      startAt: { gte: dateStart, lt: dayAfter },
     };
     if (options.staffUserId) {
       busyWhere.staffUserId = options.staffUserId;
@@ -422,7 +410,7 @@ export class AvailabilityService {
     const apptWhere: Record<string, unknown> = {
       studioId,
       status: { not: 'CANCELLED' },
-      startAt: { gte: dateStart, lte: dateEnd },
+      startAt: { gte: dateStart, lt: dayAfter },
     };
     if (options.staffUserId) {
       apptWhere.staffUserId = options.staffUserId;
@@ -491,15 +479,31 @@ export class AvailabilityService {
         staffName = schedule.staff?.phone || null;
       }
 
-      const workOpen = this.almatyWallInstant(dateStr, schedule.startTime).getTime();
-      const workClose = this.almatyWallInstant(dateStr, schedule.endTime).getTime();
+      const workOpen = utcAtWallClockInTimeZone(
+        dateStr,
+        schedule.startTime,
+        wallTz,
+      ).getTime();
+      const workClose = utcAtWallClockInTimeZone(
+        dateStr,
+        schedule.endTime,
+        wallTz,
+      ).getTime();
       if (workClose <= workOpen) continue;
 
       let segments = [{ start: workOpen, end: workClose }];
 
       if (schedule.breakStart && schedule.breakEnd) {
-        const b0 = this.almatyWallInstant(dateStr, schedule.breakStart).getTime();
-        const b1 = this.almatyWallInstant(dateStr, schedule.breakEnd).getTime();
+        const b0 = utcAtWallClockInTimeZone(
+          dateStr,
+          schedule.breakStart,
+          wallTz,
+        ).getTime();
+        const b1 = utcAtWallClockInTimeZone(
+          dateStr,
+          schedule.breakEnd,
+          wallTz,
+        ).getTime();
         if (b1 > b0) {
           segments = this.subtractIntervals(segments, { start: b0, end: b1 });
         }

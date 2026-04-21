@@ -7,6 +7,8 @@ import {
   Min,
   IsBoolean,
   IsEnum,
+  IsArray,
+  ArrayMinSize,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { WaitlistEntrySource } from '@prisma/client';
@@ -22,10 +24,27 @@ export class CreateAppointmentDto {
   @IsNotEmpty()
   clientId: string;
 
-  @ApiProperty({ example: 'service-uuid' })
+  @ApiPropertyOptional({
+    example: 'service-uuid',
+    description:
+      'Legacy fallback: первая основная услуга. Предпочтительно передавать serviceIds.',
+  })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  serviceId: string;
+  serviceId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Основные услуги в этой же записи (не допродажи). Можно передавать даже одну услугу.',
+    example: ['srv_face_cleaning', 'srv_eyebrow_shape'],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  serviceIds?: string[];
 
   @ApiProperty({ 
     example: '2024-01-15T10:00:00+06:00',

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
+import { UpdateOrganizationDto } from './dto/update-organization.dto';
 
 @Injectable()
 export class OrganizationsService {
@@ -27,7 +28,19 @@ export class OrganizationsService {
         id: generateId(IdPrefix.Organization),
         name: dto.name,
         slug: dto.slug?.trim() || null,
+        ...(dto.ianaTimezone != null ? { ianaTimezone: dto.ianaTimezone } : {}),
       },
+    });
+  }
+
+  async update(id: string, dto: UpdateOrganizationDto) {
+    const org = await this.findOne(id);
+    if (dto.ianaTimezone == null) {
+      return org;
+    }
+    return this.prisma.organization.update({
+      where: { id },
+      data: { ianaTimezone: dto.ianaTimezone },
     });
   }
 }

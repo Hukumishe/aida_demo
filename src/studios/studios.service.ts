@@ -19,6 +19,7 @@ import {
 } from './dto/update-studio-loyalty.dto';
 import { UserRole, isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { resolveAutoTierForTotalPaid } from '../common/loyalty/studio-loyalty.util';
+import { DEFAULT_IANA_TIMEZONE } from '../common/effective-timezone';
 
 @Injectable()
 export class StudiosService {
@@ -57,7 +58,10 @@ export class StudiosService {
         organizationId,
         name: createStudioDto.name,
         address: createStudioDto.address,
-        timezone: createStudioDto.timezone || 'Asia/Almaty',
+        timezone:
+          createStudioDto.timezone?.trim() ||
+          org.ianaTimezone ||
+          DEFAULT_IANA_TIMEZONE,
       },
     });
   }

@@ -17,6 +17,11 @@ import {
 } from '../clients/constants/levels.constants';
 import { resolveAutoTierForTotalPaid } from '../common/loyalty/studio-loyalty.util';
 import { AvailabilityService } from '../availability/availability.service';
+import {
+  DEFAULT_IANA_TIMEZONE,
+  studioWallClockTimezone,
+} from '../common/effective-timezone';
+import { zonedDayRangeUtc } from '../common/iana-wall-time';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
   AppointmentStatus,
@@ -49,6 +54,81 @@ export class AppointmentsService {
     return endAt;
   }
 
+  /** Основная услуга + доп. основные услуги (без дублей, с сохранением порядка). */
+  private buildAppointmentServiceIds(dto: CreateAppointmentDto): string[] {
+    const ids: string[] = [];
+    const legacyPrimary = String(dto.serviceId ?? '').trim();
+    if (legacyPrimary) {
+      ids.push(legacyPrimary);
+    }
+    for (const raw of dto.serviceIds ?? []) {
+      const id = String(raw ?? '').trim();
+      if (id && !ids.includes(id)) {
+        ids.push(id);
+      }
+    }
+    if (ids.length === 0) {
+      throw new BadRequestException('serviceIds (or legacy serviceId) is required');
+    }
+    return ids;
+  }
+
+  /**
+   * Разрешить услуги для записи с учетом доступности в филиале и override мастера.
+   * duration/price считаются как для "основных" услуг записи.
+   */
+  private async resolveAppointmentServices(
+    studioId: string,
+    organizationId: string,
+    staffUserId: string,
+    serviceIds: string[],
+  ) {
+    const resolved: Array<{
+      serviceId: string;
+      durationMin: number;
+      price: number | null;
+      service: { id: string; name: string; bonusAccrualEnabled: boolean };
+    }> = [];
+
+    for (const serviceId of serviceIds) {
+      const service = await assertServiceBookableAtStudio(
+        this.prisma,
+        studioId,
+        serviceId,
+        organizationId,
+      );
+      const staffOverride = await this.prisma.staffServiceOverride.findUnique({
+        where: {
+          studioId_staffUserId_serviceId: {
+            studioId,
+            staffUserId,
+            serviceId,
+          },
+        },
+      });
+      const durationMin =
+        staffOverride?.durationMin && staffOverride.isActive
+          ? staffOverride.durationMin
+          : service.defaultDurationMin;
+      const price =
+        staffOverride?.price != null && staffOverride.isActive
+          ? staffOverride.price
+          : service.defaultPrice ?? null;
+
+      resolved.push({
+        serviceId,
+        durationMin,
+        price,
+        service: {
+          id: service.id,
+          name: service.name,
+          bonusAccrualEnabled: service.bonusAccrualEnabled,
+        },
+      });
+    }
+    return resolved;
+  }
+
   async findAll(
     studioId: string,
     date?: string,
@@ -73,15 +153,18 @@ export class AppointmentsService {
     }
 
     if (date) {
-      // Normalize date: interpret the date string as a date in Asia/Almaty timezone
-      // Date should come in YYYY-MM-DD format
       const dateStr = date.includes('T') ? date.split('T')[0] : date;
-      const dateStart = new Date(dateStr + 'T00:00:00+06:00'); // Start of day in Almaty
-      const dateEnd = new Date(dateStr + 'T23:59:59.999+06:00'); // End of day in Almaty
-
+      const studio = await this.prisma.studio.findUnique({
+        where: { id: studioId },
+        include: { organization: true },
+      });
+      const tz = studio
+        ? studioWallClockTimezone(studio, studio.organization)
+        : DEFAULT_IANA_TIMEZONE;
+      const { dayStart, nextDayStart } = zonedDayRangeUtc(dateStr, tz);
       where.startAt = {
-        gte: dateStart,
-        lte: dateEnd,
+        gte: dayStart,
+        lt: nextDayStart,
       };
     }
 
@@ -95,6 +178,10 @@ export class AppointmentsService {
         },
         client: true,
         service: true,
+        serviceItems: {
+          include: { service: true },
+          orderBy: { sortOrder: 'asc' },
+        },
         arrivedByUser: {
           select: {
             id: true,
@@ -177,28 +264,14 @@ export class AppointmentsService {
       throw new BadRequestException('Cannot create appointment for a blacklisted client');
     }
 
-    const service = await assertServiceBookableAtStudio(
-      this.prisma,
+    const appointmentServiceIds = this.buildAppointmentServiceIds(createAppointmentDto);
+    const resolvedServices = await this.resolveAppointmentServices(
       studioId,
-      createAppointmentDto.serviceId,
       studio.organizationId,
+      createAppointmentDto.staffUserId,
+      appointmentServiceIds,
     );
-
-    // Get duration (override if exists, otherwise default)
-    const staffOverride = await this.prisma.staffServiceOverride.findUnique({
-      where: {
-        studioId_staffUserId_serviceId: {
-          studioId,
-          staffUserId: createAppointmentDto.staffUserId,
-          serviceId: createAppointmentDto.serviceId,
-        },
-      },
-    });
-
-    const durationMinutes =
-      staffOverride?.durationMin && staffOverride.isActive
-        ? staffOverride.durationMin
-        : service.defaultDurationMin;
+    const durationMinutes = resolvedServices.reduce((sum, s) => sum + s.durationMin, 0);
 
     const startAt = new Date(createAppointmentDto.startAt);
     const endAt = this.calculateEndAt(startAt, durationMinutes);
@@ -222,6 +295,7 @@ export class AppointmentsService {
             studioId,
             org.id,
             createAppointmentDto,
+            appointmentServiceIds[0],
             startAt,
             endAt,
             waitlistSource,
@@ -296,7 +370,7 @@ export class AppointmentsService {
           studioId,
           staffUserId: createAppointmentDto.staffUserId,
           clientId: createAppointmentDto.clientId,
-          serviceId: createAppointmentDto.serviceId,
+          serviceId: appointmentServiceIds[0],
           startAt,
           endAt,
           prepaymentAmount: createAppointmentDto.prepaymentAmount,
@@ -310,6 +384,44 @@ export class AppointmentsService {
           },
           client: true,
           service: true,
+          serviceItems: {
+            include: {
+              service: true,
+            },
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+      });
+
+      if (resolvedServices.length > 0) {
+        await tx.appointmentServiceItem.createMany({
+          data: resolvedServices.map((s, idx) => ({
+            id: generateId(IdPrefix.AppointmentServiceItem),
+            appointmentId: appointment.id,
+            serviceId: s.serviceId,
+            sortOrder: idx,
+            durationMin: s.durationMin,
+            price: s.price,
+          })),
+        });
+      }
+
+      const appointmentWithItems = await tx.appointment.findUniqueOrThrow({
+        where: { id: appointment.id },
+        include: {
+          staff: {
+            include: {
+              staffProfile: true,
+            },
+          },
+          client: true,
+          service: true,
+          serviceItems: {
+            include: {
+              service: true,
+            },
+            orderBy: { sortOrder: 'asc' },
+          },
         },
       });
 
@@ -325,7 +437,7 @@ export class AppointmentsService {
           createAppointmentDto.staffUserId,
           appointment.id,
           clientName,
-          appointment.service.name,
+          appointmentWithItems.service.name,
           startAt,
         );
       } catch (error) {
@@ -334,9 +446,9 @@ export class AppointmentsService {
       }
 
       if (preferWaitlist) {
-        return { outcome: 'booked' as const, appointment };
+        return { outcome: 'booked' as const, appointment: appointmentWithItems };
       }
-      return appointment;
+      return appointmentWithItems;
     });
   }
 
@@ -344,6 +456,7 @@ export class AppointmentsService {
     studioId: string,
     organizationId: string,
     dto: CreateAppointmentDto,
+    primaryServiceId: string,
     requestedStartAt: Date,
     requestedEndAt: Date,
     source: WaitlistEntrySource,
@@ -355,7 +468,7 @@ export class AppointmentsService {
         organizationId,
         staffUserId: dto.staffUserId,
         clientId: dto.clientId,
-        serviceId: dto.serviceId,
+        serviceId: primaryServiceId,
         requestedStartAt,
         requestedEndAt,
         status: WaitlistEntryStatus.PENDING,
@@ -399,10 +512,18 @@ export class AppointmentsService {
     }
 
     if (options?.date) {
-      const dateStr = options.date.includes('T') ? options.date.split('T')[0] : options.date;
-      const dateStart = new Date(dateStr + 'T00:00:00+06:00');
-      const dateEnd = new Date(dateStr + 'T23:59:59.999+06:00');
-      where.requestedStartAt = { gte: dateStart, lte: dateEnd };
+      const dateStr = options.date.includes('T')
+        ? options.date.split('T')[0]
+        : options.date;
+      const studio = await this.prisma.studio.findUnique({
+        where: { id: studioId },
+        include: { organization: true },
+      });
+      const tz = studio
+        ? studioWallClockTimezone(studio, studio.organization)
+        : DEFAULT_IANA_TIMEZONE;
+      const { dayStart, nextDayStart } = zonedDayRangeUtc(dateStr, tz);
+      where.requestedStartAt = { gte: dayStart, lt: nextDayStart };
     }
 
     if (userRole === UserRole.MASTER && userStaffId) {
@@ -556,6 +677,7 @@ export class AppointmentsService {
       where: { id },
       include: {
         service: true,
+        serviceItems: true,
       },
     });
 
@@ -591,21 +713,19 @@ export class AppointmentsService {
     if (updateAppointmentDto.startAt) {
       startAt = new Date(updateAppointmentDto.startAt);
 
-      // Get duration
-      const staffOverride = await this.prisma.staffServiceOverride.findUnique({
-        where: {
-          studioId_staffUserId_serviceId: {
-            studioId: appointment.studioId,
-            staffUserId: appointment.staffUserId,
-            serviceId: appointment.serviceId,
-          },
-        },
-      });
-
-      const durationMinutes =
-        staffOverride?.durationMin && staffOverride.isActive
-          ? staffOverride.durationMin
-          : appointment.service.defaultDurationMin;
+      const serviceIds =
+        appointment.serviceItems.length > 0
+          ? appointment.serviceItems
+              .sort((a, b) => a.sortOrder - b.sortOrder)
+              .map((x) => x.serviceId)
+          : [appointment.serviceId];
+      const resolved = await this.resolveAppointmentServices(
+        appointment.studioId,
+        appointment.service.organizationId,
+        appointment.staffUserId,
+        serviceIds,
+      );
+      const durationMinutes = resolved.reduce((sum, s) => sum + s.durationMin, 0);
 
       endAt = this.calculateEndAt(startAt, durationMinutes);
 
@@ -647,8 +767,12 @@ export class AppointmentsService {
           (new Date(effectiveStart).getTime() - now.getTime()) / (1000 * 60 * 60);
         if (hoursUntilStart < 4) {
           const alreadyForfeited = (appointment.forfeitedPrepaymentAmount ?? 0) > 0;
+          const appointmentServicesTotal =
+            appointment.serviceItems.length > 0
+              ? appointment.serviceItems.reduce((sum, item) => sum + (item.price ?? 0), 0)
+              : (appointment.service.defaultPrice ?? 0);
           const amountToForfeit =
-            appointment.prepaymentAmount ?? appointment.service.defaultPrice ?? 0;
+            appointment.prepaymentAmount ?? appointmentServicesTotal;
           if (amountToForfeit > 0 && !alreadyForfeited) {
             forfeitedToSet = amountToForfeit;
           }
@@ -689,6 +813,10 @@ export class AppointmentsService {
           },
           client: true,
           service: true,
+          serviceItems: {
+            include: { service: true },
+            orderBy: { sortOrder: 'asc' },
+          },
         },
       });
 
@@ -712,6 +840,7 @@ export class AppointmentsService {
       where: { id },
       include: {
         service: true,
+        serviceItems: true,
         client: true,
         staff: {
           include: {
@@ -759,7 +888,11 @@ export class AppointmentsService {
     return this.prisma.$transaction(async (tx) => {
       // If late cancellation (< 4 hours), add prepayment to income only if not already added (e.g. by "Опоздал")
       if (isLateCancellation) {
-        const amountToAdd = appointment.prepaymentAmount ?? appointment.service.defaultPrice ?? 0;
+        const appointmentServicesTotal =
+          appointment.serviceItems.length > 0
+            ? appointment.serviceItems.reduce((sum, item) => sum + (item.price ?? 0), 0)
+            : (appointment.service.defaultPrice ?? 0);
+        const amountToAdd = appointment.prepaymentAmount ?? appointmentServicesTotal;
         const alreadyForfeited = (appointment.forfeitedPrepaymentAmount ?? 0) > 0;
         if (amountToAdd > 0 && !alreadyForfeited) {
           await tx.noShowIncome.create({
@@ -814,7 +947,7 @@ export class AppointmentsService {
   async markLate(id: string, userRole?: string, userStudioId?: string, userStaffId?: string) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
-      include: { service: true, client: true, staff: { include: { staffProfile: true } } },
+      include: { service: true, serviceItems: true, client: true, staff: { include: { staffProfile: true } } },
     });
 
     if (!appointment) {
@@ -845,7 +978,11 @@ export class AppointmentsService {
       );
     }
 
-    const amount = appointment.prepaymentAmount ?? appointment.service.defaultPrice ?? 0;
+    const appointmentServicesTotal =
+      appointment.serviceItems.length > 0
+        ? appointment.serviceItems.reduce((sum, item) => sum + (item.price ?? 0), 0)
+        : (appointment.service.defaultPrice ?? 0);
+    const amount = appointment.prepaymentAmount ?? appointmentServicesTotal;
     if (amount <= 0) {
       throw new BadRequestException('No prepayment to forfeit for this appointment');
     }
@@ -920,6 +1057,10 @@ export class AppointmentsService {
         },
         client: true,
         service: true,
+        serviceItems: {
+          include: { service: true },
+          orderBy: { sortOrder: 'asc' },
+        },
         arrivedByUser: {
           select: {
             id: true,
@@ -956,6 +1097,10 @@ export class AppointmentsService {
       include: {
         client: true,
         service: true,
+        serviceItems: {
+          include: { service: true },
+          orderBy: { sortOrder: 'asc' },
+        },
         studio: { include: { organization: true } },
         upsells: true,
       },
@@ -980,11 +1125,24 @@ export class AppointmentsService {
       throw new BadRequestException('Appointment is already marked as done');
     }
 
-    const { client, service, studio, upsells } = existingAppointment;
+    const { client, service, serviceItems, studio, upsells } = existingAppointment;
     const org = studio.organization;
     const loyaltyEnabled = client.loyaltyEnabled !== false;
     const prepayment = existingAppointment.prepaymentAmount ?? 0;
-    const baseAmount = service.defaultPrice ?? 0;
+    const primaryServices =
+      serviceItems.length > 0
+        ? serviceItems
+        : [
+            {
+              serviceId: service.id,
+              price: service.defaultPrice,
+              service,
+            } as any,
+          ];
+    const baseAmount = primaryServices.reduce((sum, item) => sum + (item.price ?? 0), 0);
+    const hasAccrualEnabledPrimaryService = primaryServices.some(
+      (item) => item.service?.bonusAccrualEnabled !== false,
+    );
     const upsellsSum = upsells.reduce((s, u) => s + u.totalAmount, 0);
     const grossTotal = baseAmount + upsellsSum;
 
@@ -1084,7 +1242,7 @@ export class AppointmentsService {
 
       cashbackPercent = tierForCashback?.cashbackPercent ?? 0;
       cashback =
-        service.bonusAccrualEnabled && totalMoneyPaid > 0
+        hasAccrualEnabledPrimaryService && totalMoneyPaid > 0
           ? Math.round((totalMoneyPaid * cashbackPercent) / 100)
           : 0;
       newTotalPaidForLevel = client.totalPaidForLevel;
@@ -1104,7 +1262,7 @@ export class AppointmentsService {
     } else {
       cashbackPercent = getCashbackPercent(client.level);
       cashback =
-        service.bonusAccrualEnabled && totalMoneyPaid > 0
+        hasAccrualEnabledPrimaryService && totalMoneyPaid > 0
           ? Math.round((totalMoneyPaid * cashbackPercent) / 100)
           : 0;
       newTotalPaidForLevel = client.totalPaidForLevel + totalMoneyPaid;
@@ -1131,7 +1289,7 @@ export class AppointmentsService {
     let referralLinkCashback = 0;
     let referralLinkRowId: string | null = null;
     const marketingLinkId = client.studioReferralLinkId;
-    if (loyaltyEnabled && marketingLinkId && totalMoneyPaid > 0 && service.bonusAccrualEnabled) {
+    if (loyaltyEnabled && marketingLinkId && totalMoneyPaid > 0 && hasAccrualEnabledPrimaryService) {
       const mLink = await this.prisma.studioReferralLink.findFirst({
         where: {
           id: marketingLinkId,
@@ -1179,7 +1337,7 @@ export class AppointmentsService {
       appointmentId: id,
       clientId: client.id,
       serviceName: service.name,
-      bonusAccrualEnabled: service.bonusAccrualEnabled,
+      bonusAccrualEnabled: hasAccrualEnabledPrimaryService,
       math: {
         baseAmount: `${baseAmount} ₸`,
         upsellsSum: `${upsellsSum} ₸`,
@@ -1367,6 +1525,10 @@ export class AppointmentsService {
           },
           client: true,
           service: true,
+          serviceItems: {
+            include: { service: true },
+            orderBy: { sortOrder: 'asc' },
+          },
           arrivedByUser: {
             select: {
               id: true,

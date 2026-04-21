@@ -44,6 +44,10 @@ import {
   VERIFY_CLIENT_STATUS_PROMPT_KEYS,
   VerifyClientVerificationStatus,
 } from './verify-client-status.constants';
+import {
+  DEFAULT_IANA_TIMEZONE,
+  organizationTimezone,
+} from '../common/effective-timezone';
 
 /** Фолбэк-промпт для get_service_categories, если в таблице prompts нет записи. */
 export const NEXTBOT_GET_SERVICE_CATEGORIES_PROMPT = [
@@ -715,7 +719,7 @@ export class NextbotService {
   private currentHourInStudioTimezone(timezone: string, now: Date): number {
     try {
       const fmt = new Intl.DateTimeFormat('en-GB', {
-        timeZone: timezone || 'Asia/Almaty',
+        timeZone: timezone || DEFAULT_IANA_TIMEZONE,
         hour: '2-digit',
         hour12: false,
       });
@@ -868,12 +872,12 @@ export class NextbotService {
     }
 
     const organization = appointment.studio.organization;
-    const studioTimezone = appointment.studio.timezone || 'Asia/Almaty';
+    const marketingLocalTimezone = organizationTimezone(organization);
     const now = new Date();
     const isDay = this.isDuringMarketingHours(
       organization.marketingHoursStartHour,
       organization.marketingHoursEndHour,
-      studioTimezone,
+      marketingLocalTimezone,
       now,
     );
     const isNight = !isDay;

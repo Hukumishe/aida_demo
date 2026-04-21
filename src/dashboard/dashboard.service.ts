@@ -12,6 +12,12 @@ import {
 } from '../common/decorators/roles.decorator';
 import { DashboardQueryDto, DashboardPeriod } from './dto/dashboard-query.dto';
 import { AppointmentStatus } from '@prisma/client';
+import {
+  DEFAULT_IANA_TIMEZONE,
+  organizationTimezone,
+  studioWallClockTimezone,
+} from '../common/effective-timezone';
+import { zonedDayRangeUtc } from '../common/iana-wall-time';
 
 @Injectable()
 export class DashboardService {
@@ -39,27 +45,37 @@ export class DashboardService {
     return userOrganizationId.trim();
   }
 
-  private getDateRange(period?: DashboardPeriod, startDate?: string, endDate?: string) {
+  private getDateRange(
+    period?: DashboardPeriod,
+    startDate?: string,
+    endDate?: string,
+    tz: string = DEFAULT_IANA_TIMEZONE,
+  ) {
     const now = new Date();
     let start: Date;
     let end: Date = new Date(now);
 
+    const ymd = (d: string) => (d.includes('T') ? d.split('T')[0] : d);
+
     // If both startDate and endDate are provided, use them (ignore period)
     if (startDate && endDate) {
-      start = new Date(startDate + 'T00:00:00+06:00');
-      end = new Date(endDate + 'T23:59:59.999+06:00');
-      
+      const sd = ymd(startDate);
+      const ed = ymd(endDate);
+      start = zonedDayRangeUtc(sd, tz).dayStart;
+      const endNext = zonedDayRangeUtc(ed, tz).nextDayStart;
+      end = new Date(endNext.getTime() - 1);
+
       // Validate that startDate is before endDate
       if (start > end) {
         throw new BadRequestException('startDate must be before or equal to endDate');
       }
-    } 
+    }
     // If only startDate is provided, use it as start and today as end
     else if (startDate) {
-      start = new Date(startDate + 'T00:00:00+06:00');
+      start = zonedDayRangeUtc(ymd(startDate), tz).dayStart;
       end = new Date(now);
       end.setHours(23, 59, 59, 999);
-      
+
       // Validate that startDate is not in the future
       if (start > end) {
         throw new BadRequestException('startDate cannot be in the future');
@@ -67,11 +83,13 @@ export class DashboardService {
     }
     // If only endDate is provided, use 30 days before endDate as start
     else if (endDate) {
-      end = new Date(endDate + 'T23:59:59.999+06:00');
+      const ed = ymd(endDate);
+      const endNext = zonedDayRangeUtc(ed, tz).nextDayStart;
+      end = new Date(endNext.getTime() - 1);
       start = new Date(end);
       start.setDate(start.getDate() - 30);
       start.setHours(0, 0, 0, 0);
-      
+
       // Validate that endDate is not in the future
       if (end > now) {
         throw new BadRequestException('endDate cannot be in the future');
@@ -126,7 +144,20 @@ export class DashboardService {
       throw new ForbiddenException('Only owners and deputy owners can access dashboard');
     }
 
-    const { start, end } = this.getDateRange(query.period, query.startDate, query.endDate);
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      include: { organization: true },
+    });
+    if (!studio) {
+      throw new NotFoundException(`Studio with ID ${studioId} not found`);
+    }
+    const tz = studioWallClockTimezone(studio, studio.organization);
+    const { start, end } = this.getDateRange(
+      query.period,
+      query.startDate,
+      query.endDate,
+      tz,
+    );
 
     // Get all appointments in date range
     const appointments = await this.prisma.appointment.findMany({
@@ -374,11 +405,23 @@ export class DashboardService {
       throw new ForbiddenException('Only owners and deputy owners can view all studios dashboard');
     }
 
-    const { start, end } = this.getDateRange(query.period, query.startDate, query.endDate);
     const organizationId = await this.resolveOrganizationId(
       userRole,
       userOrganizationId,
       organizationIdQuery,
+    );
+
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { ianaTimezone: true },
+    });
+    const tz = organizationTimezone(org ?? { ianaTimezone: null });
+
+    const { start, end } = this.getDateRange(
+      query.period,
+      query.startDate,
+      query.endDate,
+      tz,
     );
 
     // Get all studios only for one organization (tenant-safe)

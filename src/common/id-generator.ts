@@ -25,6 +25,7 @@ export const IdPrefix = {
   StaffService: 'sts',
   StaffServiceOverride: 'sso',
   Appointment: 'apt',
+  AppointmentServiceItem: 'asi',
   WaitlistEntry: 'wle',
   AppointmentUpsell: 'ups',
   Log: 'log',

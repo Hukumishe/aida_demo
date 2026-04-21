@@ -7,6 +7,10 @@ import {
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  DEFAULT_IANA_TIMEZONE,
+  studioWallClockTimezone,
+} from '../effective-timezone';
 
 /**
  * Интерцептор для преобразования всех DateTime полей в таймзону студии
@@ -21,15 +25,18 @@ export class TimezoneInterceptor implements NestInterceptor {
     const studioId = request.params?.studioId || request.user?.studioId;
     
     // Получаем таймзону студии или используем дефолтную
-    let timezone = 'Asia/Almaty';
+    let timezone = DEFAULT_IANA_TIMEZONE;
     if (studioId) {
       try {
         const studio = await this.prisma.studio.findUnique({
           where: { id: studioId },
-          select: { timezone: true },
+          select: {
+            timezone: true,
+            organization: { select: { ianaTimezone: true } },
+          },
         });
-        if (studio?.timezone) {
-          timezone = studio.timezone;
+        if (studio) {
+          timezone = studioWallClockTimezone(studio, studio.organization);
         }
       } catch (error) {
         // Если не удалось получить таймзону, используем дефолтную
