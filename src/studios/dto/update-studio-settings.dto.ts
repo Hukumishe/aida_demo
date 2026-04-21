@@ -10,7 +10,11 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { ReferFriendInviteeRewardType, ReferFriendReferrerRewardType } from '@prisma/client';
+import {
+  ReferFriendInviteeRewardType,
+  ReferFriendReferrerRewardType,
+  RemotePaymentMethod,
+} from '@prisma/client';
 
 export class UpdateStudioSettingsDto {
   @ApiPropertyOptional({
@@ -122,6 +126,29 @@ export class UpdateStudioSettingsDto {
   @IsString()
   @MaxLength(128)
   paymentKaspiCardHolder?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Способ удалённой оплаты для Nextbot: перевод по номеру (PHONE_TRANSFER) или оплата на ИП (IP_ACCOUNT).',
+    enum: RemotePaymentMethod,
+    example: 'PHONE_TRANSFER',
+  })
+  @IsOptional()
+  @IsEnum(RemotePaymentMethod)
+  remotePaymentMethod?: RemotePaymentMethod;
+
+  @ApiPropertyOptional({
+    description:
+      'Реквизиты ИП для удалённой оплаты (свободный текст). Используется, когда remotePaymentMethod = IP_ACCOUNT. ' +
+      'Пустая строка/null очищает значение.',
+    maxLength: 2000,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsString()
+  @MaxLength(2000)
+  paymentIpRequisites?: string | null;
 
   @ApiPropertyOptional({
     description:

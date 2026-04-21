@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   AppointmentStatus,
+  RemotePaymentMethod,
   ServiceAudience,
   TaskStatus,
 } from '@prisma/client';
@@ -737,42 +738,55 @@ export class NextbotService {
 
   private buildDayInvoicePrompt(): string {
     return [
-      'СИСТЕМНОЕ СООБЩЕНИЕ: Заявка на выставление счёта Kaspi передана менеджеру филиала.',
+      'СИСТЕМНОЕ СООБЩЕНИЕ: Заявка на удалённую оплату передана менеджеру филиала.',
       '',
       'ТВОИ ДЕЙСТВИЯ:',
-      'Коротко и спокойно подтверди клиенту: менеджер уже получил заявку и в ближайшее время выставит счёт в Kaspi по указанным реквизитам.',
-      'Попроси клиента дождаться уведомления/счёта в Kaspi; присылать чек СЕЙЧАС не нужно — оплата пройдёт по официальному счёту.',
+      'Коротко и спокойно подтверди клиенту: менеджер уже получил заявку и в ближайшее время отправит реквизиты/счёт по выбранному способу оплаты.',
+      'Попроси клиента дождаться сообщения от менеджера; присылать чек СЕЙЧАС не нужно — сначала нужно получить корректные реквизиты.',
       'Не называй никаких статичных номеров, карт и внутренних идентификаторов — все реквизиты придут клиенту в счёте.',
       'Если клиент спросит о сроках: «в течение рабочего времени, обычно быстро». Конкретные минуты не обещай.',
     ].join('\n');
   }
 
   private buildNightInvoicePrompt(params: {
+    remotePaymentMethod: RemotePaymentMethod;
     kaspiPhone: string | null;
     kaspiCardHolder: string | null;
+    ipRequisites: string | null;
     holdMinutes: number;
   }): string {
-    const { kaspiPhone, kaspiCardHolder, holdMinutes } = params;
-    const hasRequisites = !!(kaspiPhone || kaspiCardHolder);
-    const requisites = hasRequisites
-      ? [
-          'РЕКВИЗИТЫ KASPI для ручного перевода:',
-          kaspiPhone ? `• Номер Kaspi: ${kaspiPhone}` : null,
-          kaspiCardHolder ? `• Получатель: ${kaspiCardHolder}` : null,
-        ]
-          .filter(Boolean)
-          .join('\n')
-      : 'ВНИМАНИЕ: статичные реквизиты Kaspi не настроены в организации. Сообщи клиенту, что ночная оплата временно недоступна, и предложи записаться на другое время или дождаться утра — менеджер свяжется для выставления счёта.';
+    const { remotePaymentMethod, kaspiPhone, kaspiCardHolder, ipRequisites, holdMinutes } = params;
+    const isPhoneTransfer = remotePaymentMethod === RemotePaymentMethod.PHONE_TRANSFER;
+    const hasRequisites = isPhoneTransfer
+      ? !!(kaspiPhone || kaspiCardHolder)
+      : !!(ipRequisites && ipRequisites.trim() !== '');
+    const requisites = isPhoneTransfer
+      ? hasRequisites
+        ? [
+            'РЕКВИЗИТЫ ДЛЯ ПЕРЕВОДА ПО НОМЕРУ:',
+            kaspiPhone ? `• Номер: ${kaspiPhone}` : null,
+            kaspiCardHolder ? `• Получатель: ${kaspiCardHolder}` : null,
+          ]
+            .filter(Boolean)
+            .join('\n')
+        : 'ВНИМАНИЕ: реквизиты для перевода по номеру не настроены в организации. Сообщи клиенту, что ночная оплата временно недоступна, и предложи записаться на другое время или дождаться утра — менеджер отправит реквизиты.'
+      : hasRequisites
+        ? ['РЕКВИЗИТЫ ДЛЯ ОПЛАТЫ НА ИП:', ipRequisites ?? ''].join('\n')
+        : 'ВНИМАНИЕ: реквизиты ИП не настроены в организации. Сообщи клиенту, что ночная оплата временно недоступна, и предложи записаться на другое время или дождаться утра — менеджер отправит реквизиты.';
 
     return [
-      'СИСТЕМНОЕ СООБЩЕНИЕ: Сейчас ночной режим оплаты. Счёт вручную не выставляем — клиент оплачивает переводом по статичным реквизитам Kaspi.',
+      `СИСТЕМНОЕ СООБЩЕНИЕ: Сейчас ночной режим оплаты. Выбранный способ: ${
+        isPhoneTransfer ? 'перевод по номеру' : 'оплата на ИП'
+      }.`,
       '',
       requisites,
       '',
       `ВАЖНО — ТАЙМЕР: Предварительная бронь удерживается ровно ${holdMinutes} минут. Если за это время чек не получен и не проверен, бронь будет автоматически отменена, слот освободится.`,
       '',
       'ТВОИ ДЕЙСТВИЯ:',
-      hasRequisites ? 'Сообщи клиенту реквизиты Kaspi (номер и получателя) точно, без сокращений.' : 'Не выдумывай реквизиты — их нет.',
+      hasRequisites
+        ? 'Сообщи клиенту реквизиты точно, без сокращений и искажений.'
+        : 'Не выдумывай реквизиты — их нет.',
       `Чётко обозначь правило: в течение ${holdMinutes} минут он присылает чек/скриншот оплаты сюда же, иначе бронь снимется.`,
       'Как только клиент пришлёт чек — вызови функцию verify_receipt_nighttime для визуальной/системной проверки. Не подтверждай оплату до верификации.',
       'Не обещай окончательное подтверждение записи до проверки чека.',
@@ -858,8 +872,11 @@ export class NextbotService {
       });
 
       const fallback = this.buildNightInvoicePrompt({
+        remotePaymentMethod:
+          organization.remotePaymentMethod ?? RemotePaymentMethod.PHONE_TRANSFER,
         kaspiPhone: organization.paymentKaspiPhone,
         kaspiCardHolder: organization.paymentKaspiCardHolder,
+        ipRequisites: organization.paymentIpRequisites,
         holdMinutes,
       });
 
@@ -902,7 +919,7 @@ export class NextbotService {
     const deadlineAt = new Date(now.getTime() + dayInvoiceDeadlineHours * 60 * 60 * 1000);
     const phoneInfo = (dto.phone ?? '').trim();
     const description = [
-      `Kaspi (со слов клиента): ${kaspiDetails}`,
+      `Реквизиты/детали оплаты (со слов клиента): ${kaspiDetails}`,
       phoneInfo ? `WhatsApp клиента: ${phoneInfo}` : null,
       `Запись: ${appointment.id} (${appointment.startAt.toISOString()})`,
     ]
@@ -913,7 +930,7 @@ export class NextbotService {
       data: {
         id: generateId(IdPrefix.StudioTask),
         organizationId: appointment.studio.organizationId,
-        title: `Выставить счёт Kaspi по записи ${appointment.id}`,
+        title: `Провести удалённую оплату по записи ${appointment.id}`,
         description,
         assigneeUserId: assignee.id,
         createdByUserId: assignee.id, // система / ассистент от имени менеджера

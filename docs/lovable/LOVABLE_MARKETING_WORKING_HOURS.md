@@ -39,6 +39,8 @@
   "marketingHoursEndHour": 22,
   "paymentKaspiPhone": "+77011234567",
   "paymentKaspiCardHolder": "Иванов И. И.",
+  "remotePaymentMethod": "PHONE_TRANSFER",
+  "paymentIpRequisites": null,
 
   "nightHoldMinutes": 30,
   "dayInvoiceTaskDeadlineHours": 2,
@@ -53,6 +55,10 @@
 - `marketingHoursEndHour: number | null` — час окончания смены, 0..23. Допускается «переход через полночь» (например 22 → 6 означает «маркетинг на смене с 22:00 до 06:00 следующего дня»).
 - `paymentKaspiPhone: string | null` — номер Kaspi, на который клиент переводит оплату в ночной режим.
 - `paymentKaspiCardHolder: string | null` — ФИО держателя карты Kaspi (как показать клиенту).
+- `remotePaymentMethod: "PHONE_TRANSFER" | "IP_ACCOUNT"` — способ удалённой оплаты в ночном режиме:
+  - `PHONE_TRANSFER` — перевод по номеру;
+  - `IP_ACCOUNT` — оплата на ИП (текстом из `paymentIpRequisites`).
+- `paymentIpRequisites: string | null` — реквизиты ИП для показа клиенту (свободный текст). Обязателен, когда выбран `IP_ACCOUNT`.
 - `nightHoldMinutes: number | null` — сколько минут удерживаем предварительную бронь в ночном режиме, прежде чем крон её автоматически отменит. null → бэкенд применит дефолт 30.
 - `dayInvoiceTaskDeadlineHours: number | null` — через сколько часов истекает дедлайн дневной задачи менеджеру на выставление счёта Kaspi. null → дефолт 2.
 - `nightReceiptTaskDeadlineHours: number | null` — через сколько часов истекает дедлайн утренней задачи на сверку ночного чека с выпиской Kaspi. null → дефолт 12.
@@ -69,6 +75,8 @@
   "marketingHoursEndHour": 22,
   "paymentKaspiPhone": "+77011234567",
   "paymentKaspiCardHolder": "Иванов И. И.",
+  "remotePaymentMethod": "PHONE_TRANSFER",
+  "paymentIpRequisites": null,
   "nightHoldMinutes": 30,
   "dayInvoiceTaskDeadlineHours": 2,
   "nightReceiptTaskDeadlineHours": 12,
@@ -84,6 +92,9 @@
 - `marketingHoursStartHour !== marketingHoursEndHour` (иначе интервал пустой).
 - Чтобы **очистить** рабочие часы маркетинга — отправь `{ "marketingHoursStartHour": null, "marketingHoursEndHour": null }`.
 - Пустая строка в `paymentKaspiPhone` / `paymentKaspiCardHolder` трактуется бэкендом как очистка (становится `null`).
+- `remotePaymentMethod` — одно из значений enum: `PHONE_TRANSFER` или `IP_ACCOUNT`.
+- Пустая строка в `paymentIpRequisites` очищает значение.
+- Если выбран `remotePaymentMethod = IP_ACCOUNT`, а `paymentIpRequisites` пустой/null — бэкенд вернёт 400.
 - `nightHoldMinutes` — целое, **1..1440** (практический диапазон 5..120). Отправь `null`, чтобы бэкенд применил дефолт 30.
 - `dayInvoiceTaskDeadlineHours` — целое, **1..48** (практический диапазон 1..8). `null` → дефолт 2.
 - `nightReceiptTaskDeadlineHours` — целое, **1..48** (практический диапазон 4..24). `null` → дефолт 12.
@@ -119,6 +130,14 @@
 4. **Телефон Kaspi** — текстовый инпут, маска под казахстанский номер (+7 ...), максимум 32 символа. Подпись «Номер, на который клиент переводит оплату».
 
 5. **Получатель (ФИО)** — текстовый инпут, максимум 128 символов. Подпись «ФИО держателя карты Kaspi — показывается клиенту вместе с номером».
+
+6. **Способ удалённой оплаты** — radio/select:
+   - `Перевод по номеру` (`PHONE_TRANSFER`)
+   - `Удалённая оплата на ИП` (`IP_ACCOUNT`)
+   По умолчанию: `PHONE_TRANSFER`.
+
+7. **Реквизиты ИП** — textarea (до 2000 символов), показывать/делать обязательным когда выбран `IP_ACCOUNT`.
+   Подсказка: «Укажи реквизиты, которые клиент должен увидеть ночью: ИП, БИН/ИИН, номер счёта, банк, комментарий к переводу и т.д.».
 
 ### Кнопки
 

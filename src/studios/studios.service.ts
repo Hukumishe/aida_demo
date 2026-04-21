@@ -8,6 +8,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import {
   ReferFriendInviteeRewardType,
   ReferFriendReferrerRewardType,
+  RemotePaymentMethod,
   StudioLoyaltyMode,
 } from '@prisma/client';
 import { generateId, IdPrefix } from '../common/id-generator';
@@ -104,6 +105,8 @@ export class StudiosService {
             marketingHoursEndHour: true,
             paymentKaspiPhone: true,
             paymentKaspiCardHolder: true,
+            remotePaymentMethod: true,
+            paymentIpRequisites: true,
             nightHoldMinutes: true,
             dayInvoiceTaskDeadlineHours: true,
             nightReceiptTaskDeadlineHours: true,
@@ -130,6 +133,8 @@ export class StudiosService {
       marketingHoursEndHour: org.marketingHoursEndHour,
       paymentKaspiPhone: org.paymentKaspiPhone,
       paymentKaspiCardHolder: org.paymentKaspiCardHolder,
+      remotePaymentMethod: org.remotePaymentMethod,
+      paymentIpRequisites: org.paymentIpRequisites,
       nightHoldMinutes: org.nightHoldMinutes,
       dayInvoiceTaskDeadlineHours: org.dayInvoiceTaskDeadlineHours,
       nightReceiptTaskDeadlineHours: org.nightReceiptTaskDeadlineHours,
@@ -151,6 +156,8 @@ export class StudiosService {
       marketingHoursEndHour?: number | null;
       paymentKaspiPhone?: string | null;
       paymentKaspiCardHolder?: string | null;
+      remotePaymentMethod?: RemotePaymentMethod;
+      paymentIpRequisites?: string | null;
       nightHoldMinutes?: number | null;
       dayInvoiceTaskDeadlineHours?: number | null;
       nightReceiptTaskDeadlineHours?: number | null;
@@ -252,6 +259,27 @@ export class StudiosService {
     if (Object.prototype.hasOwnProperty.call(dto, 'paymentKaspiCardHolder')) {
       const v = dto.paymentKaspiCardHolder;
       data.paymentKaspiCardHolder = v == null || v.trim() === '' ? null : v.trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(dto, 'remotePaymentMethod')) {
+      data.remotePaymentMethod = dto.remotePaymentMethod ?? RemotePaymentMethod.PHONE_TRANSFER;
+    }
+    if (Object.prototype.hasOwnProperty.call(dto, 'paymentIpRequisites')) {
+      const v = dto.paymentIpRequisites;
+      data.paymentIpRequisites = v == null || v.trim() === '' ? null : v.trim();
+    }
+    const nextRemotePaymentMethod =
+      dto.remotePaymentMethod ?? org.remotePaymentMethod ?? RemotePaymentMethod.PHONE_TRANSFER;
+    const nextPaymentIpRequisites =
+      Object.prototype.hasOwnProperty.call(dto, 'paymentIpRequisites')
+        ? ((data.paymentIpRequisites as string | null | undefined) ?? null)
+        : (org.paymentIpRequisites ?? null);
+    if (
+      nextRemotePaymentMethod === RemotePaymentMethod.IP_ACCOUNT &&
+      (!nextPaymentIpRequisites || nextPaymentIpRequisites.trim() === '')
+    ) {
+      throw new BadRequestException(
+        'Для remotePaymentMethod=IP_ACCOUNT заполните paymentIpRequisites',
+      );
     }
 
     // Тайминги Nextbot-потока оплаты. Все — nullable; null/undefined = «сбросить к дефолту в коде».

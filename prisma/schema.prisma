@@ -136,6 +136,12 @@ enum ServiceAudience {
   WOMEN
 }
 
+/// Как клиент платит удалённо, когда Nextbot маршрутизирует оплату.
+enum RemotePaymentMethod {
+  PHONE_TRANSFER // перевод по номеру (Kaspi phone + holder)
+  IP_ACCOUNT // оплата на ИП (по реквизитам ИП)
+}
+
 /// Пол клиента. NULL = «не указано».
 enum ClientGender {
   MALE
@@ -165,6 +171,10 @@ model Organization {
   /// Статичные реквизиты Kaspi для ночного промпта оплаты Nextbot.
   paymentKaspiPhone              String?
   paymentKaspiCardHolder         String?
+  /// Способ удалённой оплаты: перевод по номеру или оплата на ИП.
+  remotePaymentMethod            RemotePaymentMethod            @default(PHONE_TRANSFER)
+  /// Реквизиты ИП для удалённой оплаты (свободный текст для клиента).
+  paymentIpRequisites            String?
   /// Ночной режим Nextbot: сколько минут удерживается предварительная бронь (TENTATIVE)
   /// до авто-отмены кроном, если клиент не прислал чек. null → используется дефолт 30.
   nightHoldMinutes               Int?
