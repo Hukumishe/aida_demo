@@ -54,7 +54,7 @@ export const NEXTBOT_GET_SERVICE_CATEGORIES_PROMPT = [
   '"Подскажите, вас интересует мужской или женский прайс?"',
   '"Вы планируете запись для себя или для мужчины?"',
   'ПРЕЗЕНТАЦИЯ КАТЕГОРИЙ: Озвучь клиенту доступные направления услуг, используя их названия из поля "name" в массиве "categories".',
-  'ПРОВЕРКА ДОСТУПНОСТИ (КРИТИЧНО): В массиве "categories" у каждой услуги есть параметр "available_in" со списком ID филиалов. Если клиент выбрал услугу, которая доступна НЕ во всех студиях (например, только в одной), ты ОБЯЗАН предупредить его об этом и предложить только доступные варианты, опираясь на названия из справочника локаций в твоем базовом контексте.',
+  'ПРОВЕРКА ДОСТУПНОСТИ (КРИТИЧНО): В массиве "categories" у каждой услуги есть параметры "available_in" (ID филиалов) и "available_in_studios" (объекты с id и name). Если клиент выбрал услугу, которая доступна НЕ во всех студиях (например, только в одной), ты ОБЯЗАН предупредить его об этом и предложить только доступные варианты.',
   'ПЕРЕХОД К ПРАЙСУ: Как только клиент определится с категорией (зафиксируй её "id") и ты будешь точно знать нужный прайс, вызывай функцию get_services_and_prices для получения конкретных услуг.',
 ].join('\n');
 
@@ -195,6 +195,12 @@ export class NextbotService {
     return true;
   }
 
+  /** Убираем поля, которые не должны уходить в Nextbot-контекст. */
+  private sanitizeClientForNextbot(client: Record<string, unknown>): Record<string, unknown> {
+    const { discount, ...safeClient } = client;
+    return safeClient;
+  }
+
   /** Заглушка: функция из xmind, в CRM ещё нет реализации. */
   notImplemented(fn: NextbotXmindFunction): never {
     throw new HttpException(
@@ -216,7 +222,6 @@ export class NextbotService {
       user.organizationId,
     );
     return this.withNextbotPrompt(user.organizationId, 'get_company_context', {
-      organizationId: user.organizationId,
       studios,
     });
   }
@@ -248,11 +253,14 @@ export class NextbotService {
     if (!profile) {
       return this.withNextbotPrompt(
         user.organizationId,
-        'verify_client_status',
+        'prompt',
         {
-          verificationStatus: VerifyClientVerificationStatus.NOT_FOUND,
           found: false,
-          client: null as unknown as null,
+          firstName: null as unknown as null,
+          patronymic: null as unknown as null,
+          level: null as unknown as null,
+          bonuses: null as unknown as null,
+          cashbackPercent: null as unknown as null,
         },
         undefined,
         VERIFY_CLIENT_STATUS_PROMPT_KEYS[VerifyClientVerificationStatus.NOT_FOUND],
@@ -265,11 +273,14 @@ export class NextbotService {
       : VerifyClientVerificationStatus.FOUND_WITHOUT_BIRTH_DATE;
     return this.withNextbotPrompt(
       user.organizationId,
-      'verify_client_status',
+      'prompt',
       {
-        verificationStatus: status,
         found: true,
-        client: c,
+        firstName: c['firstName'] ?? null,
+        patronymic: c['patronymic'] ?? null,
+        level: c['level'] ?? null,
+        bonuses: c['bonuses'] ?? null,
+        cashbackPercent: c['cashbackPercent'] ?? null,
       },
       undefined,
       VERIFY_CLIENT_STATUS_PROMPT_KEYS[status],
@@ -293,14 +304,14 @@ export class NextbotService {
     const ol = c['organizationLoyalty'] as { currentTier?: { name?: string } } | null | undefined;
     const slLegacy = c['studioLoyalty'] as { currentTier?: { name?: string } } | null | undefined;
     const loyaltyTierName = ol?.currentTier?.name ?? slLegacy?.currentTier?.name ?? null;
+    const safeClient = this.sanitizeClientForNextbot(c);
     return this.withNextbotPrompt(user.organizationId, 'check_loyalty_status', {
       found: true,
       clientId: c['id'],
       level: c['level'] ?? null,
       loyaltyTierName,
       bonuses: c['bonuses'] ?? null,
-      discount: c['discount'] ?? null,
-      rawClient: profile,
+      rawClient: safeClient,
     });
   }
 
@@ -519,7 +530,7 @@ export class NextbotService {
       }),
       this.prisma.studio.findMany({
         where: { organizationId: user.organizationId },
-        select: { id: true },
+        select: { id: true, name: true },
       }),
       this.prisma.studioDisabledCategory.findMany({
         where: { studio: { organizationId: user.organizationId } },
@@ -527,7 +538,7 @@ export class NextbotService {
       }),
     ]);
 
-    const allStudioIds = studios.map((s) => s.id);
+    const allStudios = studios.map((s) => ({ id: s.id, name: s.name }));
     const disabledByCategory = new Map<string, Set<string>>();
     for (const row of disabled) {
       if (!disabledByCategory.has(row.categoryId)) {
@@ -539,12 +550,13 @@ export class NextbotService {
     const data = {
       categories: categories.map((c) => {
         const disabledSet = disabledByCategory.get(c.id) ?? new Set<string>();
-        const availableIn = allStudioIds.filter((sid) => !disabledSet.has(sid));
+        const availableStudios = allStudios.filter((s) => !disabledSet.has(s.id));
         return {
           id: c.id,
           name: c.name,
           subcategories: c.subcategories,
-          available_in: availableIn,
+          available_in: availableStudios.map((s) => s.id),
+          available_in_studios: availableStudios,
         };
       }),
     };

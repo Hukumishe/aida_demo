@@ -50,7 +50,7 @@ export class NextbotController {
   @ApiOperation({
     summary: 'get_company_context',
     description:
-      'Возвращает { organizationId, studios } — слой организации и список филиалов (как в панели). У каждой студии в массиве также есть своё поле organizationId.',
+      'Возвращает { studios } — список филиалов (как в панели). У каждой студии в массиве есть поле organizationId.',
   })
   @ApiResponse({ status: 200 })
   getContext(@CurrentUser() user: CurrentUserPayload) {
@@ -62,8 +62,7 @@ export class NextbotController {
   @ApiOperation({
     summary: 'verify_client_status',
     description:
-      'Ответ: verificationStatus (NOT_FOUND | FOUND_WITH_BIRTH_DATE | FOUND_WITHOUT_BIRTH_DATE), found, client, ' +
-      'и строка verify_client_status — промпт с портала для этого сценария (ключи в БД: verify_client_status_not_found, ' +
+      'Ответ: found + компактные поля клиента (firstName, patronymic, level, bonuses, cashbackPercent) и строка prompt — промпт с портала для этого сценария (ключи в БД: verify_client_status_not_found, ' +
       'verify_client_status_found_with_birth_date, verify_client_status_found_without_birth_date).',
   })
   @ApiQuery({
@@ -150,14 +149,16 @@ export class NextbotController {
 
   // --- get_service_categories ---
   // Первичный фильтр: укрупнённые направления работы (категории услуг).
-  // Для каждой категории возвращается `available_in` — список ID филиалов организации,
-  // где она НЕ отключена (учёт StudioDisabledCategory).
+  // Для каждой категории возвращается:
+  // - `available_in` — список ID филиалов организации;
+  // - `available_in_studios` — список объектов { id, name } тех же филиалов,
+  // где категория НЕ отключена (учёт StudioDisabledCategory).
   @Get('service-categories')
   @ApiOperation({
     summary: 'get_service_categories',
     description:
       'Возвращает категории услуг организации для презентации клиенту. У каждой категории есть ' +
-      '`available_in` — ID филиалов, где она доступна. Организация определяется по JWT / API-ключу. ' +
+      '`available_in` (ID филиалов) и `available_in_studios` ({ id, name } филиалов), где она доступна. Организация определяется по JWT / API-ключу. ' +
       'Параметр `studioId` принимается для совместимости, но не обязателен (категории общие на всю сеть).',
   })
   @ApiQuery({
