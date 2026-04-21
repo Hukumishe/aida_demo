@@ -52,6 +52,12 @@ export class DashboardController {
     enum: ['day', 'week', 'month', 'year', 'all'],
     description: 'Period type. Used only if startDate and endDate are not provided. Calculates period from today backwards.' 
   })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description:
+      'Только DEVELOPER: явно выбрать организацию. Для остальных ролей игнорируется, организация берётся из JWT.',
+  })
   @ApiResponse({ 
     status: 200, 
     description: 'Dashboard statistics',
@@ -217,9 +223,15 @@ export class DashboardController {
   @ApiResponse({ status: 403, description: 'Forbidden - Only owners can access' })
   async getAllStudiosDashboard(
     @Query() query: DashboardQueryDto,
+    @Query('organizationId') organizationId: string | undefined,
     @CurrentUser() user?: any,
   ) {
-    return this.dashboardService.getAllStudiosDashboard(query, user?.role);
+    return this.dashboardService.getAllStudiosDashboard(
+      query,
+      user?.role,
+      user?.organizationId,
+      organizationId,
+    );
   }
 }
 

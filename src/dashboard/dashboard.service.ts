@@ -2,15 +2,42 @@ import {
   Injectable,
   ForbiddenException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import {
+  UserRole,
+  isDeveloperRole,
+  isOwnerLevelRole,
+} from '../common/decorators/roles.decorator';
 import { DashboardQueryDto, DashboardPeriod } from './dto/dashboard-query.dto';
 import { AppointmentStatus } from '@prisma/client';
 
 @Injectable()
 export class DashboardService {
   constructor(private prisma: PrismaService) {}
+
+  private async resolveOrganizationId(
+    userRole: string | undefined,
+    userOrganizationId: string | undefined,
+    organizationIdQuery: string | undefined,
+  ): Promise<string> {
+    if (isDeveloperRole(userRole) && organizationIdQuery?.trim()) {
+      const organizationId = organizationIdQuery.trim();
+      const org = await this.prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { id: true },
+      });
+      if (!org) {
+        throw new NotFoundException(`Organization with ID ${organizationId} not found`);
+      }
+      return organizationId;
+    }
+    if (!userOrganizationId?.trim()) {
+      throw new BadRequestException('Organization context required');
+    }
+    return userOrganizationId.trim();
+  }
 
   private getDateRange(period?: DashboardPeriod, startDate?: string, endDate?: string) {
     const now = new Date();
@@ -339,6 +366,8 @@ export class DashboardService {
   async getAllStudiosDashboard(
     query: DashboardQueryDto,
     userRole?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
   ) {
     // Only OWNER and DEPUTY_OWNER can access this
     if (!isOwnerLevelRole(userRole)) {
@@ -346,9 +375,15 @@ export class DashboardService {
     }
 
     const { start, end } = this.getDateRange(query.period, query.startDate, query.endDate);
+    const organizationId = await this.resolveOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
 
-    // Get all studios
+    // Get all studios only for one organization (tenant-safe)
     const studios = await this.prisma.studio.findMany({
+      where: { organizationId },
       include: {
         appointments: {
           where: {
