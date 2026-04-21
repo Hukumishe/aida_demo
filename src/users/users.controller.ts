@@ -156,7 +156,7 @@ export class UsersController {
   @Delete('staff/:userId')
   @ApiOperation({ summary: 'Dismiss staff member (revoke access, data preserved)' })
   @ApiResponse({ status: 200, description: 'Staff member dismissed' })
-  @ApiResponse({ status: 400, description: 'Bad request (cannot dismiss OWNER or already dismissed)' })
+  @ApiResponse({ status: 400, description: 'Bad request (already dismissed)' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Staff member not found' })
   async remove(
