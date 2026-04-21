@@ -34,6 +34,14 @@ const REFERRAL_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export class ClientsService {
   constructor(private prisma: PrismaService) {}
 
+  /** Доступ к программе лояльности только при заполненных ФИО+дате рождения. */
+  private hasLoyaltyAccess(firstName?: string | null, lastName?: string | null, birthDate?: Date | null): boolean {
+    const hasFirstName = !!(firstName ?? '').trim();
+    const hasLastName = !!(lastName ?? '').trim();
+    const hasBirthDate = !!birthDate;
+    return hasFirstName && hasLastName && hasBirthDate;
+  }
+
   /** Генерирует уникальный реферальный код в пределах организации. */
   private async generateReferralCode(organizationId: string): Promise<string> {
     for (let attempt = 0; attempt < 50; attempt++) {
@@ -334,6 +342,15 @@ export class ClientsService {
 
     const referralCode = await this.generateReferralCode(organizationId);
 
+    const createBirthDate = createClientDto.birthDate ? new Date(createClientDto.birthDate) : undefined;
+    const loyaltyEligibleOnCreate = this.hasLoyaltyAccess(
+      createClientDto.firstName,
+      createClientDto.lastName,
+      createBirthDate ?? null,
+    );
+    const loyaltyEnabledOnCreate =
+      loyaltyEligibleOnCreate && (createClientDto.loyaltyEnabled ?? true);
+
     let registrationSource: string | undefined;
     let studioReferralLinkId: string | undefined;
     const rawMarketingLinkId = createClientDto.referralLinkId?.trim();
@@ -363,10 +380,10 @@ export class ClientsService {
             instagram: createClientDto.instagram?.trim() || undefined,
             phone: createClientDto.phone,
             gender: createClientDto.gender,
-            birthDate: createClientDto.birthDate ? new Date(createClientDto.birthDate) : undefined,
+            birthDate: createBirthDate,
             notes: createClientDto.notes,
             bonuses: createClientDto.bonuses ?? 0,
-            loyaltyEnabled: createClientDto.loyaltyEnabled ?? true,
+            loyaltyEnabled: loyaltyEnabledOnCreate,
             discount: createClientDto.discount ?? 0,
             balance: createClientDto.balance ?? 0,
             referralCode,
@@ -843,6 +860,29 @@ export class ClientsService {
     if (data.birthDate !== undefined) {
       data.birthDate = data.birthDate ? new Date(data.birthDate) : null;
     }
+
+    const nextFirstName =
+      data.firstName !== undefined ? String(data.firstName) : (client.firstName ?? '');
+    const nextLastName =
+      data.lastName !== undefined ? String(data.lastName ?? '') : (client.lastName ?? '');
+    const nextBirthDate =
+      data.birthDate !== undefined ? (data.birthDate as Date | null) : (client.birthDate ?? null);
+    const loyaltyEligibleAfterPatch = this.hasLoyaltyAccess(
+      nextFirstName,
+      nextLastName,
+      nextBirthDate,
+    );
+
+    if (data.loyaltyEnabled === true && !loyaltyEligibleAfterPatch) {
+      throw new BadRequestException(
+        'Cannot enable loyalty: firstName, lastName and birthDate are required',
+      );
+    }
+    if (!loyaltyEligibleAfterPatch) {
+      // Если обязательные поля неполные — лояльность принудительно отключается.
+      data.loyaltyEnabled = false;
+    }
+
     const hasUpdates = Object.keys(data).length > 0;
     if (hasUpdates) {
       return this.prisma.client.update({
