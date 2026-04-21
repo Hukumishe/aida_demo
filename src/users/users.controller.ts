@@ -25,6 +25,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles, UserRole } from '../common/decorators/roles.decorator';
 
 @ApiTags('staff')
 @Controller()
@@ -164,6 +165,23 @@ export class UsersController {
     @CurrentUser() user: any,
   ) {
     return this.usersService.remove(userId, user.role, user.studioId);
+  }
+
+  @Delete('staff/:userId/hard')
+  @Roles(UserRole.DEVELOPER)
+  @ApiOperation({
+    summary: 'Hard delete staff member (DEVELOPER only)',
+    description:
+      'Полностью удаляет сотрудника из БД (без soft-delete). Использовать с осторожностью.',
+  })
+  @ApiResponse({ status: 200, description: 'Staff member permanently deleted' })
+  @ApiResponse({ status: 403, description: 'Forbidden - DEVELOPER only' })
+  @ApiResponse({ status: 404, description: 'Staff member not found' })
+  async hardDelete(
+    @Param('userId') userId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.hardDelete(userId, user.role);
   }
 
   @Get('staff/:staffUserId/services/:serviceId/override')

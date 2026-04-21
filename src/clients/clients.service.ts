@@ -1184,6 +1184,25 @@ export class ClientsService {
       select: { id: true, bonuses: true },
     });
   }
+
+  /**
+   * Полное удаление клиента из БД. Доступно только DEVELOPER.
+   * В отличие от обычных действий с клиентом, запись удаляется физически.
+   */
+  async hardDelete(clientId: string, actorRole?: string) {
+    if (!isDeveloperRole(actorRole)) {
+      throw new ForbiddenException('Only DEVELOPER can hard delete clients');
+    }
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      select: { id: true },
+    });
+    if (!client) {
+      throw new NotFoundException(`Client with ID ${clientId} not found`);
+    }
+    await this.prisma.client.delete({ where: { id: clientId } });
+    return { success: true };
+  }
 }
 
 

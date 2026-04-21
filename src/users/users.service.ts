@@ -14,7 +14,13 @@ import { UpdateStaffDto } from './dto/update-staff.dto';
 import { UpdateStaffProfileDto } from './dto/update-staff-profile.dto';
 import { CreateServiceOverrideDto } from './dto/create-service-override.dto';
 import { UpdateServiceOverrideDto } from './dto/update-service-override.dto';
-import { UserRole, isOwnerLevelRole, canManageOwners, canManageDeputies } from '../common/decorators/roles.decorator';
+import {
+  UserRole,
+  isDeveloperRole,
+  isOwnerLevelRole,
+  canManageOwners,
+  canManageDeputies,
+} from '../common/decorators/roles.decorator';
 
 /** Роли, которые могут быть на уровне сети (`studioId` = null) и показываются во всех филиалах. */
 const NETWORK_STAFF_ROLES: UserRole[] = [
@@ -744,6 +750,45 @@ export class UsersService {
       return rest;
     }
     return updated;
+  }
+
+  /**
+   * Полное удаление сотрудника из БД. Доступно только DEVELOPER.
+   * В отличие от remove(), это не soft-delete: запись users удаляется физически.
+   */
+  async hardDelete(userId: string, actorRole: string) {
+    if (!isDeveloperRole(actorRole)) {
+      throw new ForbiddenException('Only DEVELOPER can hard delete staff');
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // DevTicket.createdBy has onDelete: Restrict — удаляем связанные тикеты,
+      // чтобы физическое удаление пользователя прошло без FK-ошибки.
+      const createdTicketIds = await tx.devTicket.findMany({
+        where: { createdByUserId: userId },
+        select: { id: true },
+      });
+      if (createdTicketIds.length > 0) {
+        const ticketIds = createdTicketIds.map((t) => t.id);
+        await tx.devTicketMessage.deleteMany({
+          where: { ticketId: { in: ticketIds } },
+        });
+        await tx.devTicket.deleteMany({
+          where: { id: { in: ticketIds } },
+        });
+      }
+
+      await tx.user.delete({ where: { id: userId } });
+    });
+
+    return { success: true };
   }
 
   async createServiceOverride(

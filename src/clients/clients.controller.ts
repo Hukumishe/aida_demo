@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -410,5 +411,22 @@ export class ClientsController {
       user?.organizationId,
       organizationId,
     );
+  }
+
+  @Delete(':id/hard')
+  @Roles(UserRole.DEVELOPER)
+  @ApiOperation({
+    summary: 'Hard delete client (DEVELOPER only)',
+    description:
+      'Полностью удаляет клиента из БД (без soft-delete). Использовать с осторожностью.',
+  })
+  @ApiResponse({ status: 200, description: 'Client permanently deleted' })
+  @ApiResponse({ status: 403, description: 'Forbidden - DEVELOPER only' })
+  @ApiResponse({ status: 404, description: 'Client not found' })
+  async hardDelete(
+    @Param('id') id: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.clientsService.hardDelete(id, user?.role);
   }
 }
