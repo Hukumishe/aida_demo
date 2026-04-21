@@ -57,8 +57,8 @@
 - `paymentKaspiCardHolder: string | null` — ФИО держателя карты Kaspi (как показать клиенту).
 - `remotePaymentMethod: "PHONE_TRANSFER" | "IP_ACCOUNT"` — способ удалённой оплаты в ночном режиме:
   - `PHONE_TRANSFER` — перевод по номеру;
-  - `IP_ACCOUNT` — оплата на ИП (текстом из `paymentIpRequisites`).
-- `paymentIpRequisites: string | null` — реквизиты ИП для показа клиенту (свободный текст). Обязателен, когда выбран `IP_ACCOUNT`.
+  - `IP_ACCOUNT` — оплата на ИП (ссылкой из `paymentIpRequisites`).
+- `paymentIpRequisites: string | null` — ссылка оплаты на ИП (пример: `https://pay.kaspi.kz/pay/arthp913`). Обязательна, когда выбран `IP_ACCOUNT`.
 - `nightHoldMinutes: number | null` — сколько минут удерживаем предварительную бронь в ночном режиме, прежде чем крон её автоматически отменит. null → бэкенд применит дефолт 30.
 - `dayInvoiceTaskDeadlineHours: number | null` — через сколько часов истекает дедлайн дневной задачи менеджеру на выставление счёта Kaspi. null → дефолт 2.
 - `nightReceiptTaskDeadlineHours: number | null` — через сколько часов истекает дедлайн утренней задачи на сверку ночного чека с выпиской Kaspi. null → дефолт 12.
@@ -95,6 +95,7 @@
 - `remotePaymentMethod` — одно из значений enum: `PHONE_TRANSFER` или `IP_ACCOUNT`.
 - Пустая строка в `paymentIpRequisites` очищает значение.
 - Если выбран `remotePaymentMethod = IP_ACCOUNT`, а `paymentIpRequisites` пустой/null — бэкенд вернёт 400.
+- Для `IP_ACCOUNT` значение `paymentIpRequisites` должно быть ссылкой вида `https://pay.kaspi.kz/pay/<id>`.
 - `nightHoldMinutes` — целое, **1..1440** (практический диапазон 5..120). Отправь `null`, чтобы бэкенд применил дефолт 30.
 - `dayInvoiceTaskDeadlineHours` — целое, **1..48** (практический диапазон 1..8). `null` → дефолт 2.
 - `nightReceiptTaskDeadlineHours` — целое, **1..48** (практический диапазон 4..24). `null` → дефолт 12.
@@ -136,8 +137,8 @@
    - `Удалённая оплата на ИП` (`IP_ACCOUNT`)
    По умолчанию: `PHONE_TRANSFER`.
 
-7. **Реквизиты ИП** — textarea (до 2000 символов), показывать/делать обязательным когда выбран `IP_ACCOUNT`.
-   Подсказка: «Укажи реквизиты, которые клиент должен увидеть ночью: ИП, БИН/ИИН, номер счёта, банк, комментарий к переводу и т.д.».
+7. **Ссылка оплаты на ИП** — текстовое поле URL (до 500 символов), показывать/делать обязательным когда выбран `IP_ACCOUNT`.
+   Подсказка: «Вставь ссылку Kaspi Pay, например: https://pay.kaspi.kz/pay/arthp913».
 
 ### Кнопки
 

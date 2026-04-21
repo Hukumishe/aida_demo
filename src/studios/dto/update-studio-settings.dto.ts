@@ -4,6 +4,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   Max,
   MaxLength,
   Min,
@@ -139,15 +140,17 @@ export class UpdateStudioSettingsDto {
 
   @ApiPropertyOptional({
     description:
-      'Реквизиты ИП для удалённой оплаты (свободный текст). Используется, когда remotePaymentMethod = IP_ACCOUNT. ' +
+      'Ссылка оплаты на ИП (например Kaspi Pay). Используется, когда remotePaymentMethod = IP_ACCOUNT. ' +
       'Пустая строка/null очищает значение.',
-    maxLength: 2000,
+    maxLength: 500,
     nullable: true,
+    example: 'https://pay.kaspi.kz/pay/arthp913',
   })
   @IsOptional()
   @ValidateIf((_o, v) => v !== null)
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(500)
+  @IsUrl({ require_protocol: true })
   paymentIpRequisites?: string | null;
 
   @ApiPropertyOptional({

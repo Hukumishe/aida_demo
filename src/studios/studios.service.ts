@@ -278,8 +278,17 @@ export class StudiosService {
       (!nextPaymentIpRequisites || nextPaymentIpRequisites.trim() === '')
     ) {
       throw new BadRequestException(
-        'Для remotePaymentMethod=IP_ACCOUNT заполните paymentIpRequisites',
+        'Для remotePaymentMethod=IP_ACCOUNT заполните paymentIpRequisites (ссылка оплаты)',
       );
+    }
+    if (nextRemotePaymentMethod === RemotePaymentMethod.IP_ACCOUNT && nextPaymentIpRequisites) {
+      const url = nextPaymentIpRequisites.trim();
+      const isKaspiPayLink = /^https:\/\/pay\.kaspi\.kz\/pay\/[A-Za-z0-9_-]+$/i.test(url);
+      if (!isKaspiPayLink) {
+        throw new BadRequestException(
+          'paymentIpRequisites должен быть ссылкой вида https://pay.kaspi.kz/pay/<id>',
+        );
+      }
     }
 
     // Тайминги Nextbot-потока оплаты. Все — nullable; null/undefined = «сбросить к дефолту в коде».
