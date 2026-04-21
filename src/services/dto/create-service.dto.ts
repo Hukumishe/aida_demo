@@ -1,4 +1,13 @@
-import { IsString, IsNotEmpty, IsInt, IsOptional, Min, IsEnum, Matches } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsInt,
+  IsOptional,
+  Min,
+  IsEnum,
+  Matches,
+  ValidateIf,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { ServiceAudience } from '@prisma/client';
 import {
@@ -35,6 +44,18 @@ export class CreateServiceDto {
   })
   @Matches(READABLE_ENTITY_ID_REGEX, { message: READABLE_ENTITY_ID_MESSAGE })
   categoryId: string;
+
+  @ApiProperty({
+    description:
+      'ID подкатегории внутри categoryId (опционально). Если задан, подкатегория должна принадлежать выбранной категории.',
+    example: 'ssc_abc12defgh3',
+    required: false,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @Matches(READABLE_ENTITY_ID_REGEX, { message: READABLE_ENTITY_ID_MESSAGE })
+  subcategoryId?: string | null;
 
   @ApiProperty({
     enum: ServiceAudience,

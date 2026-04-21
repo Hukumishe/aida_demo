@@ -506,7 +506,15 @@ export class NextbotService {
     const [categories, studios, disabled] = await Promise.all([
       this.prisma.serviceCategory.findMany({
         where: { organizationId: user.organizationId, isActive: true },
-        select: { id: true, name: true },
+        select: {
+          id: true,
+          name: true,
+          subcategories: {
+            where: { isActive: true },
+            select: { id: true, name: true },
+            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+          },
+        },
         orderBy: { name: 'asc' },
       }),
       this.prisma.studio.findMany({
@@ -535,6 +543,7 @@ export class NextbotService {
         return {
           id: c.id,
           name: c.name,
+          subcategories: c.subcategories,
           available_in: availableIn,
         };
       }),

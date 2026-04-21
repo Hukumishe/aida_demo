@@ -16,6 +16,7 @@ export const IdPrefix = {
   BusySlot: 'bsy',
   Service: 'srv',
   ServiceCategory: 'sca',
+  ServiceSubcategory: 'ssc',
   LandingPromotion: 'lpr',
   LandingPromotionService: 'lps',
   LandingPromotionCode: 'lpc',

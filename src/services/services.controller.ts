@@ -29,6 +29,8 @@ import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto';
 import { UpdateServiceCategoryDto } from './dto/update-service-category.dto';
+import { CreateServiceSubcategoryDto } from './dto/create-service-subcategory.dto';
+import { UpdateServiceSubcategoryDto } from './dto/update-service-subcategory.dto';
 import { SetServiceStudioOfferingDto } from './dto/set-service-studio-offering.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -141,6 +143,82 @@ export class ServicesController {
     return this.servicesService.updateCategory(
       categoryId,
       dto,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+      organizationId,
+    );
+  }
+
+  @Post('categories/:categoryId/subcategories')
+  @ApiOperation({ summary: 'Создать подкатегорию внутри категории услуг' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER: создать в указанной организации',
+  })
+  @ApiResponse({ status: 201 })
+  createSubcategory(
+    @Param('categoryId') categoryId: string,
+    @Body() dto: CreateServiceSubcategoryDto,
+    @Query('organizationId') organizationId: string | undefined,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.createSubcategory(
+      categoryId,
+      dto,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+      organizationId,
+    );
+  }
+
+  @Patch('categories/:categoryId/subcategories/:subcategoryId')
+  @ApiOperation({ summary: 'Изменить подкатегорию' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 404 })
+  updateSubcategory(
+    @Param('categoryId') categoryId: string,
+    @Param('subcategoryId') subcategoryId: string,
+    @Body() dto: UpdateServiceSubcategoryDto,
+    @Query('organizationId') organizationId: string | undefined,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.updateSubcategory(
+      categoryId,
+      subcategoryId,
+      dto,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+      organizationId,
+    );
+  }
+
+  @Delete('categories/:categoryId/subcategories/:subcategoryId')
+  @ApiOperation({ summary: 'Удалить подкатегорию' })
+  @ApiQuery({
+    name: 'organizationId',
+    required: false,
+    description: 'Только DEVELOPER',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 404 })
+  deleteSubcategory(
+    @Param('categoryId') categoryId: string,
+    @Param('subcategoryId') subcategoryId: string,
+    @Query('organizationId') organizationId: string | undefined,
+    @CurrentUser() user?: any,
+  ) {
+    return this.servicesService.deleteSubcategory(
+      categoryId,
+      subcategoryId,
       user?.role,
       user?.studioId,
       user?.organizationId,

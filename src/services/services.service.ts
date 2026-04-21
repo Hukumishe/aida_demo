@@ -20,6 +20,8 @@ import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto';
 import { UpdateServiceCategoryDto } from './dto/update-service-category.dto';
+import { CreateServiceSubcategoryDto } from './dto/create-service-subcategory.dto';
+import { UpdateServiceSubcategoryDto } from './dto/update-service-subcategory.dto';
 import { UserRole, isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { AppointmentStatus, ServiceAudience } from '@prisma/client';
 
@@ -80,6 +82,24 @@ export class ServicesService {
     }
   }
 
+  private async validateSubcategoryForCategory(
+    subcategoryId: string | null | undefined,
+    categoryId: string,
+    organizationId: string,
+  ) {
+    if (!subcategoryId) return;
+    const sub = await this.prisma.serviceSubcategory.findUnique({
+      where: { id: subcategoryId },
+      include: { category: { select: { organizationId: true } } },
+    });
+    if (!sub || sub.category.organizationId !== organizationId) {
+      throw new BadRequestException('Подкатегория не найдена или не принадлежит этой организации');
+    }
+    if (sub.categoryId !== categoryId) {
+      throw new BadRequestException('Подкатегория должна принадлежать выбранной категории');
+    }
+  }
+
   /**
    * Каталог услуг организации (один на все филиалы).
    * Query `studioId` — опционально: добавить `isOfferedInStudio` для выбранного филиала.
@@ -101,7 +121,7 @@ export class ServicesService {
 
       const services = await this.prisma.service.findMany({
         where: { organizationId },
-        include: { category: true },
+        include: { category: true, subcategory: true },
         orderBy: [{ name: 'asc' }],
       });
 
@@ -155,6 +175,11 @@ export class ServicesService {
     );
 
     await this.assertCategoryBelongsToOrganization(createServiceDto.categoryId, organizationId);
+    await this.validateSubcategoryForCategory(
+      createServiceDto.subcategoryId,
+      createServiceDto.categoryId,
+      organizationId,
+    );
 
     const audience = createServiceDto.audience ?? ServiceAudience.WOMEN;
 
@@ -167,9 +192,10 @@ export class ServicesService {
         defaultPrice: createServiceDto.defaultPrice,
         requiredStaffCount: createServiceDto.requiredStaffCount ?? 1,
         categoryId: createServiceDto.categoryId,
+        subcategoryId: createServiceDto.subcategoryId ?? null,
         audience,
       },
-      include: { category: true },
+      include: { category: true, subcategory: true },
     });
     return { ...created, isOfferedInStudio: true };
   }
@@ -212,16 +238,24 @@ export class ServicesService {
     if (categoryId !== undefined) {
       await this.assertCategoryBelongsToOrganization(categoryId, organizationId);
     }
+    const nextCategoryId = categoryId ?? service.categoryId;
+    const subcategoryId = updateServiceDto.subcategoryId;
+    if (subcategoryId !== undefined) {
+      await this.validateSubcategoryForCategory(subcategoryId, nextCategoryId, organizationId);
+    }
 
     const data: Record<string, unknown> = { ...rest };
     if (categoryId !== undefined) {
       data.categoryId = categoryId;
     }
+    if (subcategoryId !== undefined) {
+      data.subcategoryId = subcategoryId ?? null;
+    }
 
     return this.prisma.service.update({
       where: { id },
       data: data as any,
-      include: { category: true },
+      include: { category: true, subcategory: true },
     });
   }
 
@@ -371,6 +405,11 @@ export class ServicesService {
     );
     const categories = await this.prisma.serviceCategory.findMany({
       where: { organizationId },
+      include: {
+        subcategories: {
+          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        },
+      },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
     if (!studioIdForOffering?.trim()) {
@@ -388,6 +427,96 @@ export class ServicesService {
       ...c,
       isOfferedInStudio: c.isActive && !disabledCategoryIds.has(c.id),
     }));
+  }
+
+  async createSubcategory(
+    categoryId: string,
+    dto: CreateServiceSubcategoryDto,
+    userRole?: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
+  ) {
+    this.assertOrganizationCatalogAccess(userRole, userStudioId);
+    const organizationId = await this.resolveOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
+    await this.assertCategoryBelongsToOrganization(categoryId, organizationId);
+    return this.prisma.serviceSubcategory.create({
+      data: {
+        id: generateId(IdPrefix.ServiceSubcategory),
+        categoryId,
+        name: dto.name.trim(),
+        sortOrder: dto.sortOrder ?? 0,
+        isActive: dto.isActive ?? true,
+      },
+    });
+  }
+
+  async updateSubcategory(
+    categoryId: string,
+    subcategoryId: string,
+    dto: UpdateServiceSubcategoryDto,
+    userRole?: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
+  ) {
+    this.assertOrganizationCatalogAccess(userRole, userStudioId);
+    const organizationId = await this.resolveOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
+    await this.assertCategoryBelongsToOrganization(categoryId, organizationId);
+    const sub = await this.prisma.serviceSubcategory.findUnique({
+      where: { id: subcategoryId },
+      include: { category: { select: { organizationId: true } } },
+    });
+    if (!sub || sub.categoryId !== categoryId || sub.category.organizationId !== organizationId) {
+      throw new NotFoundException('Подкатегория не найдена');
+    }
+    return this.prisma.serviceSubcategory.update({
+      where: { id: subcategoryId },
+      data: {
+        ...(dto.name !== undefined && { name: dto.name.trim() }),
+        ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
+        ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+      },
+    });
+  }
+
+  async deleteSubcategory(
+    categoryId: string,
+    subcategoryId: string,
+    userRole?: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
+  ) {
+    this.assertOrganizationCatalogAccess(userRole, userStudioId);
+    const organizationId = await this.resolveOrganizationId(
+      userRole,
+      userOrganizationId,
+      organizationIdQuery,
+    );
+    await this.assertCategoryBelongsToOrganization(categoryId, organizationId);
+    const sub = await this.prisma.serviceSubcategory.findUnique({
+      where: { id: subcategoryId },
+      include: { category: { select: { organizationId: true } }, _count: { select: { services: true } } },
+    });
+    if (!sub || sub.categoryId !== categoryId || sub.category.organizationId !== organizationId) {
+      throw new NotFoundException('Подкатегория не найдена');
+    }
+    if (sub._count.services > 0) {
+      throw new BadRequestException(
+        'Нельзя удалить подкатегорию: к ней привязаны услуги. Сначала перенесите услуги в другую подкатегорию или очистите поле.',
+      );
+    }
+    await this.prisma.serviceSubcategory.delete({ where: { id: subcategoryId } });
+    return { success: true };
   }
 
   async createCategory(
