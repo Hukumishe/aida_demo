@@ -21,7 +21,10 @@ import {
   DEFAULT_IANA_TIMEZONE,
   studioWallClockTimezone,
 } from '../common/effective-timezone';
-import { zonedDayRangeUtc } from '../common/iana-wall-time';
+import {
+  normalizeCalendarDateStr,
+  zonedDayRangeUtc,
+} from '../common/iana-wall-time';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
   AppointmentStatus,
@@ -512,9 +515,10 @@ export class AppointmentsService {
     }
 
     if (options?.date) {
-      const dateStr = options.date.includes('T')
+      const raw = options.date.includes('T')
         ? options.date.split('T')[0]
         : options.date;
+      const dateStr = normalizeCalendarDateStr(raw);
       const studio = await this.prisma.studio.findUnique({
         where: { id: studioId },
         include: { organization: true },
