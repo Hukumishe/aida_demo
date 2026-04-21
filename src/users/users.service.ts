@@ -706,12 +706,6 @@ export class UsersService {
     userRole: string,
     userStudioId?: string,
   ) {
-    if (userRole !== UserRole.DEVELOPER) {
-      throw new ForbiddenException(
-        'Only DEVELOPER can dismiss employees, including OWNER and DEPUTY_OWNER',
-      );
-    }
-
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { staffProfile: true },
@@ -728,6 +722,15 @@ export class UsersService {
     // Check access
     if (!isOwnerLevelRole(userRole) && userStudioId !== user.studioId) {
       throw new ForbiddenException('Access denied to this user');
+    }
+
+    // Cannot dismiss OWNER (only OWNER can do this, and only via special endpoint)
+    if (user.role === UserRole.OWNER && !canManageOwners(userRole)) {
+      throw new BadRequestException('Cannot dismiss OWNER role');
+    }
+    // Cannot dismiss DEPUTY_OWNER (only OWNER can do this)
+    if (user.role === UserRole.DEPUTY_OWNER && !canManageDeputies(userRole)) {
+      throw new BadRequestException('Cannot dismiss DEPUTY_OWNER role');
     }
 
     const updated = await this.prisma.user.update({
