@@ -71,6 +71,7 @@
 | `check_loyalty_status.py` | лояльность |
 | `get_referral_code.py` | реферальный код по `phone` (client_id не нужен; имя только в диалоге) |
 | `check_availability.py` | сырые слоты |
+| `check_availability_reschedule.py` | сырые слоты для переноса (берёт prompt `check_availability_reschedule`) |
 | `create_booking_request.py` | создание записи |
 | `modify_booking.py` | любые правки записи (тело `patch_json`) |
 | `cancel_booking.py` | отмена `POST .../appointments/:id/update`, в result только `data.id`, `data.status` и `prompt` |

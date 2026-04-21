@@ -458,6 +458,7 @@ model Client {
   levelSetManually                Boolean     @default(false) // true если DIAMOND назначен вручную (только режим PRESET)
   totalPaidForLevel               Int         @default(0) // Сумма оплаченных деньгами по DONE (для расчёта уровня в PRESET; глобально по клиенту)
   bonuses                         Int         @default(0) // Бонусные баллы (1 балл = 1 ₸)
+  loyaltyEnabled                  Boolean     @default(true) // Персональный переключатель лояльности клиента (false = бонусы/кэшбэк/реферальные начисления отключены)
   discount                        Int         @default(0) // Скидка в процентах (0-100)
   balance                         Int         @default(0) // Баланс в тенге (историческое поле)
   isBlacklisted                   Boolean     @default(false) // Флаг черного списка

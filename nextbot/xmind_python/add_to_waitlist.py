@@ -52,9 +52,18 @@ body = {
 }
 
 status_code = 0
+prompt_text = WAITLIST_PROMPT
 try:
   r = requests.post(url, headers=headers, json=body, timeout=15)
   status_code = r.status_code
+  try:
+    full = r.json() if r.content else {}
+  except Exception:
+    full = {}
+  if isinstance(full, dict):
+    dynamic_prompt = full.get("add_to_waitlist", "")
+    if dynamic_prompt:
+      prompt_text = str(dynamic_prompt)
   debug("add_to_waitlist: status=" + str(status_code))
 except Exception as e:
   debug("add_to_waitlist: exception " + str(e))
@@ -64,5 +73,6 @@ result = {
   "ok": True,
   "status": status_code,
   "data": {},
-  "prompt": WAITLIST_PROMPT,
+  "add_to_waitlist": prompt_text,
+  "prompt": prompt_text,
 }

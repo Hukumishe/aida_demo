@@ -982,6 +982,7 @@ export class AppointmentsService {
 
     const { client, service, studio, upsells } = existingAppointment;
     const org = studio.organization;
+    const loyaltyEnabled = client.loyaltyEnabled !== false;
     const prepayment = existingAppointment.prepaymentAmount ?? 0;
     const baseAmount = service.defaultPrice ?? 0;
     const upsellsSum = upsells.reduce((s, u) => s + u.totalAmount, 0);
@@ -995,7 +996,7 @@ export class AppointmentsService {
       !!client.referredByClientId &&
       doneBefore === 0 &&
       !client.referralFirstVisitBonusCredited;
-    const applyReferFriendRewards = referProgramOn && eligibleFirstVisitReferral;
+    const applyReferFriendRewards = loyaltyEnabled && referProgramOn && eligibleFirstVisitReferral;
 
     let total = grossTotal;
     if (
@@ -1010,11 +1011,13 @@ export class AppointmentsService {
     const limitPercent = org.globalBonusPaymentLimitPercent ?? 30;
     const maxBonusesAllowed = Math.floor((total * limitPercent) / 100);
     const requestedBonus = Math.max(0, dto?.bonusesUsed ?? 0);
-    const bonusesUsed = Math.min(
-      requestedBonus,
-      Math.max(0, client.bonuses),
-      maxBonusesAllowed,
-    );
+    const bonusesUsed = loyaltyEnabled
+      ? Math.min(
+          requestedBonus,
+          Math.max(0, client.bonuses),
+          maxBonusesAllowed,
+        )
+      : 0;
 
     // Общая сумма, которую клиент оплачивает деньгами за визит (включая предоплату)
     const totalMoneyPaid = total - bonusesUsed;
@@ -1033,7 +1036,13 @@ export class AppointmentsService {
       cslLevelSetManually: boolean;
     } | null = null;
 
-    if (useCustomLoyalty) {
+    if (!loyaltyEnabled) {
+      cashbackPercent = 0;
+      cashback = 0;
+      newTotalPaidForLevel = client.totalPaidForLevel;
+      newLevel = client.level;
+      customLoyaltyUpsert = null;
+    } else if (useCustomLoyalty) {
       const [loyaltyTiers, loyaltyMilestones] = await Promise.all([
         this.prisma.studioLoyaltyTier.findMany({
           where: { organizationId: org.id },
@@ -1108,6 +1117,7 @@ export class AppointmentsService {
 
     let inviteeReferralBonus = 0;
     if (
+      loyaltyEnabled &&
       applyReferFriendRewards &&
       org.referFriendInviteeRewardType === 'BONUS_PERCENT' &&
       org.referFriendInviteeValue != null &&
@@ -1121,7 +1131,7 @@ export class AppointmentsService {
     let referralLinkCashback = 0;
     let referralLinkRowId: string | null = null;
     const marketingLinkId = client.studioReferralLinkId;
-    if (marketingLinkId && totalMoneyPaid > 0 && service.bonusAccrualEnabled) {
+    if (loyaltyEnabled && marketingLinkId && totalMoneyPaid > 0 && service.bonusAccrualEnabled) {
       const mLink = await this.prisma.studioReferralLink.findFirst({
         where: {
           id: marketingLinkId,
@@ -1143,7 +1153,7 @@ export class AppointmentsService {
     // Пригласивший: из настроек студии (процент от оплаты или фикс)
     let referrer: { id: string; bonuses: number } | null = null;
     let referrerBonus = 0;
-    if (applyReferFriendRewards && totalMoneyPaid > 0 && client.referredByClientId) {
+    if (loyaltyEnabled && applyReferFriendRewards && totalMoneyPaid > 0 && client.referredByClientId) {
       const ref = await this.prisma.client.findUnique({
         where: { id: client.referredByClientId },
         select: { id: true, bonuses: true },
@@ -1198,6 +1208,7 @@ export class AppointmentsService {
         levelSetManually: client.levelSetManually,
         newLevel,
         loyaltyMode: org.loyaltyMode,
+        loyaltyEnabled,
         customLoyalty: customLoyaltyUpsert,
         bonusesAfter: `${client.bonuses} - ${bonusesUsed} + ${cashback} = ${newBonuses}`,
       },

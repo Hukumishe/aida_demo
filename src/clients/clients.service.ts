@@ -366,6 +366,7 @@ export class ClientsService {
             birthDate: createClientDto.birthDate ? new Date(createClientDto.birthDate) : undefined,
             notes: createClientDto.notes,
             bonuses: createClientDto.bonuses ?? 0,
+            loyaltyEnabled: createClientDto.loyaltyEnabled ?? true,
             discount: createClientDto.discount ?? 0,
             balance: createClientDto.balance ?? 0,
             referralCode,

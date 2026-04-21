@@ -3,6 +3,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsInt,
+  IsBoolean,
   Min,
   Max,
   Matches,
@@ -79,6 +80,16 @@ export class CreateClientDto {
   @Min(0)
   @IsOptional()
   balance?: number;
+
+  @ApiProperty({
+    example: true,
+    required: false,
+    description:
+      'Включена ли программа лояльности для клиента. false = не списываются/не начисляются бонусы и кэшбэк.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  loyaltyEnabled?: boolean;
 
   @ApiProperty({
     required: false,

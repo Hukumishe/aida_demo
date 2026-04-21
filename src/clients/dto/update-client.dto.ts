@@ -97,6 +97,15 @@ export class UpdateClientDto {
 
   @ApiPropertyOptional({
     description:
+      'Персональный переключатель программы лояльности клиента. false = не списываются и не начисляются бонусы/кэшбэк/реферальные бонусы.',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  loyaltyEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    description:
       'Режим CUSTOM: id организации клиента для ручного уровня или сброса (вместе с customLoyaltyTierId или customLoyaltyClearManual). Должен совпадать с organizationId клиента.',
   })
   @IsOptional()

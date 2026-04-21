@@ -10,7 +10,8 @@
 #       client_id (опционально),
 #       phone_lookup — для поиска, если нет client_id (номер как в CRM до смены);
 #       phone — обязателен в теле PATCH; если нет client_id и пуст phone_lookup, для поиска используется phone;
-#       first_name, last_name, patronymic, instagram, birth_date
+#       first_name/firstName, last_name/lastName, patronymic, instagram,
+#       birth_date/birthDate, referrer_code/referrerCode
 # Успех (минимум полей): ok, status, data { id, firstName, phone }, update_old_client_profile;
 # Без prompt и без дубля client_id (id только в data).
 
@@ -26,12 +27,15 @@ headers = {
 
 cid = str(args.get("client_id", "") or "").strip()
 phone_lookup = str(args.get("phone_lookup", "") or "").strip()
-fn = str(args.get("first_name", "") or "").strip()
+fn = str(args.get("first_name", "") or args.get("firstName", "") or "").strip()
 ph = str(args.get("phone", "") or "").strip()
-ln = str(args.get("last_name", "") or "").strip()
+ln = str(args.get("last_name", "") or args.get("lastName", "") or "").strip()
 pat = str(args.get("patronymic", "") or "").strip()
 ig = str(args.get("instagram", "") or "").strip()
-bd = str(args.get("birth_date", "") or "").strip()
+bd = str(args.get("birth_date", "") or args.get("birthDate", "") or "").strip()
+ref = args.get("referrer_code")
+if ref is None or ref == "":
+  ref = args.get("referrerCode")
 
 body = {"firstName": fn, "phone": ph}
 if ln:
@@ -42,6 +46,8 @@ if ig:
   body["instagram"] = ig
 if bd:
   body["birthDate"] = bd
+if ref is not None and str(ref).strip() != "":
+  body["referrerCode"] = str(ref).strip()
 
 result = None
 
