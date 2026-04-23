@@ -26,7 +26,7 @@ try:
     base + "/nextbot/service-categories",
     headers=headers,
     params=params or None,
-    timeout=15,
+    timeout=(2.5, 7),
   )
   try:
     body = r.json() if r.ok else r.text

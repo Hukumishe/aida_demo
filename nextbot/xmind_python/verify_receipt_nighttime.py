@@ -84,7 +84,7 @@ else:
 
   try:
     debug("verify_receipt_nighttime: POST " + url)
-    r = requests.post(url, headers=headers, json=body, timeout=15)
+    r = requests.post(url, headers=headers, json=body, timeout=(3, 10))
     debug("verify_receipt_nighttime: status=" + str(r.status_code))
 
     try:

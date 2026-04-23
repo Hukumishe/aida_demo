@@ -13,7 +13,7 @@ headers = {
 }
 body = {"startAt": start_at}
 url = base + "/nextbot/appointments/" + aid + "/update"
-r = requests.post(url, headers=headers, json=body, timeout=15)
+r = requests.post(url, headers=headers, json=body, timeout=(3, 10))
 try:
   data = r.json() if r.ok else r.text
 except Exception:

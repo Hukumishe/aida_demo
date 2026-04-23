@@ -77,7 +77,7 @@ else:
           base + "/nextbot/clients/verify",
           headers=headers,
           params={"phone": verify_phone},
-          timeout=15,
+          timeout=(2.5, 5),
         )
         try:
           vj = rv.json() if rv.content else {}
@@ -128,7 +128,7 @@ else:
   if result is None and resolved_id:
     url = base + "/nextbot/clients/" + resolved_id + "/update"
     try:
-      r = requests.patch(url, headers=headers, json=body, timeout=15)
+      r = requests.patch(url, headers=headers, json=body, timeout=(3, 10))
       try:
         full = r.json() if r.content else {}
       except Exception:

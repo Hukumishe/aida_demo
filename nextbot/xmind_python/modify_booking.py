@@ -15,7 +15,7 @@ headers = {
 pj = args.get("patch_json", "{}")
 body = json.loads(pj) if isinstance(pj, str) else pj
 url = base + "/nextbot/appointments/" + aid + "/update"
-r = requests.post(url, headers=headers, json=body, timeout=15)
+r = requests.post(url, headers=headers, json=body, timeout=(3, 10))
 try:
   data = r.json() if r.ok else r.text
 except Exception:

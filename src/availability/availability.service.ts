@@ -354,21 +354,43 @@ export class AvailabilityService {
     const normalToleranceMs = rawTol > 0 ? rawTol * 60 * 1000 : 0;
 
     let durationMinutes: number;
+    let eligibleStaffUserIds: string[] | null = null;
     if (options.serviceId?.trim()) {
+      const serviceId = options.serviceId.trim();
       const service = await assertServiceBookableAtStudio(
         this.prisma,
         studioId,
-        options.serviceId.trim(),
+        serviceId,
         studioRow.organizationId,
       );
       durationMinutes = service.defaultDurationMin;
+
+      const baseLinks = await this.prisma.staffService.findMany({
+        where: { studioId, serviceId },
+        select: { staffUserId: true },
+      });
+      const disabledOverrides = await this.prisma.staffServiceOverride.findMany({
+        where: { studioId, serviceId, isActive: false },
+        select: { staffUserId: true },
+      });
+      const disabledSet = new Set(disabledOverrides.map((x) => x.staffUserId));
+      eligibleStaffUserIds = baseLinks
+        .map((x) => x.staffUserId)
+        .filter((id) => !disabledSet.has(id));
+
+      if (options.staffUserId && !eligibleStaffUserIds.includes(options.staffUserId)) {
+        throw new BadRequestException(
+          'Selected staff does not provide this service in this studio.',
+        );
+      }
+
       if (options.staffUserId) {
         const ov = await this.prisma.staffServiceOverride.findUnique({
           where: {
             studioId_staffUserId_serviceId: {
               studioId,
               staffUserId: options.staffUserId,
-              serviceId: options.serviceId.trim(),
+              serviceId,
             },
           },
         });
@@ -400,6 +422,17 @@ export class AvailabilityService {
     };
     if (options.staffUserId) {
       busyWhere.staffUserId = options.staffUserId;
+    } else if (eligibleStaffUserIds) {
+      if (eligibleStaffUserIds.length === 0) {
+        return {
+          date: dateStr,
+          studioId,
+          durationMinutes,
+          slotStepMinutes: slotStep,
+          freeSlots: [],
+        };
+      }
+      busyWhere.staffUserId = { in: eligibleStaffUserIds };
     }
 
     const busySlots = await this.prisma.busySlot.findMany({
@@ -414,6 +447,8 @@ export class AvailabilityService {
     };
     if (options.staffUserId) {
       apptWhere.staffUserId = options.staffUserId;
+    } else if (eligibleStaffUserIds) {
+      apptWhere.staffUserId = { in: eligibleStaffUserIds };
     }
 
     const appointments = await this.prisma.appointment.findMany({
@@ -425,7 +460,11 @@ export class AvailabilityService {
       where: {
         studioId,
         date: dateObj,
-        ...(options.staffUserId ? { staffUserId: options.staffUserId } : {}),
+        ...(options.staffUserId
+          ? { staffUserId: options.staffUserId }
+          : eligibleStaffUserIds
+            ? { staffUserId: { in: eligibleStaffUserIds } }
+            : {}),
       },
       include: {
         staff: { include: { staffProfile: true } },

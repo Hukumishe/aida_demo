@@ -13,7 +13,7 @@ headers = {
 bj = args.get("body_json", None)
 body = json.loads(bj) if bj else {}
 url = base + "/nextbot/clients/" + cid + "/survey-failed"
-r = requests.post(url, headers=headers, json=body, timeout=15)
+r = requests.post(url, headers=headers, json=body, timeout=(3, 10))
 try:
   data = r.json() if r.content else {}
 except Exception:

@@ -98,7 +98,7 @@ else:
 
   url = base + "/nextbot/studios/" + sid + "/availability-raw"
   try:
-    r = requests.get(url, headers=headers, params=params, timeout=20)
+    r = requests.get(url, headers=headers, params=params, timeout=(3, 10))
     try:
       full = r.json() if r.content else {}
     except Exception:

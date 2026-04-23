@@ -42,7 +42,7 @@ status_code = 0
 prompt_text = ESCALATION_PROMPT
 try:
   url = base + "/nextbot/create-escalation-ticket"
-  r = requests.post(url, headers=headers, json=body, timeout=15)
+  r = requests.post(url, headers=headers, json=body, timeout=(3, 10))
   status_code = r.status_code
   try:
     full = r.json() if r.content else {}

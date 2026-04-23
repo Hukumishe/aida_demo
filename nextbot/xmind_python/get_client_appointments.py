@@ -43,7 +43,7 @@ if not resolved_id:
         base + "/nextbot/clients/verify",
         headers=headers,
         params={"phone": verify_phone},
-        timeout=15,
+        timeout=(2.5, 7),
       )
       try:
         vj = rv.json() if rv.content else {}
@@ -92,7 +92,7 @@ if not resolved_id:
 if result is None and resolved_id:
   url = base + "/clients/" + resolved_id + "/appointments"
   try:
-    r = requests.get(url, headers=headers, params=params, timeout=15)
+    r = requests.get(url, headers=headers, params=params, timeout=(2.5, 7))
     try:
       body = r.json() if r.content else []
     except Exception:

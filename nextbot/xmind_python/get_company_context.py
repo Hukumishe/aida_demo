@@ -10,7 +10,7 @@ headers = {
   "Accept": "application/json",
 }
 url = base + "/nextbot/context"
-r = requests.get(url, headers=headers, timeout=15)
+r = requests.get(url, headers=headers, timeout=(2.5, 7))
 try:
   data = r.json() if r.ok else r.text
 except Exception:

@@ -86,7 +86,7 @@ if not base or not apiKey or not organizationId or not normalizedPhone:
 else:
   try:
     url = base + "/nextbot/clients/verify"
-    r = requests.get(url, headers=headers, params={"phone": normalizedPhone}, timeout=15)
+    r = requests.get(url, headers=headers, params={"phone": normalizedPhone}, timeout=(2.5, 5))
     try:
       data = r.json() if r.text else {}
     except Exception:

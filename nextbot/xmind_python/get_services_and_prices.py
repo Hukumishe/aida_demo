@@ -30,7 +30,7 @@ if audience:
 url = base + "/nextbot/studios/" + sid + "/services"
 
 try:
-  r = requests.get(url, headers=headers, params=params or None, timeout=15)
+  r = requests.get(url, headers=headers, params=params or None, timeout=(2.5, 7))
   try:
     body = r.json() if r.ok else r.text
   except Exception:

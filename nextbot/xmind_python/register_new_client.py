@@ -64,7 +64,7 @@ client_id = None
 if base and studio_id and first_name and phone:
   try:
     url = base + "/nextbot/studios/" + studio_id + "/clients/register"
-    r = requests.post(url, headers=headers, json=body, timeout=15)
+    r = requests.post(url, headers=headers, json=body, timeout=(3, 10))
     status_code = r.status_code
     try:
       full = r.json() if r.content else {}
@@ -76,7 +76,7 @@ if base and studio_id and first_name and phone:
     # Совместимость со старым backend-роутом.
     if not r.ok:
       legacy_url = base + "/nextbot/clients/register"
-      r2 = requests.post(legacy_url, headers=headers, json=body, timeout=15)
+      r2 = requests.post(legacy_url, headers=headers, json=body, timeout=(3, 10))
       status_code = r2.status_code
       try:
         full = r2.json() if r2.content else {}

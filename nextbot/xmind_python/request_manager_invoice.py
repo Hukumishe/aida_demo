@@ -84,7 +84,7 @@ else:
 
   try:
     debug("request_manager_invoice: POST " + url)
-    r = requests.post(url, headers=headers, json=body, timeout=15)
+    r = requests.post(url, headers=headers, json=body, timeout=(3, 10))
     debug("request_manager_invoice: status=" + str(r.status_code))
 
     try:

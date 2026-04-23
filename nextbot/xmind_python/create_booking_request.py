@@ -168,7 +168,7 @@ else:
           base + "/nextbot/clients/verify",
           headers=headers,
           params={"phone": candidate},
-          timeout=15,
+          timeout=(2.5, 5),
         )
         vfull = vr.json() if vr.content else {}
         if not isinstance(vfull, dict):
@@ -182,7 +182,7 @@ else:
                 base + "/nextbot/clients/referral",
                 headers=headers,
                 params={"phone": candidate},
-                timeout=15,
+                timeout=(2.5, 5),
               )
               rfull = rr.json() if rr.content else {}
               if not isinstance(rfull, dict):
@@ -284,7 +284,7 @@ if body is not None:
   else:
     url = base + "/nextbot/studios/" + sid + "/appointments"
     try:
-      r = requests.post(url, headers=headers, json=body, timeout=15)
+      r = requests.post(url, headers=headers, json=body, timeout=(3, 10))
       try:
         full = r.json() if r.content else {}
       except Exception:

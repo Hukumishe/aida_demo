@@ -7,12 +7,20 @@
 # Args: base_url, api_key, organization_id, appointment_id
 # result: ok, status, data { id, status }, prompt
 
-base = args.get("base_url", "").rstrip("/")
-aid = str(args.get("appointment_id", "") or "").strip()
-org_id = str(args.get("organization_id", "") or "").strip()
+try:
+  AP = args
+except NameError:
+  AP = {}
+if AP is None:
+  AP = {}
+
+base = str(AP.get("base_url", "") or "").strip().rstrip("/")
+aid = str(AP.get("appointment_id", "") or "").strip()
+org_id = str(AP.get("organization_id", "") or "").strip()
+api_key = str(AP.get("api_key", "") or "").strip()
 
 headers = {
-  "X-API-Key": args.get("api_key", ""),
+  "X-API-Key": api_key,
   "X-Organization-Id": org_id,
   "Accept": "application/json",
   "Content-Type": "application/json",
@@ -20,7 +28,7 @@ headers = {
 
 body = {"status": "CANCELLED"}
 
-_DEFAULT_PROMPT = (
+DEFAULT_PROMPT = (
   "Запись отменена. Кратко подтверди клиенту отмену вежливо. "
   "Если отмена позднее чем за 4 часа до визита, предоплата могла быть удержана — при необходимости поясни по правилам сети."
 )
@@ -33,10 +41,34 @@ if not aid:
     "prompt": "",
     "error": "missing_appointment_id",
   }
+elif not base:
+  result = {
+    "ok": False,
+    "status": 0,
+    "data": None,
+    "prompt": "",
+    "error": "missing_base_url",
+  }
+elif not api_key:
+  result = {
+    "ok": False,
+    "status": 0,
+    "data": None,
+    "prompt": "",
+    "error": "missing_api_key",
+  }
+elif not org_id:
+  result = {
+    "ok": False,
+    "status": 0,
+    "data": None,
+    "prompt": "",
+    "error": "missing_organization_id",
+  }
 else:
   url = base + "/nextbot/appointments/" + aid + "/update"
   try:
-    r = requests.post(url, headers=headers, json=body, timeout=15)
+    r = requests.post(url, headers=headers, json=body, timeout=(3, 10))
     try:
       full = r.json() if r.content else {}
     except Exception:
@@ -45,7 +77,7 @@ else:
     if not isinstance(full, dict):
       full = {}
 
-    prompt_text = full.get("prompt") or full.get("modify_booking") or _DEFAULT_PROMPT
+    prompt_text = full.get("prompt") or full.get("modify_booking") or DEFAULT_PROMPT
     if not isinstance(prompt_text, str):
       prompt_text = str(prompt_text)
 
@@ -74,7 +106,7 @@ else:
       "ok": False,
       "status": 0,
       "data": None,
-      "prompt": _DEFAULT_PROMPT,
+      "prompt": DEFAULT_PROMPT,
       "error": "request_failed",
       "error_message": str(e),
     }
