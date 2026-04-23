@@ -205,6 +205,39 @@ export class NextbotService {
     return safeClient;
   }
 
+  private normalizePhoneDigits(raw: string | undefined): string {
+    const src = String(raw ?? '').trim();
+    if (!src) return '';
+    return src.replace(/\D/g, '');
+  }
+
+  /** Кандидаты формата телефона для быстрого exact-поиска (без тяжёлого contains). */
+  private phoneLookupCandidates(raw: string | undefined): string[] {
+    const original = String(raw ?? '').trim();
+    const digits = this.normalizePhoneDigits(raw);
+    if (!original && !digits) return [];
+    const out: string[] = [];
+    const push = (v: string) => {
+      const t = v.trim();
+      if (t && !out.includes(t)) out.push(t);
+    };
+
+    if (digits) {
+      push(digits);
+      push(`+${digits}`);
+      if (digits.startsWith('8') && digits.length === 11) {
+        const d7 = `7${digits.slice(1)}`;
+        push(d7);
+        push(`+${d7}`);
+      }
+      if (digits.startsWith('7') && digits.length === 11) {
+        push(`8${digits.slice(1)}`);
+      }
+    }
+    push(original);
+    return out;
+  }
+
   /** Заглушка: функция из xmind, в CRM ещё нет реализации. */
   notImplemented(fn: NextbotXmindFunction): never {
     throw new HttpException(
@@ -232,6 +265,27 @@ export class NextbotService {
 
   /** Без промпта — общая логика для verify / loyalty / referral. */
   private async resolveClientProfile(phone: string | undefined, user: CurrentUserPayload) {
+    const candidates = this.phoneLookupCandidates(phone);
+    for (const candidate of candidates) {
+      const quick = await this.prisma.client.findFirst({
+        where: {
+          organizationId: user.organizationId,
+          isBlacklisted: false,
+          phone: candidate,
+        },
+        select: { id: true },
+      });
+      if (quick?.id) {
+        return this.clientsService.findOne(
+          quick.id,
+          user.role,
+          user.studioId,
+          user.organizationId,
+        );
+      }
+    }
+
+    // Fallback на legacy contains-поиск для совместимости со старыми данными.
     const list = await this.clientsService.findAll(
       phone,
       user.role,

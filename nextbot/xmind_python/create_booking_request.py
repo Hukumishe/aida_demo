@@ -20,12 +20,117 @@ except NameError:
 if AP is None:
   AP = {}
 
-base = AP.get("base_url", "").rstrip("/")
+
+def toAsciiDigits(value):
+  out = []
+  for ch in str(value or ""):
+    if "0" <= ch <= "9":
+      out.append(ch)
+      continue
+    if "\u0660" <= ch <= "\u0669":
+      out.append(str(ord(ch) - ord("\u0660")))
+      continue
+    if "\u06F0" <= ch <= "\u06F9":
+      out.append(str(ord(ch) - ord("\u06F0")))
+      continue
+    out.append(ch)
+  return "".join(out)
+
+
+def normalizePhone(rawPhone):
+  raw = toAsciiDigits(rawPhone).strip()
+  if not raw:
+    return ""
+
+  hadPlus = raw.startswith("+")
+  digits = re.sub(r"\D", "", raw)
+  if not digits:
+    return ""
+
+  if digits.startswith("00"):
+    digits = digits[2:]
+    hadPlus = True
+
+  if (not hadPlus) and len(digits) == 11 and digits.startswith("8"):
+    return "+7" + digits[1:]
+
+  if (not hadPlus) and len(digits) == 11 and digits.startswith("05"):
+    return "+90" + digits[1:]
+  if (not hadPlus) and len(digits) == 10 and digits.startswith("5"):
+    return "+90" + digits
+  if (not hadPlus) and len(digits) == 12 and digits.startswith("90"):
+    return "+" + digits
+
+  if hadPlus or len(digits) >= 11:
+    return "+" + digits
+  return digits
+
+
+def uniquePhoneCandidates(rawPhone):
+  original = str(rawPhone or "").strip()
+  normalized = normalizePhone(original)
+  digits = re.sub(r"\D", "", toAsciiDigits(original))
+
+  candidates = []
+  candidates_seed = [normalized, original, ("+" + digits) if digits else "", digits]
+
+  # Частые локальные варианты для KZ/RU:
+  # +7XXXXXXXXXX <-> 7XXXXXXXXXX <-> 8XXXXXXXXXX
+  if digits.startswith("7") and len(digits) == 11:
+    candidates_seed.append("8" + digits[1:])
+  if digits.startswith("8") and len(digits) == 11:
+    candidates_seed.append("7" + digits[1:])
+    candidates_seed.append("+7" + digits[1:])
+
+  for p in candidates_seed:
+    p2 = str(p or "").strip()
+    if p2 and p2 not in candidates:
+      candidates.append(p2)
+  return candidates
+
+
+def extractClientIdFromVerifyResponse(payload):
+  """
+  Бэкенд verify может вернуть разные формы:
+  - { found: true, client: { id: ... } }
+  - { found: true, clientId: ... }
+  - { found: true, data: { client: { id: ... } } }
+  """
+  if not isinstance(payload, dict):
+    return ""
+
+  # 1) top-level clientId
+  cid = str(payload.get("clientId") or "").strip()
+  if cid:
+    return cid
+
+  # 2) top-level client.id
+  cl = payload.get("client")
+  if isinstance(cl, dict):
+    cid = str(cl.get("id") or "").strip()
+    if cid:
+      return cid
+
+  # 3) nested data.clientId / data.client.id
+  data_obj = payload.get("data")
+  if isinstance(data_obj, dict):
+    cid = str(data_obj.get("clientId") or "").strip()
+    if cid:
+      return cid
+    cl2 = data_obj.get("client")
+    if isinstance(cl2, dict):
+      cid = str(cl2.get("id") or "").strip()
+      if cid:
+        return cid
+
+  return ""
+
+base = str(AP.get("base_url", "") or "").strip().rstrip("/")
 org_id = str(AP.get("organization_id", "") or "").strip()
 sid = str(AP.get("studio_id", "") or "").strip()
 
 headers = {
-  "X-API-Key": AP.get("api_key", ""),
+  "X-API-Key": str(AP.get("api_key", "") or "").strip(),
   "X-Organization-Id": org_id,
   "Accept": "application/json",
   "Content-Type": "application/json",
@@ -43,30 +148,53 @@ if pj:
     body = None
 else:
   staff_user_id = str(AP.get("staff_user_id") or AP.get("staffUserId") or "").strip()
-  client_id = str(AP.get("client_id") or AP.get("clientId") or "").strip()
-  if not client_id:
-    phone = str(
-      AP.get("phone")
-      or AP.get("user_contact")
-      or AP.get("userContact")
-      or AP.get("q")
-      or ""
-    ).strip()
-    if phone and base:
+  # По требованиям Nextbot client_id определяем только через номер телефона.
+  client_id = ""
+  phone_for_lookup = ""
+  phone = str(
+    AP.get("phone")
+    or AP.get("user_contact")
+    or AP.get("userContact")
+    or AP.get("q")
+    or ""
+  ).strip()
+  if phone and base:
+    candidates = uniquePhoneCandidates(phone)
+    if len(candidates) > 0:
+      phone_for_lookup = candidates[0]
+    for candidate in candidates:
       try:
         vr = requests.get(
           base + "/nextbot/clients/verify",
           headers=headers,
-          params={"phone": phone},
+          params={"phone": candidate},
           timeout=15,
         )
         vfull = vr.json() if vr.content else {}
         if not isinstance(vfull, dict):
           vfull = {}
         if vfull.get("found"):
-          cl = vfull.get("client")
-          if isinstance(cl, dict) and cl.get("id") is not None:
-            client_id = str(cl.get("id") or "").strip()
+          client_id = extractClientIdFromVerifyResponse(vfull)
+          # Если verify вернул found=true, но не отдал id, берём id через get_referral_code.
+          if not client_id:
+            try:
+              rr = requests.get(
+                base + "/nextbot/clients/referral",
+                headers=headers,
+                params={"phone": candidate},
+                timeout=15,
+              )
+              rfull = rr.json() if rr.content else {}
+              if not isinstance(rfull, dict):
+                rfull = {}
+              cid2 = str(rfull.get("clientId") or "").strip()
+              if cid2:
+                client_id = cid2
+            except Exception:
+              pass
+          if client_id:
+            phone_for_lookup = candidate
+            break
       except Exception:
         pass
   service_id = str(AP.get("service_id") or AP.get("serviceId") or "").strip()
@@ -102,6 +230,7 @@ else:
       "prompt": "",
       "error": err,
       "missing": missing,
+      "normalizedPhone": phone_for_lookup or normalizePhone(phone_for_err),
     }
     body = None
   else:
