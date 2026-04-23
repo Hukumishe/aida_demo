@@ -313,7 +313,14 @@ export class NextbotController {
   @ApiQuery({
     name: 'serviceId',
     required: false,
-    description: 'Услуга студии — длительность слота из CRM (и override мастера)',
+    description:
+      'Услуга студии — длительность слота из CRM, фильтр мастеров по staff_services (и override мастера). ' +
+      'Альтернативно: `service_id` (snake_case) — тот же смысл.',
+  })
+  @ApiQuery({
+    name: 'service_id',
+    required: false,
+    description: 'См. serviceId (для совместимости с клиентами, шлюзами, Nextbot).',
   })
   @ApiQuery({
     name: 'durationMinutes',
@@ -330,10 +337,15 @@ export class NextbotController {
     @Query('date') date: string,
     @Query('staffUserId') staffUserId: string | undefined,
     @Query('serviceId') serviceId: string | undefined,
+    @Query('service_id') serviceIdSnake: string | undefined,
     @Query('durationMinutes') durationMinutesRaw: string | undefined,
     @Query('slotStepMinutes') slotStepMinutesRaw: string | undefined,
     @CurrentUser() user: CurrentUserPayload,
   ) {
+    const effectiveServiceId =
+      [serviceId, serviceIdSnake]
+        .map((s) => (s != null && s !== '' ? String(s).trim() : ''))
+        .find((s) => s !== '') || undefined;
     const durationMinutes =
       durationMinutesRaw !== undefined && durationMinutesRaw !== ''
         ? parseInt(durationMinutesRaw, 10)
@@ -343,7 +355,7 @@ export class NextbotController {
         ? parseInt(slotStepMinutesRaw, 10)
         : undefined;
     return this.nextbotService.availabilityRaw(studioId, date, staffUserId, user, {
-      serviceId,
+      serviceId: effectiveServiceId,
       durationMinutes:
         durationMinutes !== undefined && !Number.isNaN(durationMinutes)
           ? durationMinutes

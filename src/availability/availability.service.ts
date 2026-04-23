@@ -605,7 +605,7 @@ export class AvailabilityService {
       normal: 2,
       low: 3,
     };
-    const freeSlotsWithPriority = freeSlots.map((slot) => {
+    let freeSlotsWithPriority = freeSlots.map((slot) => {
       const s = new Date(slot.startAt).getTime();
       const e = new Date(slot.endAt).getTime();
       const sorted = apptsByStaff.get(slot.staffUserId) ?? [];
@@ -649,6 +649,13 @@ export class AvailabilityService {
         priority: 'low' as const,
       };
     });
+
+    if (eligibleStaffUserIds && eligibleStaffUserIds.length > 0) {
+      const allowed = new Set(eligibleStaffUserIds);
+      freeSlotsWithPriority = freeSlotsWithPriority.filter((s) =>
+        allowed.has(s.staffUserId),
+      );
+    }
 
     freeSlotsWithPriority.sort((a, b) => {
       const d = PRI[a.priority] - PRI[b.priority];
