@@ -12,6 +12,8 @@ import { isDeveloperRole } from '../common/decorators/roles.decorator';
 
 export interface ImportClientsOptions {
   dryRun?: boolean;
+  defaultRegistrationSource?: string;
+  overridePerRowSources?: Record<number, string>;
 }
 
 export interface ImportClientRowReport {
@@ -20,6 +22,7 @@ export interface ImportClientRowReport {
   phone?: string;
   name?: string;
   reason?: string;
+  registrationSourceResolved?: string | null;
 }
 
 export interface ImportClientsResult {
@@ -41,6 +44,7 @@ type NormalizedRow = {
   gender: ClientGender | null;
   birthDate: Date | null;
   notes: string | null;
+  registrationSource: string | null;
   bonuses: number;
   discount: number;
   balance: number;
@@ -52,10 +56,12 @@ const HEADER_ALIASES: Record<string, string> = {
   firstname: 'firstName',
   'first name': 'firstName',
   name: 'firstName',
+  'имя клиента': 'firstName',
 
   фамилия: 'lastName',
   lastname: 'lastName',
   'last name': 'lastName',
+  'фамилия клиента': 'lastName',
 
   отчество: 'patronymic',
   patronymic: 'patronymic',
@@ -71,6 +77,9 @@ const HEADER_ALIASES: Record<string, string> = {
   номер: 'phone',
   'номер телефона': 'phone',
   mobile: 'phone',
+  'мобильный номер': 'phone',
+  'номер мобильного': 'phone',
+  'телефон клиента': 'phone',
 
   'дата рождения': 'birthDate',
   'день рождения': 'birthDate',
@@ -105,6 +114,10 @@ const HEADER_ALIASES: Record<string, string> = {
   пол: 'gender',
   gender: 'gender',
   sex: 'gender',
+
+  источник: 'registrationSource',
+  source: 'registrationSource',
+  'registration source': 'registrationSource',
 };
 
 const REFERRAL_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -134,6 +147,14 @@ function parseInteger(value: unknown): number | null {
   if (!cleaned) return null;
   const num = Number(cleaned);
   return Number.isFinite(num) ? Math.round(num) : null;
+}
+
+function normalizeRegistrationSource(value: unknown): string | null | 'invalid' {
+  if (value === null || value === undefined) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (raw.length > 100) return 'invalid';
+  return raw;
 }
 
 /**
@@ -218,6 +239,33 @@ function parseLevel(value: unknown): ClientLevel | null | 'invalid' {
 export class ClientsImportService {
   constructor(private prisma: PrismaService) {}
 
+  private resolvePerRowSourceOverrides(
+    sourceMap: Record<number, string> | undefined,
+  ): Map<number, string> {
+    const out = new Map<number, string>();
+    if (!sourceMap) {
+      return out;
+    }
+    for (const [rowRaw, value] of Object.entries(sourceMap)) {
+      const rowNumber = Number(rowRaw);
+      if (!Number.isInteger(rowNumber) || rowNumber < 1) {
+        throw new BadRequestException(
+          'overridePerRowSources: ключи должны быть номерами строк Excel (целые числа >= 1)',
+        );
+      }
+      const normalized = normalizeRegistrationSource(value);
+      if (normalized === 'invalid') {
+        throw new BadRequestException(
+          `overridePerRowSources[${rowNumber}]: источник длиннее 100 символов`,
+        );
+      }
+      if (normalized) {
+        out.set(rowNumber, normalized);
+      }
+    }
+    return out;
+  }
+
   async importFromFile(
     file: Express.Multer.File,
     userRole: string | undefined,
@@ -248,6 +296,13 @@ export class ClientsImportService {
 
     const normalized: NormalizedRow[] = [];
     const details: ImportClientRowReport[] = [];
+    const defaultSource = normalizeRegistrationSource(options.defaultRegistrationSource);
+    if (defaultSource === 'invalid') {
+      throw new BadRequestException('defaultRegistrationSource длиннее 100 символов');
+    }
+    const sourceOverrides = this.resolvePerRowSourceOverrides(
+      options.overridePerRowSources,
+    );
 
     for (const row of rows) {
       const result = this.normalizeRow(row);
@@ -277,6 +332,11 @@ export class ClientsImportService {
 
     for (const row of normalized) {
       const phoneKey = row.phone; // уже нормализован
+      const sourceResolved =
+        sourceOverrides.get(row.rowNumber) ??
+        row.registrationSource ??
+        defaultSource ??
+        null;
 
       if (existingPhones.has(phoneKey) || seenInFile.has(phoneKey)) {
         skipped++;
@@ -288,6 +348,7 @@ export class ClientsImportService {
           reason: existingPhones.has(phoneKey)
             ? 'Клиент с таким телефоном уже есть в организации'
             : 'Дубликат телефона внутри файла',
+          registrationSourceResolved: sourceResolved,
         });
         continue;
       }
@@ -300,6 +361,7 @@ export class ClientsImportService {
           status: 'created',
           phone: row.phone,
           name: [row.firstName, row.lastName].filter(Boolean).join(' '),
+          registrationSourceResolved: sourceResolved,
         });
         continue;
       }
@@ -320,6 +382,7 @@ export class ClientsImportService {
           bonuses: row.bonuses,
           discount: row.discount,
           balance: row.balance,
+          registrationSource: sourceResolved ?? undefined,
           referralCode,
           ...(row.level && {
             level: row.level,
@@ -335,6 +398,7 @@ export class ClientsImportService {
           status: 'created',
           phone: row.phone,
           name: [row.firstName, row.lastName].filter(Boolean).join(' '),
+          registrationSourceResolved: sourceResolved,
         });
       } catch (err) {
         details.push({
@@ -343,6 +407,7 @@ export class ClientsImportService {
           phone: row.phone,
           name: [row.firstName, row.lastName].filter(Boolean).join(' '),
           reason: err instanceof Error ? err.message : String(err),
+          registrationSourceResolved: sourceResolved,
         });
       }
     }
@@ -429,6 +494,11 @@ export class ClientsImportService {
       const v = String(row['notes'] ?? '').trim();
       return v === '' ? null : v;
     })();
+    const registrationSource = (() => {
+      const parsed = normalizeRegistrationSource(row['registrationSource']);
+      if (parsed === 'invalid') return 'invalid' as const;
+      return parsed;
+    })();
 
     if (!firstName && !phone) {
       return { error: { row: rowNumber, status: 'error', reason: 'Строка пустая' } };
@@ -445,6 +515,17 @@ export class ClientsImportService {
           status: 'error',
           name: [firstName, lastName].filter(Boolean).join(' '),
           reason: 'Не указан телефон',
+        },
+      };
+    }
+    if (registrationSource === 'invalid') {
+      return {
+        error: {
+          row: rowNumber,
+          status: 'error',
+          phone,
+          name: [firstName, lastName].filter(Boolean).join(' '),
+          reason: 'Источник длиннее 100 символов',
         },
       };
     }
@@ -537,6 +618,7 @@ export class ClientsImportService {
         gender,
         birthDate: birthDateResult ?? null,
         notes,
+        registrationSource,
         bonuses: bonuses ?? 0,
         discount: discount ?? 0,
         balance: balance ?? 0,

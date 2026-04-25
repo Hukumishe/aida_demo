@@ -155,8 +155,10 @@ export class ClientsController {
     summary: 'Импортировать клиентов из CSV/XLSX (только DEVELOPER)',
     description:
       'Колонки: «Имя», «Фамилия», «Телефон», «Дата рождения», «Заметки», «Бонусы», «Скидка», «Баланс», «Уровень» ' +
+      'и опционально «Источник». ' +
       '(BRONZE/SILVER/GOLD/DIAMOND). Обязательные: Имя и Телефон. Клиенты с уже существующим в организации телефоном ' +
-      'пропускаются — импорт идемпотентен. `dryRun=true` — проверить файл без записи в БД.',
+      'пропускаются — импорт идемпотентен. Источник можно задать через колонку, общим defaultRegistrationSource ' +
+      'или per-row в overridePerRowSources. `dryRun=true` — проверить файл без записи в БД.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -165,6 +167,17 @@ export class ClientsController {
       required: ['file'],
       properties: {
         file: { type: 'string', format: 'binary' },
+        defaultRegistrationSource: {
+          type: 'string',
+          description:
+            'Общий источник по умолчанию для всех строк, где не задан источник в файле/overrides',
+        },
+        overridePerRowSources: {
+          type: 'string',
+          description:
+            'JSON-объект вида {"2":"Instagram","15":"Старая база"} (ключ = номер строки Excel)',
+          example: '{"2":"старая база","10":"реклама"}',
+        },
       },
     },
   })
@@ -203,6 +216,8 @@ export class ClientsController {
     @UploadedFile() file: Express.Multer.File,
     @Query('organizationId') organizationId: string | undefined,
     @Query('dryRun') dryRun: string | undefined,
+    @Body('defaultRegistrationSource') defaultRegistrationSource: string | undefined,
+    @Body('overridePerRowSources') overridePerRowSourcesRaw: string | undefined,
     @CurrentUser() user?: any,
   ) {
     if (!file) {
@@ -212,8 +227,24 @@ export class ClientsController {
     if (!orgId) {
       throw new BadRequestException('Укажите organizationId в query');
     }
+    let overridePerRowSources: Record<number, string> | undefined;
+    if (overridePerRowSourcesRaw != null && String(overridePerRowSourcesRaw).trim() !== '') {
+      try {
+        const parsed = JSON.parse(String(overridePerRowSourcesRaw));
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw new Error('not_object');
+        }
+        overridePerRowSources = parsed as Record<number, string>;
+      } catch {
+        throw new BadRequestException(
+          'overridePerRowSources должен быть валидным JSON-объектом { "rowNumber": "source" }',
+        );
+      }
+    }
     return this.clientsImportService.importFromFile(file, user?.role, orgId, {
       dryRun: dryRun === 'true' || dryRun === '1',
+      defaultRegistrationSource,
+      overridePerRowSources,
     });
   }
 
