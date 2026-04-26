@@ -23,6 +23,10 @@ export interface ImportClientRowReport {
   name?: string;
   reason?: string;
   registrationSourceResolved?: string | null;
+  /** Пол после нормализации; пусто в файле = null. */
+  gender?: ClientGender | null;
+  /** YYYY-MM-DD, дата «последний визит» из импорта. */
+  importedLastVisitAt?: string | null;
 }
 
 export interface ImportClientsResult {
@@ -162,18 +166,16 @@ function normalizeRegistrationSource(value: unknown): string | null | 'invalid' 
   return raw;
 }
 
-function buildImportMetaNote(visitsCount: number | null, lastVisitDate: Date | null): string | null {
-  const parts: string[] = [];
-  if (visitsCount !== null) {
-    parts.push(`Количество записей (старая база): ${visitsCount}`);
-  }
-  if (lastVisitDate) {
-    parts.push(`Последний визит (старая база): ${lastVisitDate.toISOString().slice(0, 10)}`);
-  }
-  if (parts.length === 0) {
+function buildImportMetaNote(visitsCount: number | null): string | null {
+  if (visitsCount === null) {
     return null;
   }
-  return parts.join('\n');
+  return `Количество записей (старая база): ${visitsCount}`;
+}
+
+function dateOnlyToIsoString(d: Date | null | undefined): string | null {
+  if (!d) return null;
+  return d.toISOString().slice(0, 10);
 }
 
 /**
@@ -224,13 +226,14 @@ function isValidDateParts(y: number, m: number, d: number): boolean {
 
 function parseGender(value: unknown): ClientGender | null | 'invalid' {
   if (value === null || value === undefined || value === '') return null;
-  const raw = String(value).trim().toLowerCase();
+  let raw = String(value).trim().toLowerCase();
+  raw = raw.replace(/\.$/, ''); // «жен.» и т.п.
   if (!raw) return null;
   if (['-', '—', 'не указано', 'unknown', 'none', 'null'].includes(raw)) return null;
   if (['m', 'male', 'муж', 'мужчина', 'мужской', 'м'].includes(raw)) {
     return ClientGender.MALE;
   }
-  if (['f', 'w', 'female', 'жен', 'женщина', 'женский', 'ж'].includes(raw)) {
+  if (['f', 'w', 'female', 'жен', 'женщина', 'женский', 'ж', 'девушка'].includes(raw)) {
     return ClientGender.FEMALE;
   }
   return 'invalid';
@@ -356,10 +359,7 @@ export class ClientsImportService {
         row.registrationSource ??
         defaultSource ??
         null;
-      const importMetaNote = buildImportMetaNote(
-        row.legacyVisitsCount,
-        row.legacyLastVisitDate,
-      );
+      const importMetaNote = buildImportMetaNote(row.legacyVisitsCount);
       const resolvedNotes = [row.notes, importMetaNote].filter(Boolean).join('\n');
 
       if (existingPhones.has(phoneKey) || seenInFile.has(phoneKey)) {
@@ -373,6 +373,8 @@ export class ClientsImportService {
             ? 'Клиент с таким телефоном уже есть в организации'
             : 'Дубликат телефона внутри файла',
           registrationSourceResolved: sourceResolved,
+          gender: row.gender,
+          importedLastVisitAt: dateOnlyToIsoString(row.legacyLastVisitDate),
         });
         continue;
       }
@@ -386,6 +388,8 @@ export class ClientsImportService {
           phone: row.phone,
           name: [row.firstName, row.lastName].filter(Boolean).join(' '),
           registrationSourceResolved: sourceResolved,
+          gender: row.gender,
+          importedLastVisitAt: dateOnlyToIsoString(row.legacyLastVisitDate),
         });
         continue;
       }
@@ -401,6 +405,7 @@ export class ClientsImportService {
           instagram: row.instagram ?? undefined,
           phone: row.phone,
           gender: row.gender ?? undefined,
+          importedLastVisitAt: row.legacyLastVisitDate ?? undefined,
           birthDate: row.birthDate ?? undefined,
           notes: resolvedNotes || undefined,
           bonuses: row.bonuses,
@@ -423,6 +428,8 @@ export class ClientsImportService {
           phone: row.phone,
           name: [row.firstName, row.lastName].filter(Boolean).join(' '),
           registrationSourceResolved: sourceResolved,
+          gender: row.gender,
+          importedLastVisitAt: dateOnlyToIsoString(row.legacyLastVisitDate),
         });
       } catch (err) {
         details.push({
@@ -432,6 +439,8 @@ export class ClientsImportService {
           name: [row.firstName, row.lastName].filter(Boolean).join(' '),
           reason: err instanceof Error ? err.message : String(err),
           registrationSourceResolved: sourceResolved,
+          gender: row.gender,
+          importedLastVisitAt: dateOnlyToIsoString(row.legacyLastVisitDate),
         });
       }
     }

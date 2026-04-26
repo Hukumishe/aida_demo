@@ -456,6 +456,8 @@ model Client {
   notes                           String?
   gender                          ClientGender? // Пол клиента: MALE / FEMALE / null (не указано)
   birthDate                       DateTime?   @db.Date // День рождения клиента
+  /// Дата последнего визита из внешнего импорта (старая база). Не пересчитывается по записям CRM.
+  importedLastVisitAt             DateTime?   @db.Date
   level                           ClientLevel @default(BRONZE)
   levelSetManually                Boolean     @default(false) // true если DIAMOND назначен вручную (только режим PRESET)
   totalPaidForLevel               Int         @default(0) // Сумма оплаченных деньгами по DONE (для расчёта уровня в PRESET; глобально по клиенту)

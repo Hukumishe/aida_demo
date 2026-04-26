@@ -860,6 +860,11 @@ export class ClientsService {
     if (data.birthDate !== undefined) {
       data.birthDate = data.birthDate ? new Date(data.birthDate) : null;
     }
+    if (data.importedLastVisitAt !== undefined) {
+      data.importedLastVisitAt = data.importedLastVisitAt
+        ? new Date(data.importedLastVisitAt)
+        : null;
+    }
 
     const nextFirstName =
       data.firstName !== undefined ? String(data.firstName) : (client.firstName ?? '');

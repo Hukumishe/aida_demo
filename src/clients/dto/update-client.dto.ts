@@ -61,6 +61,17 @@ export class UpdateClientDto {
   @IsEnum(ClientGender)
   gender?: ClientGender | null;
 
+  @ApiPropertyOptional({
+    description:
+      'Дата последнего визита из старой базы (импорт; не равна визитам в CRM). YYYY-MM-DD. null — очистить.',
+    example: '2024-12-07',
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'importedLastVisitAt must be YYYY-MM-DD' })
+  importedLastVisitAt?: string | null;
+
   @ApiProperty({ example: 'Regular client, prefers morning appointments', required: false })
   @IsString()
   @IsOptional()
