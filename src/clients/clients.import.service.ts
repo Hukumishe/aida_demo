@@ -27,6 +27,8 @@ export interface ImportClientRowReport {
   gender?: ClientGender | null;
   /** YYYY-MM-DD, дата «последний визит» из импорта. */
   importedLastVisitAt?: string | null;
+  /** Чёрный список после импорта. */
+  isBlacklisted?: boolean;
 }
 
 export interface ImportClientsResult {
@@ -55,6 +57,7 @@ type NormalizedRow = {
   discount: number;
   balance: number;
   level: ClientLevel | null;
+  isBlacklisted: boolean;
 };
 
 const HEADER_ALIASES: Record<string, string> = {
@@ -127,6 +130,13 @@ const HEADER_ALIASES: Record<string, string> = {
 
   'количество записей': 'legacyVisitsCount',
   'последний визит': 'legacyLastVisitDate',
+
+  'в черном списке': 'isBlacklisted',
+  'в чёрном списке': 'isBlacklisted',
+  'черный список': 'isBlacklisted',
+  'чёрный список': 'isBlacklisted',
+  isblacklisted: 'isBlacklisted',
+  blacklisted: 'isBlacklisted',
 };
 
 const REFERRAL_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -197,6 +207,31 @@ function buildImportMetaNote(visitsCount: number | null): string | null {
 function dateOnlyToIsoString(d: Date | null | undefined): string | null {
   if (!d) return null;
   return d.toISOString().slice(0, 10);
+}
+
+/** «Да»/«Нет» в колонке чёрного списка. Пусто = не в ЧС. */
+function parseBlacklistFlag(value: unknown): boolean | 'invalid' {
+  if (value === null || value === undefined || value === '') {
+    return false;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return 'invalid';
+  }
+  const raw = String(value).trim();
+  if (!raw) return false;
+  const lower = raw.toLowerCase();
+  if (['да', 'yes', 'y', '1', 'true', '+'].includes(lower)) {
+    return true;
+  }
+  if (['нет', 'no', 'n', '0', 'false', '-', '—', '–'].includes(lower)) {
+    return false;
+  }
+  return 'invalid';
 }
 
 /**
@@ -396,6 +431,7 @@ export class ClientsImportService {
           registrationSourceResolved: sourceResolved,
           gender: row.gender,
           importedLastVisitAt: dateOnlyToIsoString(row.legacyLastVisitDate),
+          isBlacklisted: row.isBlacklisted,
         });
         continue;
       }
@@ -411,6 +447,7 @@ export class ClientsImportService {
           registrationSourceResolved: sourceResolved,
           gender: row.gender,
           importedLastVisitAt: dateOnlyToIsoString(row.legacyLastVisitDate),
+          isBlacklisted: row.isBlacklisted,
         });
         continue;
       }
@@ -434,6 +471,8 @@ export class ClientsImportService {
           balance: row.balance,
           registrationSource: sourceResolved ?? undefined,
           referralCode,
+          isBlacklisted: row.isBlacklisted,
+          ...(row.isBlacklisted && { blacklistReason: 'Импорт из файла' }),
           ...(row.level && {
             level: row.level,
             levelSetManually: row.level === ClientLevel.DIAMOND,
@@ -451,6 +490,7 @@ export class ClientsImportService {
           registrationSourceResolved: sourceResolved,
           gender: row.gender,
           importedLastVisitAt: dateOnlyToIsoString(row.legacyLastVisitDate),
+          isBlacklisted: row.isBlacklisted,
         });
       } catch (err) {
         details.push({
@@ -462,6 +502,7 @@ export class ClientsImportService {
           registrationSourceResolved: sourceResolved,
           gender: row.gender,
           importedLastVisitAt: dateOnlyToIsoString(row.legacyLastVisitDate),
+          isBlacklisted: row.isBlacklisted,
         });
       }
     }
@@ -679,6 +720,19 @@ export class ClientsImportService {
       };
     }
 
+    const isBlacklistedRaw = parseBlacklistFlag(row['isBlacklisted']);
+    if (isBlacklistedRaw === 'invalid') {
+      return {
+        error: {
+          row: rowNumber,
+          status: 'error',
+          phone,
+          name: [firstName, lastName].filter(Boolean).join(' '),
+          reason: `Колонка «В чёрном списке»: ожидается «Да» / «Нет» или пусто (сейчас: "${row['isBlacklisted']}")`,
+        },
+      };
+    }
+
     return {
       row: {
         rowNumber,
@@ -697,6 +751,7 @@ export class ClientsImportService {
         discount: discount ?? 0,
         balance: balance ?? 0,
         level,
+        isBlacklisted: isBlacklistedRaw,
       },
     };
   }
