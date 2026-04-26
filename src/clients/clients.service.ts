@@ -493,9 +493,13 @@ export class ClientsService {
     const totalPaidForLevel = (client as any).totalPaidForLevel ?? 0;
     const { _count, ...clientData } = client as any;
 
-    const completedVisits = await this.prisma.appointment.count({
+    const visitStats = await this.prisma.appointment.aggregate({
       where: { clientId: id, status: 'DONE' },
+      _count: { _all: true },
+      _max: { startAt: true },
     });
+    const completedVisits = visitStats._count._all;
+    const lastVisitAt = visitStats._max.startAt ?? null;
     const hasReferrer = !!(client as any).referredByClientId;
     const firstVisitReferralPending =
       hasReferrer &&
@@ -651,6 +655,10 @@ export class ClientsService {
       referralCodeInputDisabled,
       referralFirstVisitDiscountApplies,
       referralFirstVisitBonusApplies,
+      /** Последний завершённый визит в CRM (max startAt по записям со статусом DONE). */
+      lastVisitAt,
+      /** Число завершённых визитов в CRM (как в списке клиентов). */
+      totalVisits: completedVisits,
     };
   }
 
