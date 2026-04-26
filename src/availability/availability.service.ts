@@ -304,13 +304,17 @@ export class AvailabilityService {
     dateInput: string,
     options: {
       staffUserId?: string;
+      /** Legacy: одна услуга, если `serviceIds` не передан */
       serviceId?: string;
+      /** Одна или несколько услуг; мастера — пересечение, длительность — сумма */
+      serviceIds?: string[];
       durationMinutes?: number;
       slotStepMinutes?: number;
     },
   ): Promise<{
     date: string;
     studioId: string;
+    serviceIds: string[];
     durationMinutes: number;
     slotStepMinutes: number;
     freeSlots: Array<{
@@ -353,50 +357,79 @@ export class AvailabilityService {
     const rawTol = studioRow.organization?.normalPriorityToleranceMinutes ?? 0;
     const normalToleranceMs = rawTol > 0 ? rawTol * 60 * 1000 : 0;
 
+    const resolvedServiceIds: string[] = (() => {
+      const fromOpt = (options.serviceIds ?? [])
+        .map((s) => String(s).trim())
+        .filter((s) => s !== '');
+      if (fromOpt.length > 0) {
+        const seen = new Set<string>();
+        return fromOpt.filter((id) => (seen.has(id) ? false : !!seen.add(id)));
+      }
+      if (options.serviceId?.trim()) {
+        return [options.serviceId.trim()];
+      }
+      return [];
+    })();
+
     let durationMinutes: number;
     let eligibleStaffUserIds: string[] | null = null;
-    if (options.serviceId?.trim()) {
-      const serviceId = options.serviceId.trim();
-      const service = await assertServiceBookableAtStudio(
-        this.prisma,
-        studioId,
-        serviceId,
-        studioRow.organizationId,
-      );
-      durationMinutes = service.defaultDurationMin;
-
-      const baseLinks = await this.prisma.staffService.findMany({
-        where: { studioId, serviceId },
-        select: { staffUserId: true },
-      });
-      const disabledOverrides = await this.prisma.staffServiceOverride.findMany({
-        where: { studioId, serviceId, isActive: false },
-        select: { staffUserId: true },
-      });
-      const disabledSet = new Set(disabledOverrides.map((x) => x.staffUserId));
-      eligibleStaffUserIds = baseLinks
-        .map((x) => x.staffUserId)
-        .filter((id) => !disabledSet.has(id));
-
-      if (options.staffUserId && !eligibleStaffUserIds.includes(options.staffUserId)) {
-        throw new BadRequestException(
-          'Selected staff does not provide this service in this studio.',
+    if (resolvedServiceIds.length > 0) {
+      durationMinutes = 0;
+      for (let i = 0; i < resolvedServiceIds.length; i++) {
+        const serviceId = resolvedServiceIds[i]!;
+        const service = await assertServiceBookableAtStudio(
+          this.prisma,
+          studioId,
+          serviceId,
+          studioRow.organizationId,
         );
+
+        const baseLinks = await this.prisma.staffService.findMany({
+          where: { studioId, serviceId },
+          select: { staffUserId: true },
+        });
+        const disabledOverrides = await this.prisma.staffServiceOverride.findMany({
+          where: { studioId, serviceId, isActive: false },
+          select: { staffUserId: true },
+        });
+        const disabledSet = new Set(disabledOverrides.map((x) => x.staffUserId));
+        const forThis = baseLinks
+          .map((x) => x.staffUserId)
+          .filter((id) => !disabledSet.has(id));
+
+        if (i === 0) {
+          eligibleStaffUserIds = forThis;
+        } else {
+          const set = new Set(forThis);
+          eligibleStaffUserIds = eligibleStaffUserIds!.filter((id) => set.has(id));
+        }
+
+        let partDuration = service.defaultDurationMin;
+        if (options.staffUserId) {
+          const ov = await this.prisma.staffServiceOverride.findUnique({
+            where: {
+              studioId_staffUserId_serviceId: {
+                studioId,
+                staffUserId: options.staffUserId,
+                serviceId,
+              },
+            },
+          });
+          if (ov?.isActive && ov.durationMin) {
+            partDuration = ov.durationMin;
+          }
+        }
+        durationMinutes += partDuration;
       }
 
-      if (options.staffUserId) {
-        const ov = await this.prisma.staffServiceOverride.findUnique({
-          where: {
-            studioId_staffUserId_serviceId: {
-              studioId,
-              staffUserId: options.staffUserId,
-              serviceId,
-            },
-          },
-        });
-        if (ov?.isActive && ov.durationMin) {
-          durationMinutes = ov.durationMin;
-        }
+      if (
+        options.staffUserId &&
+        eligibleStaffUserIds &&
+        !eligibleStaffUserIds.includes(options.staffUserId)
+      ) {
+        throw new BadRequestException(
+          'Selected staff does not provide all selected services in this studio.',
+        );
       }
     } else if (
       options.durationMinutes != null &&
@@ -406,7 +439,7 @@ export class AvailabilityService {
       durationMinutes = options.durationMinutes;
     } else {
       throw new BadRequestException(
-        'Укажите serviceId (длительность из карточки услуги и при необходимости override мастера) или durationMinutes.',
+        'Укажите serviceIds (длительности суммируются, мастера — пересечение по всем) или serviceId, либо durationMinutes.',
       );
     }
     durationMinutes = Math.min(Math.max(durationMinutes, 5), 8 * 60);
@@ -427,6 +460,7 @@ export class AvailabilityService {
         return {
           date: dateStr,
           studioId,
+          serviceIds: resolvedServiceIds,
           durationMinutes,
           slotStepMinutes: slotStep,
           freeSlots: [],
@@ -677,6 +711,7 @@ export class AvailabilityService {
     return {
       date: dateStr,
       studioId,
+      serviceIds: resolvedServiceIds,
       durationMinutes,
       slotStepMinutes: effectiveSlotStepForResponse,
       freeSlots: freeSlotsWithPriority,

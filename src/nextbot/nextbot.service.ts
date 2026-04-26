@@ -677,7 +677,8 @@ export class NextbotService {
     staffUserId: string | undefined,
     user: CurrentUserPayload,
     options?: {
-      serviceId?: string;
+      /** Список услуг (одна или несколько). Приоритет над legacy `serviceId` в compute. */
+      serviceIds?: string[];
       durationMinutes?: number;
       slotStepMinutes?: number;
     },
@@ -697,7 +698,7 @@ export class NextbotService {
 
     const slots = await this.availabilityService.computeNextbotFreeSlots(studioId, date, {
       staffUserId: effectiveStaffId ?? undefined,
-      serviceId: options?.serviceId,
+      serviceIds: options?.serviceIds,
       durationMinutes: options?.durationMinutes,
       slotStepMinutes: options?.slotStepMinutes,
     });

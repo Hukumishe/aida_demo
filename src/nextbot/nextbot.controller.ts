@@ -25,6 +25,7 @@ import {
   CurrentUserPayload,
 } from '../common/decorators/current-user.decorator';
 import { NextbotService } from './nextbot.service';
+import { collectServiceIdList } from './nextbot-service-ids.util';
 import { CreateClientDto } from '../clients/dto/create-client.dto';
 import { UpdateClientDto } from '../clients/dto/update-client.dto';
 import { CreateAppointmentDto } from '../appointments/dto/create-appointment.dto';
@@ -306,16 +307,29 @@ export class NextbotController {
   @ApiOperation({
     summary: 'check_availability',
     description:
-      'Свободные слоты (freeSlots) и текст промпта для ИИ (поле check_availability). Опционально serviceId для длительности услуги.',
+      'Свободные слоты (freeSlots) и текст промпта для ИИ (поле check_availability). ' +
+      'Передайте `serviceIds` (одна или несколько услуг) или legacy `serviceId` / `durationMinutes`. ' +
+      'В теле ответа всегда есть `serviceIds` (массив id).',
   })
   @ApiQuery({ name: 'date', required: true, description: 'YYYY-MM-DD' })
   @ApiQuery({ name: 'staffUserId', required: false })
   @ApiQuery({
+    name: 'serviceIds',
+    required: false,
+    description:
+      'Одна или несколько услуг: повтор параметра, либо CSV `id1,id2`. Мастера — пересечение по всем услугам; ' +
+      'длительность — сумма (с override мастера по каждой услуге при заданном staffUserId).',
+  })
+  @ApiQuery({
+    name: 'service_ids',
+    required: false,
+    description: 'См. serviceIds (snake_case).',
+  })
+  @ApiQuery({
     name: 'serviceId',
     required: false,
     description:
-      'Услуга студии — длительность слота из CRM, фильтр мастеров по staff_services (и override мастера). ' +
-      'Альтернативно: `service_id` (snake_case) — тот же смысл.',
+      'Legacy: одна услуга (если serviceIds не передан). Длительность из CRM, фильтр мастеров по staff_services.',
   })
   @ApiQuery({
     name: 'service_id',
@@ -336,16 +350,20 @@ export class NextbotController {
     @Param('studioId') studioId: string,
     @Query('date') date: string,
     @Query('staffUserId') staffUserId: string | undefined,
+    @Query('serviceIds') serviceIds: string | string[] | undefined,
+    @Query('service_ids') serviceIdsSnake: string | string[] | undefined,
     @Query('serviceId') serviceId: string | undefined,
     @Query('service_id') serviceIdSnake: string | undefined,
     @Query('durationMinutes') durationMinutesRaw: string | undefined,
     @Query('slotStepMinutes') slotStepMinutesRaw: string | undefined,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    const effectiveServiceId =
-      [serviceId, serviceIdSnake]
-        .map((s) => (s != null && s !== '' ? String(s).trim() : ''))
-        .find((s) => s !== '') || undefined;
+    const serviceIdList = collectServiceIdList(
+      serviceIds,
+      serviceIdsSnake,
+      serviceId,
+      serviceIdSnake,
+    );
     const durationMinutes =
       durationMinutesRaw !== undefined && durationMinutesRaw !== ''
         ? parseInt(durationMinutesRaw, 10)
@@ -355,7 +373,7 @@ export class NextbotController {
         ? parseInt(slotStepMinutesRaw, 10)
         : undefined;
     return this.nextbotService.availabilityRaw(studioId, date, staffUserId, user, {
-      serviceId: effectiveServiceId,
+      serviceIds: serviceIdList.length > 0 ? serviceIdList : undefined,
       durationMinutes:
         durationMinutes !== undefined && !Number.isNaN(durationMinutes)
           ? durationMinutes

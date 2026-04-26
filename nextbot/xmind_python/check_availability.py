@@ -1,10 +1,12 @@
 # xmind: check_availability
 # HTTP: GET {base_url}/nextbot/studios/{studio_id}/availability-raw
-# Query: date (YYYY-MM-DD), serviceId (обязателен), staffUserId (опционально).
-# durationMinutes и slotStepMinutes в query не передаём — сервер считает по услуге.
+# Query: date (YYYY-MM-DD), serviceIds (обязательны: одна или несколько), staffUserId (опционально).
+# В query: serviceIds= id или serviceIds= id1,id2 (или повторы параметра). Legacy: serviceId.
+# durationMinutes и slotStepMinutes в query не передаём — сервер считает по услугам.
 #
-# Args: base_url, api_key, organization_id, studio_id, date, serviceId (или service_id);
-# опционально staffUserId (или staff_user_id).
+# Args: base_url, api_key, organization_id, studio_id, date,
+#       serviceIds (рекомендуется) ИЛИ serviceId / service_id;
+#       опционально staffUserId (или staff_user_id).
 # result: ok, status, data { durationMinutes, freeSlots[] }, prompt
 # У каждого элемента freeSlots: staffUserId, staffName, startAt, endAt,
 # priority (exact|high|normal|low).
@@ -25,6 +27,55 @@ except NameError:
 if AP is None:
   AP = {}
 
+import json
+
+def coalesceServiceIds():
+  out = []
+  for key in (
+    "serviceIds",
+    "ServiceIds",
+    "service_ids",
+    "service_id_list",
+    "serviceIdList",
+  ):
+    raw = AP.get(key)
+    if raw is None or raw == "":
+      continue
+    if isinstance(raw, (list, tuple)):
+      for x in raw:
+        s = str(x).strip()
+        if s:
+          out.append(s)
+    else:
+      text = str(raw).strip()
+      if text.startswith("["):
+        try:
+          j = json.loads(text)
+          if isinstance(j, list):
+            for x in j:
+              s = str(x).strip()
+              if s:
+                out.append(s)
+        except Exception:
+          if text.startswith("[") and text.endswith("]"):
+            text = text[1:-1]
+          for p in text.split(","):
+            s = p.strip().strip("'").strip('"')
+            if s:
+              out.append(s)
+      else:
+        for p in text.split(","):
+          s = p.strip().strip("'").strip('"')
+          if s:
+            out.append(s)
+    if out:
+      return out
+  single = str(AP.get("serviceId") or AP.get("service_id") or "").strip()
+  if single:
+    return [single]
+  return []
+
+
 DEFAULT_PROMPT = (
   "СИСТЕМНОЕ СООБЩЕНИЕ: exact — щель под длительность услуги (±5 мин); "
   "high — слот целиком внутри «плотного» окна между двумя подряд записями одного мастера "
@@ -39,7 +90,7 @@ base = str(AP.get("base_url") or AP.get("baseUrl") or "").rstrip("/")
 org_id = str(AP.get("organization_id") or AP.get("organizationId") or "").strip()
 sid = str(AP.get("studio_id") or AP.get("studioId") or "").strip()
 date = str(AP.get("date") or "").strip()
-service_id = str(AP.get("serviceId") or AP.get("service_id") or "").strip()
+service_id_list = coalesceServiceIds()
 staff_uid = str(AP.get("staffUserId") or AP.get("staff_user_id") or "").strip()
 
 headers = {
@@ -80,18 +131,18 @@ elif not date:
     "prompt": "",
     "error": "missing_date",
   }
-elif not service_id:
+elif not service_id_list:
   result = {
     "ok": False,
     "status": 0,
     "data": None,
     "prompt": "",
-    "error": "missing_service_id",
+    "error": "missing_service_ids",
   }
 else:
   params = {
     "date": date,
-    "serviceId": service_id,
+    "serviceIds": ",".join(service_id_list),
   }
   if staff_uid:
     params["staffUserId"] = staff_uid
@@ -117,9 +168,16 @@ else:
     if not isinstance(slots, list):
       slots = []
 
+    resp_ids = full.get("serviceIds")
+    if not isinstance(resp_ids, list) or not resp_ids:
+      resp_ids = service_id_list
+    else:
+      resp_ids = [str(x).strip() for x in resp_ids if str(x).strip()]
+
     slim = {
       "durationMinutes": full.get("durationMinutes"),
       "freeSlots": slots,
+      "serviceIds": resp_ids,
     }
 
     if r.ok and r.status_code == 200:

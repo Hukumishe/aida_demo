@@ -44,6 +44,8 @@ type NormalizedRow = {
   gender: ClientGender | null;
   birthDate: Date | null;
   notes: string | null;
+  legacyVisitsCount: number | null;
+  legacyLastVisitDate: Date | null;
   registrationSource: string | null;
   bonuses: number;
   discount: number;
@@ -118,6 +120,9 @@ const HEADER_ALIASES: Record<string, string> = {
   источник: 'registrationSource',
   source: 'registrationSource',
   'registration source': 'registrationSource',
+
+  'количество записей': 'legacyVisitsCount',
+  'последний визит': 'legacyLastVisitDate',
 };
 
 const REFERRAL_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -155,6 +160,20 @@ function normalizeRegistrationSource(value: unknown): string | null | 'invalid' 
   if (!raw) return null;
   if (raw.length > 100) return 'invalid';
   return raw;
+}
+
+function buildImportMetaNote(visitsCount: number | null, lastVisitDate: Date | null): string | null {
+  const parts: string[] = [];
+  if (visitsCount !== null) {
+    parts.push(`Количество записей (старая база): ${visitsCount}`);
+  }
+  if (lastVisitDate) {
+    parts.push(`Последний визит (старая база): ${lastVisitDate.toISOString().slice(0, 10)}`);
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  return parts.join('\n');
 }
 
 /**
@@ -337,6 +356,11 @@ export class ClientsImportService {
         row.registrationSource ??
         defaultSource ??
         null;
+      const importMetaNote = buildImportMetaNote(
+        row.legacyVisitsCount,
+        row.legacyLastVisitDate,
+      );
+      const resolvedNotes = [row.notes, importMetaNote].filter(Boolean).join('\n');
 
       if (existingPhones.has(phoneKey) || seenInFile.has(phoneKey)) {
         skipped++;
@@ -378,7 +402,7 @@ export class ClientsImportService {
           phone: row.phone,
           gender: row.gender ?? undefined,
           birthDate: row.birthDate ?? undefined,
-          notes: row.notes ?? undefined,
+          notes: resolvedNotes || undefined,
           bonuses: row.bonuses,
           discount: row.discount,
           balance: row.balance,
@@ -494,6 +518,8 @@ export class ClientsImportService {
       const v = String(row['notes'] ?? '').trim();
       return v === '' ? null : v;
     })();
+    const legacyVisitsCount = parseInteger(row['legacyVisitsCount']);
+    const legacyLastVisitDateResult = parseBirthDate(row['legacyLastVisitDate']);
     const registrationSource = (() => {
       const parsed = normalizeRegistrationSource(row['registrationSource']);
       if (parsed === 'invalid') return 'invalid' as const;
@@ -526,6 +552,28 @@ export class ClientsImportService {
           phone,
           name: [firstName, lastName].filter(Boolean).join(' '),
           reason: 'Источник длиннее 100 символов',
+        },
+      };
+    }
+    if (legacyVisitsCount !== null && legacyVisitsCount < 0) {
+      return {
+        error: {
+          row: rowNumber,
+          status: 'error',
+          phone,
+          name: [firstName, lastName].filter(Boolean).join(' '),
+          reason: 'Количество записей не может быть отрицательным',
+        },
+      };
+    }
+    if (legacyLastVisitDateResult === 'invalid') {
+      return {
+        error: {
+          row: rowNumber,
+          status: 'error',
+          phone,
+          name: [firstName, lastName].filter(Boolean).join(' '),
+          reason: `Некорректная дата последнего визита: "${row['legacyLastVisitDate']}"`,
         },
       };
     }
@@ -618,6 +666,8 @@ export class ClientsImportService {
         gender,
         birthDate: birthDateResult ?? null,
         notes,
+        legacyVisitsCount,
+        legacyLastVisitDate: legacyLastVisitDateResult ?? null,
         registrationSource,
         bonuses: bonuses ?? 0,
         discount: discount ?? 0,
