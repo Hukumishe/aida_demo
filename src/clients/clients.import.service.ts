@@ -149,6 +149,27 @@ function normalizePhone(value: unknown): string {
   return (hasPlus ? '+' : '') + digits;
 }
 
+/** Плейсхолдеры «нет фамилии/отчества» в выгрузках: прочерк, тире, н/д. */
+function normalizeOptionalNamePart(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const v = String(value).trim();
+  if (!v) return null;
+  const lower = v.toLowerCase();
+  if (
+    v === '-' ||
+    v === '—' ||
+    v === '–' ||
+    lower === 'нет' ||
+    lower === 'н/д' ||
+    lower === 'н.д.' ||
+    lower === 'n/a' ||
+    lower === 'na'
+  ) {
+    return null;
+  }
+  return v;
+}
+
 function parseInteger(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'number') return Number.isFinite(value) ? Math.round(value) : null;
@@ -510,14 +531,8 @@ export class ClientsImportService {
         : 0;
 
     const firstName = String(row['firstName'] ?? '').trim();
-    const lastName = (() => {
-      const v = String(row['lastName'] ?? '').trim();
-      return v === '' ? null : v;
-    })();
-    const patronymic = (() => {
-      const v = String(row['patronymic'] ?? '').trim();
-      return v === '' ? null : v;
-    })();
+    const lastName = normalizeOptionalNamePart(row['lastName']);
+    const patronymic = normalizeOptionalNamePart(row['patronymic']);
     const instagram = (() => {
       const v = String(row['instagram'] ?? '').trim();
       return v === '' ? null : v;
