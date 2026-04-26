@@ -58,6 +58,8 @@ type NormalizedRow = {
   balance: number;
   level: ClientLevel | null;
   isBlacklisted: boolean;
+  /** Текст из скобок в «В чёрном списке», напр. «Да (Псевдоюрист)» → в blacklistReason. */
+  blacklistImportHint: string | null;
 };
 
 const HEADER_ALIASES: Record<string, string> = {
@@ -209,7 +211,12 @@ function dateOnlyToIsoString(d: Date | null | undefined): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-/** «Да»/«Нет» в колонке чёрного списка. Пусто = не в ЧС. */
+const BLACKLIST_IMPORT_REASON_MAX = 500;
+
+/**
+ * «Да»/«Нет» в колонке чёрного списка. Пусто = не в ЧС.
+ * Поддерживает «Да (причина)» / «Нет (комментарий)» — для парса берётся только часть до «(».
+ */
 function parseBlacklistFlag(value: unknown): boolean | 'invalid' {
   if (value === null || value === undefined || value === '') {
     return false;
@@ -222,8 +229,15 @@ function parseBlacklistFlag(value: unknown): boolean | 'invalid' {
     if (value === 0) return false;
     return 'invalid';
   }
-  const raw = String(value).trim();
+  let raw = String(value).trim();
   if (!raw) return false;
+  const open = raw.indexOf('(');
+  if (open > 0) {
+    raw = raw.substring(0, open).trim();
+  }
+  if (!raw) {
+    return false;
+  }
   const lower = raw.toLowerCase();
   if (['да', 'yes', 'y', '1', 'true', '+'].includes(lower)) {
     return true;
@@ -232,6 +246,20 @@ function parseBlacklistFlag(value: unknown): boolean | 'invalid' {
     return false;
   }
   return 'invalid';
+}
+
+/** Первый фрагмент в скобках, для подстановки в blacklistReason. */
+function extractBlacklistParenthetical(value: string): string | null {
+  const t = value.trim();
+  const open = t.indexOf('(');
+  if (open < 0) return null;
+  const close = t.indexOf(')', open);
+  if (close <= open) return null;
+  const inner = t.slice(open + 1, close).trim();
+  if (!inner) return null;
+  return inner.length > BLACKLIST_IMPORT_REASON_MAX
+    ? inner.slice(0, BLACKLIST_IMPORT_REASON_MAX) + '…'
+    : inner;
 }
 
 /**
@@ -472,7 +500,11 @@ export class ClientsImportService {
           registrationSource: sourceResolved ?? undefined,
           referralCode,
           isBlacklisted: row.isBlacklisted,
-          ...(row.isBlacklisted && { blacklistReason: 'Импорт из файла' }),
+          ...(row.isBlacklisted && {
+            blacklistReason: row.blacklistImportHint
+              ? `Импорт: ${row.blacklistImportHint}`.slice(0, 2000)
+              : 'Импорт из файла',
+          }),
           ...(row.level && {
             level: row.level,
             levelSetManually: row.level === ClientLevel.DIAMOND,
@@ -583,7 +615,11 @@ export class ClientsImportService {
       const v = String(row['notes'] ?? '').trim();
       return v === '' ? null : v;
     })();
-    const legacyVisitsCount = parseInteger(row['legacyVisitsCount']);
+    let legacyVisitsCount = parseInteger(row['legacyVisitsCount']);
+    // В выгрузках пустая ячейка иногда уходит в Excel как -1; трактуем как «не указано».
+    if (legacyVisitsCount !== null && legacyVisitsCount < 0) {
+      legacyVisitsCount = null;
+    }
     const legacyLastVisitDateResult = parseBirthDate(row['legacyLastVisitDate']);
     const registrationSource = (() => {
       const parsed = normalizeRegistrationSource(row['registrationSource']);
@@ -617,17 +653,6 @@ export class ClientsImportService {
           phone,
           name: [firstName, lastName].filter(Boolean).join(' '),
           reason: 'Источник длиннее 100 символов',
-        },
-      };
-    }
-    if (legacyVisitsCount !== null && legacyVisitsCount < 0) {
-      return {
-        error: {
-          row: rowNumber,
-          status: 'error',
-          phone,
-          name: [firstName, lastName].filter(Boolean).join(' '),
-          reason: 'Количество записей не может быть отрицательным',
         },
       };
     }
@@ -728,10 +753,13 @@ export class ClientsImportService {
           status: 'error',
           phone,
           name: [firstName, lastName].filter(Boolean).join(' '),
-          reason: `Колонка «В чёрном списке»: ожидается «Да» / «Нет» или пусто (сейчас: "${row['isBlacklisted']}")`,
+          reason: `Колонка «В чёрном списке»: ожидается «Да» / «Нет» или пусто; допускается «Да (причина)» (сейчас: "${row['isBlacklisted']}")`,
         },
       };
     }
+    const blacklistImportHint = isBlacklistedRaw
+      ? extractBlacklistParenthetical(String(row['isBlacklisted'] ?? ''))
+      : null;
 
     return {
       row: {
@@ -752,6 +780,7 @@ export class ClientsImportService {
         balance: balance ?? 0,
         level,
         isBlacklisted: isBlacklistedRaw,
+        blacklistImportHint,
       },
     };
   }
