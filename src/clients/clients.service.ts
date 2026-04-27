@@ -19,8 +19,14 @@ import {
   nextMilestoneProgress,
   resolveAutoTierForTotalPaid,
 } from '../common/loyalty/studio-loyalty.util';
-import { ClientLevel, StudioLoyaltyMode } from '@prisma/client';
+import { ClientLevel, Prisma, StudioLoyaltyMode } from '@prisma/client';
 import * as crypto from 'crypto';
+import {
+  ClientListQueryParams,
+  ClientListSegment,
+  ClientsPaginatedResponse,
+} from './client-list-paginate.types';
+import { escapeIlikeUserInput, onlyDigits } from './client-list-paginate.util';
 import {
   assertReferralCodeIsNotLandingPromo,
   findReferrerByClientReferralCode,
@@ -111,12 +117,30 @@ export class ClientsService {
   /**
    * Список клиентов организации. Путь без studioId — контекст организации из JWT / X-Organization-Id.
    * Query organizationId — только для роли DEVELOPER (другая организация).
+   *
+   * `list` задан: серверная пагинация, ответ `{ items, total, limit, offset }` (тот же `ApiClient` в items).
+   * `list` не задан: прежний контракт — **массив** (все клиенты, несмотря на размер; для `q` — фильтр).
    */
   async findAll(
     query?: string,
     userRole?: string,
     userOrganizationId?: string,
     organizationIdQuery?: string,
+    list?: never,
+  ): Promise<any[]>;
+  async findAll(
+    query: string | undefined,
+    userRole: string | undefined,
+    userOrganizationId: string | undefined,
+    organizationIdQuery: string | undefined,
+    list: ClientListQueryParams,
+  ): Promise<ClientsPaginatedResponse>;
+  async findAll(
+    query?: string,
+    userRole?: string,
+    userOrganizationId?: string,
+    organizationIdQuery?: string,
+    list?: ClientListQueryParams,
   ) {
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       if (userRole === UserRole.MASTER) {
@@ -129,6 +153,10 @@ export class ClientsService {
       userOrganizationId,
       organizationIdQuery,
     );
+
+    if (list) {
+      return this.findAllPaginated(organizationId, list);
+    }
 
     const where: Record<string, unknown> = {
       isBlacklisted: false,
@@ -162,8 +190,152 @@ export class ClientsService {
       },
     });
 
-    if (clients.length === 0) return clients;
+    return this.attachVisitStatsToClients(clients);
+  }
 
+  private async findAllPaginated(
+    organizationId: string,
+    list: ClientListQueryParams,
+  ): Promise<ClientsPaginatedResponse> {
+    const now = new Date();
+    const v7d = new Date(now);
+    v7d.setDate(v7d.getDate() - 7);
+    const v6m = new Date(now);
+    v6m.setMonth(v6m.getMonth() - 6);
+
+    const whereSearch = this.clientListBuildSearchFilter(list.q);
+    const whereSegment = this.clientListBuildSegmentFilter(list.segment, v7d, v6m);
+    const orderBy = this.clientListBuildOrderBy(list.sort);
+    const limit = list.limit;
+    const offset = list.offset;
+
+    const countRows = await this.prisma.$queryRaw<[{ c: bigint }]>(Prisma.sql`
+      WITH last_done AS (
+        SELECT a."clientId" AS client_id, MAX(a."startAt") AS lastv
+        FROM appointments a
+        WHERE a."status" = 'DONE'::"AppointmentStatus"
+        GROUP BY a."clientId"
+      )
+      SELECT COUNT(*)::bigint AS c
+      FROM "clients" c
+      LEFT JOIN last_done l ON l.client_id = c.id
+      WHERE
+        c."organizationId" = ${organizationId}
+        AND c."isBlacklisted" = false
+        AND (${whereSearch})
+        ${whereSegment}
+    `);
+    const total = Number(countRows[0]?.c ?? 0n);
+
+    const pageRows = await this.prisma.$queryRaw<Array<{ id: string; lastv: Date | null }>>(
+      Prisma.sql`
+      WITH last_done AS (
+        SELECT a."clientId" AS client_id, MAX(a."startAt") AS lastv
+        FROM appointments a
+        WHERE a."status" = 'DONE'::"AppointmentStatus"
+        GROUP BY a."clientId"
+      )
+      SELECT c.id, l.lastv
+      FROM "clients" c
+      LEFT JOIN last_done l ON l.client_id = c.id
+      WHERE
+        c."organizationId" = ${organizationId}
+        AND c."isBlacklisted" = false
+        AND (${whereSearch})
+        ${whereSegment}
+      ORDER BY ${orderBy}
+      LIMIT ${limit} OFFSET ${offset}
+    `,
+    );
+
+    const idOrder: string[] = pageRows.map((r) => r.id);
+
+    if (idOrder.length === 0) {
+      return { items: [], total, limit, offset };
+    }
+
+    const clients = await this.prisma.client.findMany({
+      where: { id: { in: idOrder } },
+      include: {
+        referredByClient: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            referralCode: true,
+          },
+        },
+      },
+    });
+    const pos = new Map(idOrder.map((id, i) => [id, i]));
+    clients.sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0));
+
+    const items = await this.attachVisitStatsToClients(clients);
+    return { items, total, limit, offset };
+  }
+
+  private clientListBuildSearchFilter(q: string): Prisma.Sql {
+    const t = (q ?? '').trim();
+    if (!t) {
+      return Prisma.sql`TRUE`;
+    }
+    const like = '%' + escapeIlikeUserInput(t) + '%';
+    const digits = onlyDigits(t);
+    if (digits.length > 0) {
+      const dLike = '%' + digits + '%';
+      return Prisma.sql`(
+        c."firstName" ILIKE ${like} OR
+        c."lastName" ILIKE ${like} OR
+        c."patronymic" ILIKE ${like} OR
+        c."phone" ILIKE ${like} OR
+        regexp_replace(c."phone", '[^0-9]', '', 'g') ILIKE ${dLike}
+      )`;
+    }
+    return Prisma.sql`(
+      c."firstName" ILIKE ${like} OR
+      c."lastName" ILIKE ${like} OR
+      c."patronymic" ILIKE ${like} OR
+      c."phone" ILIKE ${like}
+    )`;
+  }
+
+  private clientListBuildSegmentFilter(
+    segment: string | null,
+    v7d: Date,
+    v6m: Date,
+  ): Prisma.Sql {
+    if (segment == null) {
+      return Prisma.empty;
+    }
+    if (segment === ClientListSegment.VIP) {
+      return Prisma.sql`AND c."level"::text = 'DIAMOND'`;
+    }
+    if (segment === ClientListSegment.LOST) {
+      return Prisma.sql`AND (l.lastv IS NULL OR l.lastv < ${v6m})`;
+    }
+    if (segment === ClientListSegment.NEW) {
+      return Prisma.sql`AND c."createdAt" >= ${v7d}`;
+    }
+    if (segment === ClientListSegment.REGULAR) {
+      return Prisma.sql`AND c."level"::text IN ('BRONZE', 'SILVER', 'GOLD') AND l.lastv IS NOT NULL AND l.lastv < ${v7d} AND l.lastv >= ${v6m}`;
+    }
+    return Prisma.empty;
+  }
+
+  private clientListBuildOrderBy(sort: string): Prisma.Sql {
+    if (sort === 'createdAt:desc') {
+      return Prisma.sql`c."createdAt" DESC`;
+    }
+    if (sort === 'firstName:asc') {
+      return Prisma.sql`c."firstName" ASC NULLS LAST, c."lastName" ASC NULLS LAST`;
+    }
+    return Prisma.sql`l.lastv DESC NULLS LAST, c."createdAt" DESC`;
+  }
+
+  private async attachVisitStatsToClients(clients: any[]) {
+    if (clients.length === 0) {
+      return [];
+    }
     const clientIds = clients.map((c) => c.id);
     const visitStats = await this.prisma.appointment.groupBy({
       by: ['clientId'],
@@ -180,7 +352,6 @@ export class ClientsService {
         { totalVisits: s._count, lastVisitAt: s._max.startAt ?? null },
       ]),
     );
-
     return clients.map((client) => {
       const stats = statsByClient.get(client.id) ?? { totalVisits: 0, lastVisitAt: null };
       return {

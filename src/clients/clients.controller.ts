@@ -32,6 +32,14 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles, UserRole } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import {
+  shouldUseClientsPagedResponse,
+  parseClientsSort,
+  parseClientListSegment,
+  parsePageLimit,
+  parseNonNegativeInt,
+  CLIENT_LIST_DEFAULT_SORT,
+} from './client-list-paginate.util';
 
 @ApiTags('clients')
 @Controller('clients')
@@ -44,20 +52,73 @@ export class ClientsController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all clients for the organization' })
-  @ApiQuery({ name: 'q', required: false, description: 'Search query' })
+  @ApiOperation({
+    summary: 'Get all clients for the organization',
+    description:
+      'Без `limit`/`offset`/`q`/`sort`/`segment` — **массив** (полный список, обратная совместимость). ' +
+      'С любым из этих query-параметров — объект **{ items, total, limit, offset }** (серверная пагинация). ' +
+      'Сегмент: VIP = DIAMOND, LOST = нет визита или &gt;6 мес, NEW = created за 7 дн, REGULAR = BRONZE/SILVER/GOLD, последний визит 1–6 мес.',
+  })
+  @ApiQuery({ name: 'q', required: false, description: 'Поиск по имени, фамилии, отчеству, телефону' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Размер страницы 1..100, по умолчанию 20 (только пагинированный режим)',
+  })
+  @ApiQuery({ name: 'offset', required: false, description: 'Смещение, по умолчанию 0' })
+  @ApiQuery({
+    name: 'sort',
+    required: false,
+    description: 'lastVisitAt:desc (по умолчанию) | createdAt:desc | firstName:asc',
+  })
+  @ApiQuery({ name: 'segment', required: false, description: 'NEW | REGULAR | VIP | LOST' })
   @ApiQuery({
     name: 'organizationId',
     required: false,
     description: 'Только DEVELOPER: список клиентов указанной организации',
   })
-  @ApiResponse({ status: 200, description: 'List of clients' })
+  @ApiResponse({
+    status: 200,
+    description: 'Список клиентов: массив (legacy) или { items, total, limit, offset }',
+  })
+  @ApiResponse({ status: 400, description: 'Неверный segment' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAll(
     @Query('q') query?: string,
+    @Query('limit') limitStr?: string,
+    @Query('offset') offsetStr?: string,
+    @Query('sort') sortStr?: string,
+    @Query('segment') segmentStr?: string,
     @Query('organizationId') organizationId?: string,
     @CurrentUser() user?: any,
   ) {
+    const paged = shouldUseClientsPagedResponse({
+      limitStr,
+      offsetStr,
+      q: query,
+      sortStr,
+      segmentStr,
+    });
+    if (paged) {
+      const segRaw = segmentStr != null && String(segmentStr).trim() !== '' ? String(segmentStr).trim() : undefined;
+      const segParsed = parseClientListSegment(segRaw);
+      if (segRaw && segParsed == null) {
+        throw new BadRequestException('segment: ожидается NEW, REGULAR, VIP или LOST');
+      }
+      return this.clientsService.findAll(
+        undefined,
+        user?.role,
+        user?.organizationId,
+        organizationId,
+        {
+          limit: parsePageLimit(limitStr, 20),
+          offset: parseNonNegativeInt(offsetStr, 0),
+          q: query != null && query !== undefined ? String(query) : '',
+          sort: parseClientsSort(sortStr, CLIENT_LIST_DEFAULT_SORT),
+          segment: segParsed,
+        },
+      );
+    }
     return this.clientsService.findAll(
       query,
       user?.role,

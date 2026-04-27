@@ -89,6 +89,61 @@ def uniquePhoneCandidates(rawPhone):
   return candidates
 
 
+def coalesceServiceIds(ap):
+  """
+  Совместимость для новой логики serviceIds/service_ids:
+  - список/кортеж
+  - JSON-массив в строке
+  - CSV-строка
+  - legacy serviceId/service_id
+  """
+  out = []
+  for key in (
+    "serviceIds",
+    "ServiceIds",
+    "service_ids",
+    "service_id_list",
+    "serviceIdList",
+  ):
+    raw = ap.get(key)
+    if raw is None or raw == "":
+      continue
+    if isinstance(raw, (list, tuple)):
+      for x in raw:
+        s = str(x).strip()
+        if s:
+          out.append(s)
+    else:
+      text = str(raw).strip()
+      if text.startswith("["):
+        try:
+          j = json.loads(text)
+          if isinstance(j, list):
+            for x in j:
+              s = str(x).strip()
+              if s:
+                out.append(s)
+        except Exception:
+          if text.startswith("[") and text.endswith("]"):
+            text = text[1:-1]
+          for p in text.split(","):
+            s = p.strip().strip("'").strip('"')
+            if s:
+              out.append(s)
+      else:
+        for p in text.split(","):
+          s = p.strip().strip("'").strip('"')
+          if s:
+            out.append(s)
+    if out:
+      return out
+
+  single = str(ap.get("service_id") or ap.get("serviceId") or "").strip()
+  if single:
+    return [single]
+  return []
+
+
 def extractClientIdFromVerifyResponse(payload):
   """
   Бэкенд verify может вернуть разные формы:
@@ -197,7 +252,8 @@ else:
             break
       except Exception:
         pass
-  service_id = str(AP.get("service_id") or AP.get("serviceId") or "").strip()
+  service_ids = coalesceServiceIds(AP)
+  service_id = service_ids[0] if len(service_ids) > 0 else ""
   start_at = str(AP.get("start_at") or AP.get("startAt") or "").strip()
   if not staff_user_id or not client_id or not service_id or not start_at:
     missing = []

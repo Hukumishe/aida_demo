@@ -7,7 +7,9 @@
 # Args: base_url, api_key, organization_id, studio_id, date,
 #       serviceIds (рекомендуется) ИЛИ serviceId / service_id;
 #       опционально staffUserId (или staff_user_id).
-# result: ok, status, data { durationMinutes, freeSlots[] }, prompt
+# Имена в args: snake_case или camelCase (Nextbot) — как в create_booking_request.
+#
+# result: ok, status, data { durationMinutes, freeSlots[], serviceIds[] }, prompt
 # У каждого элемента freeSlots: staffUserId, staffName, startAt, endAt,
 # priority (exact|high|normal|low).
 # exact — щель ≈ длительности услуги (±5 мин); при услуге <30 мин иначе сетка 30 мин.
@@ -19,6 +21,8 @@
 #          допуска от конца записи (по умолчанию 0 — строго впритык). Слот не пересекается
 #          с записью. НЕ попадает в high.
 # low — всё остальное.
+#
+# Среда Nextbot: json.loads / json.dumps и requests — без import (см. xmind_python/README.md).
 
 try:
   AP = args
@@ -27,9 +31,23 @@ except NameError:
 if AP is None:
   AP = {}
 
-import json
 
-def coalesceServiceIds():
+def str_first(ap, *keys):
+  """Первый непустой строковый аргумент по списку ключей (snake + camel), как a or b or ..."""
+  for k in keys:
+    v = ap.get(k)
+    if v is None:
+      continue
+    s = str(v).strip()
+    if s:
+      return s
+  return ""
+
+
+def coalesce_service_ids(ap):
+  """
+  Собирает список id услуг: serviceIds (строка/список/JSON-массив) или единичный serviceId.
+  """
   out = []
   for key in (
     "serviceIds",
@@ -38,7 +56,7 @@ def coalesceServiceIds():
     "service_id_list",
     "serviceIdList",
   ):
-    raw = AP.get(key)
+    raw = ap.get(key)
     if raw is None or raw == "":
       continue
     if isinstance(raw, (list, tuple)):
@@ -70,10 +88,20 @@ def coalesceServiceIds():
             out.append(s)
     if out:
       return out
-  single = str(AP.get("serviceId") or AP.get("service_id") or "").strip()
+  single = str_first(ap, "serviceId", "service_id")
   if single:
     return [single]
   return []
+
+
+def fail_result(error_code, status_code=0, prompt=""):
+  return {
+    "ok": False,
+    "status": status_code,
+    "data": None,
+    "prompt": prompt,
+    "error": error_code,
+  }
 
 
 DEFAULT_PROMPT = (
@@ -86,59 +114,31 @@ DEFAULT_PROMPT = (
   "Предлагай exact и high в первую очередь, затем normal. Не выдумывай слоты вне freeSlots."
 )
 
-base = str(AP.get("base_url") or AP.get("baseUrl") or "").rstrip("/")
-org_id = str(AP.get("organization_id") or AP.get("organizationId") or "").strip()
-sid = str(AP.get("studio_id") or AP.get("studioId") or "").strip()
-date = str(AP.get("date") or "").strip()
-service_id_list = coalesceServiceIds()
-staff_uid = str(AP.get("staffUserId") or AP.get("staff_user_id") or "").strip()
+base = str_first(AP, "base_url", "baseUrl").rstrip("/")
+org_id = str_first(AP, "organization_id", "organizationId")
+sid = str_first(AP, "studio_id", "studioId")
+date = str_first(AP, "date")
+service_id_list = coalesce_service_ids(AP)
+staff_uid = str_first(AP, "staffUserId", "staff_user_id")
 
 headers = {
-  "X-API-Key": AP.get("api_key") or AP.get("apiKey") or "",
+  "X-API-Key": str(AP.get("api_key", "") or AP.get("apiKey", "") or ""),
   "X-Organization-Id": org_id,
   "Accept": "application/json",
 }
 
+result = None
+
 if not base:
-  result = {
-    "ok": False,
-    "status": 0,
-    "data": None,
-    "prompt": "",
-    "error": "missing_base_url",
-  }
+  result = fail_result("missing_base_url")
 elif not org_id:
-  result = {
-    "ok": False,
-    "status": 0,
-    "data": None,
-    "prompt": "",
-    "error": "missing_organization_id",
-  }
+  result = fail_result("missing_organization_id")
 elif not sid:
-  result = {
-    "ok": False,
-    "status": 0,
-    "data": None,
-    "prompt": "",
-    "error": "missing_studio_id",
-  }
+  result = fail_result("missing_studio_id")
 elif not date:
-  result = {
-    "ok": False,
-    "status": 0,
-    "data": None,
-    "prompt": "",
-    "error": "missing_date",
-  }
+  result = fail_result("missing_date")
 elif not service_id_list:
-  result = {
-    "ok": False,
-    "status": 0,
-    "data": None,
-    "prompt": "",
-    "error": "missing_service_ids",
-  }
+  result = fail_result("missing_service_ids")
 else:
   params = {
     "date": date,
