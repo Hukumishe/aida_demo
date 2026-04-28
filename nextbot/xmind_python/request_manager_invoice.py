@@ -8,8 +8,9 @@
 #     30-минутный таймер удержания брони и инструктирует агента запросить чек от клиента.
 # В оба случая итоговая инструкция для агента — в поле `prompt`.
 #
-# Args (обязательные): base_url, api_key, organization_id,
+# Args (обязательные): base_url, api_key,
 #                      appointment_id, phone, kaspi_details.
+# organization_id / organizationId — опционален (если контекст берётся по API-ключу).
 # Имена в args принимаются как snake_case, так и camelCase
 # (appointmentId / kaspiDetails / organizationId).
 #
@@ -49,14 +50,6 @@ if not base:
     "prompt": "",
     "error": "missing_base_url",
   }
-elif not org_id:
-  result = {
-    "ok": False,
-    "status": 0,
-    "data": None,
-    "prompt": "",
-    "error": "missing_organization_id",
-  }
 elif missing:
   debug("request_manager_invoice: missing params " + ",".join(missing))
   result = {
@@ -71,15 +64,15 @@ else:
   url = base + "/nextbot/request-manager-invoice"
   headers = {
     "X-API-Key": api_key,
-    "X-Organization-Id": org_id,
     "Accept": "application/json",
     "Content-Type": "application/json",
   }
+  if org_id:
+    headers["X-Organization-Id"] = org_id
   body = {
     "appointmentId": appointment_id,
     "phone": phone,
     "kaspiDetails": kaspi_details,
-    "organizationId": org_id,
   }
 
   try:

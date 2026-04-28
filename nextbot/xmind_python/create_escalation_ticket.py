@@ -34,7 +34,6 @@ headers = {
   "Content-Type": "application/json",
 }
 body = {
-  "organizationId": org_id,
   "phone": phone,
   "issueSummary": issue_summary,
 }

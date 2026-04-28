@@ -1072,22 +1072,23 @@ export class NextbotService {
       );
     }
 
-    // Дневной путь — создаём задачу менеджеру филиала.
-    const assignee = await this.prisma.user.findFirst({
+    // Дневной путь — одна общая задача для всех менеджеров организации.
+    const managerPool = await this.prisma.user.findMany({
       where: {
-        studioId: appointment.studioId,
+        organizationId: appointment.studio.organizationId,
         role: { in: [UserRole.MANAGER, UserRole.ADMIN] },
         isActive: true,
       },
       orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
-      select: { id: true },
+      select: { id: true, studioId: true },
     });
 
-    if (!assignee) {
+    if (managerPool.length === 0) {
       throw new BadRequestException(
-        'No active MANAGER/ADMIN in studio to assign invoice task',
+        'No active MANAGER/ADMIN in organization to assign invoice task',
       );
     }
+    const assignee = managerPool[0]!;
 
     const dayInvoiceDeadlineHours = clampOrDefault(
       organization.dayInvoiceTaskDeadlineHours,
@@ -1117,6 +1118,14 @@ export class NextbotService {
         status: TaskStatus.OPEN,
         appointmentId: appointment.id,
         clientId: appointment.clientId,
+        controllers: {
+          create: managerPool
+            .filter((m) => m.id !== assignee.id)
+            .map((m) => ({
+              id: generateId(IdPrefix.StudioTaskController),
+              userId: m.id,
+            })),
+        },
       },
     });
 
