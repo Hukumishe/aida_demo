@@ -33,6 +33,7 @@ import { UpdateAppointmentDto } from '../appointments/dto/update-appointment.dto
 import { NextbotSurveyDto } from './dto/nextbot-survey.dto';
 import { RequestManagerInvoiceDto } from './dto/request-manager-invoice.dto';
 import { VerifyReceiptNighttimeDto } from './dto/verify-receipt-nighttime.dto';
+import { CreateEscalationTicketDto } from './dto/create-escalation-ticket.dto';
 
 /**
  * Эндпоинты строго по функциям из системного промпта xmind (aida_xmind.pdf).
@@ -497,10 +498,12 @@ export class NextbotController {
 
   @Post('create-escalation-ticket')
   @ApiOperation({ summary: 'create_escalation_ticket' })
-  @ApiBody({ required: false })
-  @ApiResponse({ status: 501 })
-  createEscalationTicket(@Body() _body?: Record<string, unknown>) {
-    return this.nextbotService.notImplemented('create_escalation_ticket');
+  @ApiResponse({ status: 200 })
+  createEscalationTicket(
+    @Body() dto: CreateEscalationTicketDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.nextbotService.createEscalationTicket(dto, user);
   }
 
   @Post('dev-error-report')

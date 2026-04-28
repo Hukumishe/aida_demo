@@ -3,7 +3,8 @@
 # Назначение: передать менеджеру сложный кейс (жалоба/негатив/сложный вопрос).
 # Args (обязательные): base_url, api_key, organization_id.
 # Args (целевые): phone, issue_summary.
-# result: { ok, status, data, prompt } — без технических деталей от backend.
+# result: { ok, status, data, prompt }.
+# Успех: data { taskId, sharedForManagers }.
 
 try:
   AP = args
@@ -40,27 +41,63 @@ body = {
 
 status_code = 0
 prompt_text = ESCALATION_PROMPT
-try:
-  url = base + "/nextbot/create-escalation-ticket"
-  r = requests.post(url, headers=headers, json=body, timeout=(3, 10))
-  status_code = r.status_code
+task_id = None
+shared = None
+raw_payload = None
+error_code = None
+error_message = None
+
+if not base:
+  error_code = "missing_base_url"
+elif not org_id:
+  error_code = "missing_organization_id"
+elif not issue_summary:
+  error_code = "missing_issue_summary"
+else:
   try:
-    full = r.json() if r.content else {}
-  except Exception:
-    full = {}
-  if isinstance(full, dict):
+    url = base + "/nextbot/create-escalation-ticket"
+    r = requests.post(url, headers=headers, json=body, timeout=(3, 10))
+    status_code = r.status_code
+    try:
+      full = r.json() if r.content else {}
+    except Exception:
+      full = {}
+    if not isinstance(full, dict):
+      full = {}
+    raw_payload = full if full else (r.text or None)
+
     dynamic_prompt = full.get("create_escalation_ticket", "")
     if dynamic_prompt:
       prompt_text = str(dynamic_prompt)
-  debug("create_escalation_ticket: status=" + str(status_code))
-except Exception:
-  status_code = 0
-  debug("create_escalation_ticket: request_failed")
 
+    task_id = full.get("taskId")
+    shared = full.get("sharedForManagers")
+
+    if not r.ok:
+      error_code = "request_failed"
+      error_message = "backend_status_" + str(r.status_code)
+    elif not task_id:
+      error_code = "task_not_created"
+  except Exception as e:
+    status_code = 0
+    error_code = "request_failed"
+    error_message = str(e)
+    debug("create_escalation_ticket: request_failed")
+
+ok = error_code is None and bool(task_id)
 result = {
-  "ok": True,
+  "ok": ok,
   "status": status_code,
-  "data": {},
+  "data": {
+    "taskId": task_id,
+    "sharedForManagers": bool(shared) if shared is not None else True,
+  } if ok else None,
   "create_escalation_ticket": prompt_text,
   "prompt": prompt_text,
 }
+if not ok:
+  result["error"] = error_code or "request_failed"
+  if error_message:
+    result["error_message"] = error_message
+  if raw_payload is not None:
+    result["raw"] = raw_payload

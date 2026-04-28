@@ -15,6 +15,7 @@ import { generateId, IdPrefix } from '../common/id-generator';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RequestManagerInvoiceDto } from './dto/request-manager-invoice.dto';
 import { VerifyReceiptNighttimeDto } from './dto/verify-receipt-nighttime.dto';
+import { CreateEscalationTicketDto } from './dto/create-escalation-ticket.dto';
 import {
   assertUserOrganizationMatchesStudio,
 } from '../common/organization-scope';
@@ -88,6 +89,16 @@ export const NEXTBOT_UPDATE_OLD_CLIENT_PROFILE_PROMPT = [
   'ТВОИ ДЕЙСТВИЯ:',
   'Кратко подтверди, что контактные данные учтены.',
   'Переведи диалог к подбору услуги: предложи выбрать направление/услугу или перейти к записи.',
+].join('\n');
+
+export const NEXTBOT_CREATE_ESCALATION_TICKET_PROMPT = [
+  'СИСТЕМНОЕ СООБЩЕНИЕ: сложный кейс клиента зафиксирован и передан менеджерам.',
+  '',
+  'ТВОИ ДЕЙСТВИЯ:',
+  'Прояви эмпатию и поблагодари за обращение.',
+  'Подтверди, что обращение передано ответственным менеджерам.',
+  'Сообщи, что менеджер вернётся с ответом в ближайшее рабочее время.',
+  'Вежливо предложи написать дополнительные детали в этом чате.',
 ].join('\n');
 
 /** Нормализация пола/аудитории из оркестратора в ServiceAudience (MEN/WOMEN). */
@@ -248,6 +259,94 @@ export class NextbotService {
           'Эндпоинт зарезервирован под сценарий xmind; логика в backend ещё не реализована.',
       },
       HttpStatus.NOT_IMPLEMENTED,
+    );
+  }
+
+  /**
+   * create_escalation_ticket.
+   *
+   * Создаёт ОДНУ задачу уровня организации для всех менеджеров:
+   * - назначается одному менеджеру (assignee),
+   * - остальные менеджеры добавляются как контролёры,
+   * - любой менеджер организации может завершить задачу на своей стороне задач.
+   */
+  async createEscalationTicket(
+    dto: CreateEscalationTicketDto,
+    user: CurrentUserPayload,
+  ) {
+    const issueSummary = (dto.issueSummary ?? '').trim();
+    if (!issueSummary) {
+      throw new BadRequestException('issueSummary is required');
+    }
+
+    const managers = await this.prisma.user.findMany({
+      where: {
+        organizationId: user.organizationId,
+        role: UserRole.MANAGER,
+        isActive: true,
+      },
+      orderBy: [{ createdAt: 'asc' }],
+      select: { id: true, studioId: true },
+    });
+    if (managers.length === 0) {
+      throw new BadRequestException('No active MANAGER in organization');
+    }
+
+    const assignee = managers[0]!;
+    const phone = (dto.phone ?? '').trim();
+    const description = [
+      issueSummary,
+      phone ? `Телефон клиента: ${phone}` : null,
+      'Источник: Nextbot escalation ticket',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    const deadlineAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const task = await this.prisma.studioTask.create({
+      data: {
+        id: generateId(IdPrefix.StudioTask),
+        organizationId: user.organizationId,
+        title: 'Эскалация клиента: требуется менеджер',
+        description,
+        assigneeUserId: assignee.id,
+        createdByUserId: assignee.id,
+        deadlineAt,
+        status: TaskStatus.OPEN,
+        controllers: {
+          create: managers
+            .filter((m) => m.id !== assignee.id)
+            .map((m) => ({
+              id: generateId(IdPrefix.StudioTaskController),
+              userId: m.id,
+            })),
+        },
+      },
+    });
+
+    // Уведомляем назначенного менеджера, если у него есть studioId для контекста уведомления.
+    if (assignee.studioId) {
+      try {
+        await this.notificationsService.createNewTaskNotification(
+          assignee.studioId,
+          task.id,
+          assignee.id,
+          task.title,
+          deadlineAt,
+        );
+      } catch {
+        // Не прерываем основной поток при сбое уведомлений.
+      }
+    }
+
+    return this.withNextbotPrompt(
+      user.organizationId,
+      'create_escalation_ticket',
+      {
+        taskId: task.id,
+        sharedForManagers: true,
+      },
+      NEXTBOT_CREATE_ESCALATION_TICKET_PROMPT,
     );
   }
 
