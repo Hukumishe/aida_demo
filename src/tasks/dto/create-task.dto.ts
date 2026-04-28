@@ -1,5 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsDateString, IsNotEmpty, IsOptional, IsString, ArrayUnique } from 'class-validator';
+import { IsArray, IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString, ArrayUnique } from 'class-validator';
+
+export enum StudioTaskAudience {
+  PERSONAL = 'PERSONAL',
+  MANAGER_POOL = 'MANAGER_POOL',
+}
 
 export class CreateStudioTaskDto {
   @ApiProperty({ description: 'Название задачи' })
@@ -27,6 +32,16 @@ export class CreateStudioTaskDto {
   @ArrayUnique()
   @IsString({ each: true })
   controllerUserIds?: string[];
+
+  @ApiPropertyOptional({
+    enum: StudioTaskAudience,
+    description:
+      'PERSONAL: видит только исполнитель (и owner/deputy/developer). MANAGER_POOL: видят все менеджеры организации.',
+    default: StudioTaskAudience.PERSONAL,
+  })
+  @IsOptional()
+  @IsEnum(StudioTaskAudience)
+  audience?: StudioTaskAudience;
 
   @ApiProperty({ description: 'Крайний срок (ISO 8601)' })
   @IsDateString()

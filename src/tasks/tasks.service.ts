@@ -11,7 +11,7 @@ import { getOrganizationIdForStudio } from '../common/organization-scope';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { NotificationsService } from '../notifications/notifications.service';
-import { CreateStudioTaskDto } from './dto/create-task.dto';
+import { CreateStudioTaskDto, StudioTaskAudience } from './dto/create-task.dto';
 import { UpdateStudioTaskDto } from './dto/update-task.dto';
 
 /** Кто может быть «контролёром» задачи: мастера филиала + уровень владельца + DEVELOPER */
@@ -23,6 +23,18 @@ const CONTROLLER_ROLES: UserRole[] = [
   UserRole.DEPUTY_OWNER,
   UserRole.SERVICE,
 ];
+
+const OWNER_LEVEL_OR_DEV: UserRole[] = [
+  UserRole.OWNER,
+  UserRole.DEPUTY_OWNER,
+  UserRole.DEVELOPER,
+];
+
+const MANAGER_POOL_CREATORS = new Set<string>([
+  UserRole.OWNER,
+  UserRole.DEPUTY_OWNER,
+  UserRole.DEVELOPER,
+]);
 
 @Injectable()
 export class TasksService {
@@ -157,14 +169,50 @@ export class TasksService {
     } as const;
   }
 
+  private async resolveManagerPoolControllerIds(
+    organizationId: string,
+    assigneeUserId: string,
+  ): Promise<string[]> {
+    const managers = await this.prisma.user.findMany({
+      where: {
+        organizationId,
+        role: UserRole.MANAGER,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    return managers.map((m) => m.id).filter((id) => id !== assigneeUserId);
+  }
+
+  private async assertManagerCanAccessTask(
+    userRole: string,
+    userId: string,
+    taskId: string,
+  ): Promise<boolean> {
+    if (userRole !== UserRole.MANAGER && userRole !== UserRole.ADMIN) return true;
+    const rel = await this.prisma.studioTask.findFirst({
+      where: {
+        id: taskId,
+        OR: [
+          { assigneeUserId: userId },
+          { controllers: { some: { userId } } },
+        ],
+      },
+      select: { id: true },
+    });
+    return !!rel;
+  }
+
   async findAll(studioId: string, userRole: string, userId: string, userStudioId?: string) {
     this.assertStudioScope(studioId, userRole, userStudioId);
 
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
-    const where: { organizationId: string; assigneeUserId?: string } = { organizationId };
+    const where: any = { organizationId };
     if (userRole === UserRole.MASTER) {
       where.assigneeUserId = userId;
+    } else if (userRole === UserRole.MANAGER || userRole === UserRole.ADMIN) {
+      where.OR = [{ assigneeUserId: userId }, { controllers: { some: { userId } } }];
     }
 
     return this.prisma.studioTask.findMany({
@@ -199,8 +247,6 @@ export class TasksService {
     this.assertStudioScope(studioId, userRole, userStudioId);
 
     await this.assertUserIsStudioStaff(studioId, dto.assigneeUserId);
-    await this.assertControllersAreManagers(studioId, dto.controllerUserIds ?? []);
-
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
     const deadlineAt = new Date(dto.deadlineAt);
@@ -214,6 +260,43 @@ export class TasksService {
       dto.clientId ?? null,
       dto.appointmentId ?? null,
     );
+    const audience = dto.audience ?? StudioTaskAudience.PERSONAL;
+    if (
+      audience === StudioTaskAudience.MANAGER_POOL &&
+      !MANAGER_POOL_CREATORS.has(userRole)
+    ) {
+      throw new ForbiddenException(
+        'MANAGER_POOL задачи может создавать только OWNER, DEPUTY_OWNER или DEVELOPER',
+      );
+    }
+    let controllerIds: string[] = [];
+    if (audience === StudioTaskAudience.MANAGER_POOL) {
+      const assignee = await this.prisma.user.findUnique({
+        where: { id: dto.assigneeUserId },
+        select: { organizationId: true, role: true, isActive: true },
+      });
+      if (
+        !assignee ||
+        !assignee.isActive ||
+        assignee.organizationId !== organizationId ||
+        assignee.role !== UserRole.MANAGER
+      ) {
+        throw new BadRequestException(
+          'Для MANAGER_POOL исполнитель должен быть активным менеджером этой организации',
+        );
+      }
+      controllerIds = await this.resolveManagerPoolControllerIds(
+        organizationId,
+        dto.assigneeUserId,
+      );
+    } else {
+      controllerIds = [];
+    }
+    if (audience === StudioTaskAudience.PERSONAL && (dto.controllerUserIds ?? []).length > 0) {
+      throw new BadRequestException(
+        'Для PERSONAL-задачи нельзя передавать controllerUserIds: задачу видит только исполнитель',
+      );
+    }
 
     const task = await this.prisma.studioTask.create({
       data: {
@@ -228,7 +311,7 @@ export class TasksService {
         clientId: links.clientId,
         appointmentId: links.appointmentId,
         controllers: {
-          create: (dto.controllerUserIds ?? []).map((uid) => ({
+          create: controllerIds.map((uid) => ({
             id: generateId(IdPrefix.StudioTaskController),
             userId: uid,
           })),
@@ -269,8 +352,16 @@ export class TasksService {
     });
     if (!task) throw new NotFoundException('Задача не найдена');
 
+    if (OWNER_LEVEL_OR_DEV.includes(userRole as UserRole)) {
+      return task;
+    }
     if (userRole === UserRole.MASTER) {
       if (task.assigneeUserId !== userId) {
+        throw new ForbiddenException('Нет доступа к этой задаче');
+      }
+    } else if (userRole === UserRole.MANAGER || userRole === UserRole.ADMIN) {
+      const ok = await this.assertManagerCanAccessTask(userRole, userId, task.id);
+      if (!ok) {
         throw new ForbiddenException('Нет доступа к этой задаче');
       }
     }
@@ -297,6 +388,13 @@ export class TasksService {
     if (!task) throw new NotFoundException('Задача не найдена');
 
     const isMaster = userRole === UserRole.MASTER;
+    const isManagerLike = userRole === UserRole.MANAGER || userRole === UserRole.ADMIN;
+    if (isManagerLike) {
+      const ok = await this.assertManagerCanAccessTask(userRole, userId, task.id);
+      if (!ok) {
+        throw new ForbiddenException('Можно менять только свои задачи и задачи из общего пула');
+      }
+    }
     if (isMaster) {
       if (task.assigneeUserId !== userId) {
         throw new ForbiddenException('Можно менять только свои задачи');
@@ -429,6 +527,7 @@ export class TasksService {
     studioId: string,
     taskId: string,
     userRole: string,
+    userId: string,
     userStudioId?: string,
   ) {
     if (
@@ -446,6 +545,12 @@ export class TasksService {
       where: { id: taskId, organizationId },
     });
     if (!task) throw new NotFoundException('Задача не найдена');
+    if (userRole === UserRole.MANAGER || userRole === UserRole.ADMIN) {
+      const ok = await this.assertManagerCanAccessTask(userRole, userId, task.id);
+      if (!ok) {
+        throw new ForbiddenException('Можно удалять только свои задачи и задачи из общего пула');
+      }
+    }
 
     await this.prisma.studioTask.delete({ where: { id: taskId } });
     return { success: true };

@@ -39,9 +39,24 @@ export class UsersService {
    * Пользователи организации без привязки к филиалу (административный персонал сети).
    * Не включает DEVELOPER (платформа) и роли филиала (ADMIN/MASTER с studioId).
    */
-  async findNetworkStaff(studioId: string, userRole: string, userStudioId?: string) {
-    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
-      throw new ForbiddenException('Access denied to this studio');
+  async findNetworkStaff(
+    studioId: string,
+    userRole: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+  ) {
+    if (!isOwnerLevelRole(userRole)) {
+      if (userRole === UserRole.MANAGER) {
+        const studioScope = await this.prisma.studio.findUnique({
+          where: { id: studioId },
+          select: { organizationId: true },
+        });
+        if (!studioScope || studioScope.organizationId !== userOrganizationId) {
+          throw new ForbiddenException('Access denied to this studio');
+        }
+      } else if (userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
     }
 
     const studio = await this.prisma.studio.findUnique({
@@ -72,10 +87,28 @@ export class UsersService {
     return users;
   }
 
-  async findAll(studioId: string, userRole: string, userStudioId?: string) {
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
-      throw new ForbiddenException('Access denied to this studio');
+  async findAll(
+    studioId: string,
+    userRole: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+  ) {
+    // Check access:
+    // - owner-level: any studio
+    // - manager: any studio in own organization
+    // - others: only own studio
+    if (!isOwnerLevelRole(userRole)) {
+      if (userRole === UserRole.MANAGER) {
+        const studioScope = await this.prisma.studio.findUnique({
+          where: { id: studioId },
+          select: { organizationId: true },
+        });
+        if (!studioScope || studioScope.organizationId !== userOrganizationId) {
+          throw new ForbiddenException('Access denied to this studio');
+        }
+      } else if (userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
     }
 
     const users = await this.prisma.user.findMany({

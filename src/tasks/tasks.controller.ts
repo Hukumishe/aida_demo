@@ -96,8 +96,8 @@ export class TasksController {
   async remove(
     @Param('studioId') studioId: string,
     @Param('taskId') taskId: string,
-    @CurrentUser() user: { role: string; studioId?: string },
+    @CurrentUser() user: { userId: string; role: string; studioId?: string },
   ) {
-    return this.tasksService.remove(studioId, taskId, user.role, user.studioId);
+    return this.tasksService.remove(studioId, taskId, user.role, user.userId, user.studioId);
   }
 }

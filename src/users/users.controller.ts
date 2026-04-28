@@ -46,7 +46,12 @@ export class UsersController {
     @Param('studioId') studioId: string,
     @CurrentUser() user: any,
   ) {
-    return this.usersService.findNetworkStaff(studioId, user.role, user.studioId);
+    return this.usersService.findNetworkStaff(
+      studioId,
+      user.role,
+      user.studioId,
+      user.organizationId,
+    );
   }
 
   @Get('studios/:studioId/staff')
@@ -57,7 +62,12 @@ export class UsersController {
     @Param('studioId') studioId: string,
     @CurrentUser() user: any,
   ) {
-    return this.usersService.findAll(studioId, user.role, user.studioId);
+    return this.usersService.findAll(
+      studioId,
+      user.role,
+      user.studioId,
+      user.organizationId,
+    );
   }
 
   @Post('studios/:studioId/staff')

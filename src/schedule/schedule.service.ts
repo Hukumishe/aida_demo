@@ -60,10 +60,24 @@ export class ScheduleService {
     date?: string,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
-      throw new ForbiddenException('Access denied to this studio');
+    // Check access:
+    // - owner-level: any studio
+    // - manager: any studio in their organization
+    // - others: only own studio
+    if (!isOwnerLevelRole(userRole)) {
+      if (userRole === UserRole.MANAGER) {
+        const studio = await this.prisma.studio.findUnique({
+          where: { id: studioId },
+          select: { organizationId: true },
+        });
+        if (!studio || studio.organizationId !== userOrganizationId) {
+          throw new ForbiddenException('Access denied to this studio');
+        }
+      } else if (userStudioId !== studioId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
     }
 
     const where: any = { studioId };

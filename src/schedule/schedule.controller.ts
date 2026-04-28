@@ -42,7 +42,13 @@ export class ScheduleController {
     @Query('date') date?: string,
     @CurrentUser() user?: any,
   ) {
-    return this.scheduleService.findAll(studioId, date, user?.role, user?.studioId);
+    return this.scheduleService.findAll(
+      studioId,
+      date,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+    );
   }
 
   @Post('studios/:studioId/schedule')
