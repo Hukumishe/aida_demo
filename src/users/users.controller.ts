@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -55,18 +56,26 @@ export class UsersController {
   }
 
   @Get('studios/:studioId/staff')
-  @ApiOperation({ summary: 'Get all staff members for a studio' })
+  @ApiOperation({
+    summary: 'Get all staff members for a studio',
+    description:
+      'Возвращает сотрудников филиала. При includeNetwork=true дополнительно включает сетевых сотрудников организации (studioId = null).',
+  })
   @ApiResponse({ status: 200, description: 'List of staff members' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAll(
     @Param('studioId') studioId: string,
     @CurrentUser() user: any,
+    @Query('includeNetwork') includeNetwork?: string,
   ) {
+    const includeNetworkFlag =
+      includeNetwork === 'true' || includeNetwork === '1' || includeNetwork === 'yes';
     return this.usersService.findAll(
       studioId,
       user.role,
       user.studioId,
       user.organizationId,
+      includeNetworkFlag,
     );
   }
 

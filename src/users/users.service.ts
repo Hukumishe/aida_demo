@@ -92,6 +92,7 @@ export class UsersService {
     userRole: string,
     userStudioId?: string,
     userOrganizationId?: string,
+    includeNetwork = false,
   ) {
     // Check access:
     // - owner-level: any studio
@@ -114,6 +115,7 @@ export class UsersService {
     const users = await this.prisma.user.findMany({
       where: {
         studioId,
+        isActive: true,
         role: {
           in: [UserRole.ADMIN, UserRole.MANAGER, UserRole.MASTER],
         },
@@ -135,6 +137,7 @@ export class UsersService {
         return this.prisma.user.findMany({
           where: {
             studioId,
+            isActive: true,
             role: {
               in: [UserRole.MANAGER, UserRole.MASTER],
             },
@@ -150,12 +153,41 @@ export class UsersService {
       throw error;
     });
 
-    // Remove password from response if user is not OWNER or DEPUTY_OWNER
-    if (!isOwnerLevelRole(userRole)) {
-      return users.map(({ password, ...user }) => user);
+    let mergedUsers = users;
+    if (includeNetwork) {
+      const studio = await this.prisma.studio.findUnique({
+        where: { id: studioId },
+        select: { organizationId: true },
+      });
+      if (!studio) {
+        throw new NotFoundException(`Studio with ID ${studioId} not found`);
+      }
+
+      const networkUsers = await this.prisma.user.findMany({
+        where: {
+          organizationId: studio.organizationId,
+          studioId: null,
+          isActive: true,
+          role: { in: NETWORK_STAFF_ROLES },
+        },
+        include: {
+          staffProfile: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const dedup = new Map<string, (typeof users)[number]>();
+      for (const u of users) dedup.set(u.id, u);
+      for (const u of networkUsers) dedup.set(u.id, u as (typeof users)[number]);
+      mergedUsers = Array.from(dedup.values());
     }
 
-    return users;
+    // Remove password from response if user is not OWNER or DEPUTY_OWNER
+    if (!isOwnerLevelRole(userRole)) {
+      return mergedUsers.map(({ password, ...user }) => user);
+    }
+
+    return mergedUsers;
   }
 
   async create(
