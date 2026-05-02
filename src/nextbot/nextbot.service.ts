@@ -222,6 +222,22 @@ export class NextbotService {
     return src.replace(/\D/g, '');
   }
 
+  /**
+   * Пул активных менеджеров организации для общих задач Nextbot.
+   * Первый менеджер становится assignee, остальные — controllers.
+   */
+  private async getOrganizationManagerPool(organizationId: string) {
+    return this.prisma.user.findMany({
+      where: {
+        organizationId,
+        role: UserRole.MANAGER,
+        isActive: true,
+      },
+      orderBy: [{ createdAt: 'asc' }],
+      select: { id: true, studioId: true },
+    });
+  }
+
   /** Кандидаты формата телефона для быстрого exact-поиска (без тяжёлого contains). */
   private phoneLookupCandidates(raw: string | undefined): string[] {
     const original = String(raw ?? '').trim();
@@ -279,15 +295,7 @@ export class NextbotService {
       throw new BadRequestException('issueSummary is required');
     }
 
-    const managers = await this.prisma.user.findMany({
-      where: {
-        organizationId: user.organizationId,
-        role: UserRole.MANAGER,
-        isActive: true,
-      },
-      orderBy: [{ createdAt: 'asc' }],
-      select: { id: true, studioId: true },
-    });
+    const managers = await this.getOrganizationManagerPool(user.organizationId);
     if (managers.length === 0) {
       throw new BadRequestException('No active MANAGER in organization');
     }
@@ -650,6 +658,7 @@ export class NextbotService {
       select: {
         id: true,
         name: true,
+        description: true,
         defaultPrice: true,
         defaultDurationMin: true,
       },
@@ -677,6 +686,7 @@ export class NextbotService {
         select: {
           id: true,
           name: true,
+          description: true,
           subcategories: {
             where: { isActive: true },
             select: { id: true, name: true },
@@ -711,6 +721,7 @@ export class NextbotService {
         return {
           id: c.id,
           name: c.name,
+          description: c.description,
           subcategories: c.subcategories,
           available_in: availableStudios.map((s) => s.id),
           available_in_studios: availableStudios,
@@ -1073,19 +1084,13 @@ export class NextbotService {
     }
 
     // Дневной путь — одна общая задача для всех менеджеров организации.
-    const managerPool = await this.prisma.user.findMany({
-      where: {
-        organizationId: appointment.studio.organizationId,
-        role: { in: [UserRole.MANAGER, UserRole.ADMIN] },
-        isActive: true,
-      },
-      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
-      select: { id: true, studioId: true },
-    });
+    const managerPool = await this.getOrganizationManagerPool(
+      appointment.studio.organizationId,
+    );
 
     if (managerPool.length === 0) {
       throw new BadRequestException(
-        'No active MANAGER/ADMIN in organization to assign invoice task',
+        'No active MANAGER in organization to assign invoice task',
       );
     }
     const assignee = managerPool[0]!;
@@ -1268,19 +1273,14 @@ export class NextbotService {
       user.organizationId,
     );
 
-    // Утренняя задача менеджеру на сверку чека с выпиской Kaspi.
-    const assignee = await this.prisma.user.findFirst({
-      where: {
-        studioId: appointment.studioId,
-        role: { in: [UserRole.MANAGER, UserRole.ADMIN] },
-        isActive: true,
-      },
-      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
-      select: { id: true },
-    });
+    // Утренняя общая задача для всех менеджеров организации на сверку чека с выпиской Kaspi.
+    const managerPool = await this.getOrganizationManagerPool(
+      appointment.studio.organizationId,
+    );
 
     let taskId: string | null = null;
-    if (assignee) {
+    if (managerPool.length > 0) {
+      const assignee = managerPool[0]!;
       const now = new Date();
       const deadlineAt = new Date(now.getTime() + nightReceiptDeadlineHours * 60 * 60 * 1000);
       const clientPhone = (dto.phone ?? '').trim() || appointment.client?.phone || '';
@@ -1305,6 +1305,14 @@ export class NextbotService {
           status: TaskStatus.OPEN,
           appointmentId: appointment.id,
           clientId: appointment.clientId,
+          controllers: {
+            create: managerPool
+              .filter((m) => m.id !== assignee.id)
+              .map((m) => ({
+                id: generateId(IdPrefix.StudioTaskController),
+                userId: m.id,
+              })),
+          },
         },
       });
       taskId = task.id;

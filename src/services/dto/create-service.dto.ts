@@ -4,11 +4,12 @@ import {
   IsInt,
   IsOptional,
   Min,
+  MaxLength,
   IsEnum,
   Matches,
   ValidateIf,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ServiceAudience } from '@prisma/client';
 import {
   READABLE_ENTITY_ID_MESSAGE,
@@ -67,6 +68,15 @@ export class CreateServiceDto {
   @IsOptional()
   @IsEnum(ServiceAudience)
   audience?: ServiceAudience;
+
+  @ApiPropertyOptional({
+    description: 'Текстовое описание услуги',
+    example: 'Удаление волосяного покрова лазером на разных зонах тела.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  description?: string;
 }
 
 

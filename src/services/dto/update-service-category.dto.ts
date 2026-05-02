@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min, ValidateIf } from 'class-validator';
 
 export class UpdateServiceCategoryDto {
   @ApiProperty({ required: false })
@@ -22,4 +22,14 @@ export class UpdateServiceCategoryDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Описание категории. Передайте null, чтобы очистить.',
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  @MaxLength(10000)
+  description?: string | null;
 }

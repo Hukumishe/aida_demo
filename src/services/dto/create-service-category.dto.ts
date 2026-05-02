@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateServiceCategoryDto {
@@ -22,4 +22,13 @@ export class CreateServiceCategoryDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Текстовое описание категории услуг',
+    example: 'Уход и регенерация кожи лица различными методами',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  description?: string;
 }

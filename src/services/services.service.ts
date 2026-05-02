@@ -188,6 +188,7 @@ export class ServicesService {
         id: generateId(IdPrefix.Service),
         organizationId,
         name: createServiceDto.name,
+        description: createServiceDto.description?.trim() || null,
         defaultDurationMin: createServiceDto.defaultDurationMin,
         defaultPrice: createServiceDto.defaultPrice,
         requiredStaffCount: createServiceDto.requiredStaffCount ?? 1,
@@ -228,7 +229,7 @@ export class ServicesService {
       throw new NotFoundException('Service not found in this organization');
     }
 
-    const { defaultDurationMin, categoryId, ...rest } = updateServiceDto as UpdateServiceDto & {
+    const { defaultDurationMin, categoryId, description, ...rest } = updateServiceDto as UpdateServiceDto & {
       defaultDurationMin?: number;
     };
     if (defaultDurationMin !== undefined) {
@@ -250,6 +251,9 @@ export class ServicesService {
     }
     if (subcategoryId !== undefined) {
       data.subcategoryId = subcategoryId ?? null;
+    }
+    if (description !== undefined) {
+      data.description = description === null ? null : String(description).trim() || null;
     }
 
     return this.prisma.service.update({
@@ -539,6 +543,7 @@ export class ServicesService {
         id: generateId(IdPrefix.ServiceCategory),
         organizationId,
         name: dto.name.trim(),
+        description: dto.description?.trim() || null,
         sortOrder: dto.sortOrder ?? 0,
         isActive: dto.isActive ?? true,
       },
@@ -573,6 +578,10 @@ export class ServicesService {
         where: { id: categoryId },
         data: {
           ...(dto.name !== undefined && { name: dto.name.trim() }),
+          ...(dto.description !== undefined && {
+            description:
+              dto.description === null ? null : dto.description.trim() || null,
+          }),
           ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
           ...(dto.isActive !== undefined && { isActive: dto.isActive }),
         },
