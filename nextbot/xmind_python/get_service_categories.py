@@ -2,7 +2,7 @@
 # HTTP: GET {base_url}/nextbot/service-categories
 # Args: base_url, api_key, organization_id, studio_id (опционально — принимается, но не обязателен)
 # Ответ: {
-#   "data": { "categories": [{ "id", "name", "available_in": [studioId...] }] },
+#   "data": { "categories": [{ "id", "name", "description", "available_in": [studioId...] }] },
 #   "prompt": "<субпромпт>",
 #   "ok": bool,
 #   "status": int
@@ -44,6 +44,7 @@ try:
       categories.append({
         "id": c.get("id"),
         "name": c.get("name"),
+        "description": c.get("description"),
         "available_in": list(c.get("available_in") or []),
       })
 

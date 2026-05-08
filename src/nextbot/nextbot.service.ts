@@ -168,6 +168,34 @@ export class NextbotService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
+  private formatClientName(client: {
+    firstName?: string | null;
+    lastName?: string | null;
+    patronymic?: string | null;
+  }): string {
+    const fullName = [client.firstName, client.lastName, client.patronymic]
+      .map((v) => (v ?? '').trim())
+      .filter(Boolean)
+      .join(' ');
+    return fullName || 'Имя не указано';
+  }
+
+  private formatAppointmentServices(appointment: {
+    service?: { name?: string | null } | null;
+    serviceItems?: Array<{ service?: { name?: string | null } | null }> | null;
+  }): string {
+    const names = new Set<string>();
+    for (const item of appointment.serviceItems ?? []) {
+      const name = item.service?.name?.trim();
+      if (name) names.add(name);
+    }
+    const fallbackServiceName = appointment.service?.name?.trim();
+    if (names.size === 0 && fallbackServiceName) {
+      names.add(fallbackServiceName);
+    }
+    return Array.from(names).join(', ') || 'Услуга не указана';
+  }
+
   /**
    * Добавляет в ответ текст промпта с портала (таблица prompts) под ключом имени функции xmind.
    * Приоритет: промпт организации → глобальный (organizationId null) → fallback.
@@ -1014,6 +1042,18 @@ export class NextbotService {
       where: { id: appointmentId },
       include: {
         studio: { include: { organization: true } },
+        client: {
+          select: {
+            firstName: true,
+            lastName: true,
+            patronymic: true,
+          },
+        },
+        service: { select: { name: true } },
+        serviceItems: {
+          select: { service: { select: { name: true } } },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        },
       },
     });
     if (!appointment) {
@@ -1102,11 +1142,13 @@ export class NextbotService {
       NEXTBOT_DEFAULT_DAY_INVOICE_TASK_DEADLINE_HOURS,
     );
     const deadlineAt = new Date(now.getTime() + dayInvoiceDeadlineHours * 60 * 60 * 1000);
-    const phoneInfo = (dto.phone ?? '').trim();
+    const clientName = this.formatClientName(appointment.client);
+    const servicesName = this.formatAppointmentServices(appointment);
     const description = [
-      `Реквизиты/детали оплаты (со слов клиента): ${kaspiDetails}`,
-      phoneInfo ? `WhatsApp клиента: ${phoneInfo}` : null,
-      `Запись: ${appointment.id} (${appointment.startAt.toISOString()})`,
+      `Клиент с именем ${clientName}.`,
+      `забронировал услугу/и: ${servicesName}`,
+      `необходимо выставить счет на предоплату на номер: ${kaspiDetails}`,
+      'Привязку к записи и к клиенту',
     ]
       .filter(Boolean)
       .join('\n');
@@ -1115,7 +1157,7 @@ export class NextbotService {
       data: {
         id: generateId(IdPrefix.StudioTask),
         organizationId: appointment.studio.organizationId,
-        title: `Провести удалённую оплату по записи ${appointment.id}`,
+        title: 'выставить счет на предоплату',
         description,
         assigneeUserId: assignee.id,
         createdByUserId: assignee.id, // система / ассистент от имени менеджера
@@ -1209,7 +1251,20 @@ export class NextbotService {
             organization: { select: { nightReceiptTaskDeadlineHours: true } },
           },
         },
-        client: { select: { id: true, phone: true } },
+        client: {
+          select: {
+            id: true,
+            phone: true,
+            firstName: true,
+            lastName: true,
+            patronymic: true,
+          },
+        },
+        service: { select: { name: true } },
+        serviceItems: {
+          select: { service: { select: { name: true } } },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        },
       },
     });
     if (!appointment) {
@@ -1283,12 +1338,15 @@ export class NextbotService {
       const assignee = managerPool[0]!;
       const now = new Date();
       const deadlineAt = new Date(now.getTime() + nightReceiptDeadlineHours * 60 * 60 * 1000);
-      const clientPhone = (dto.phone ?? '').trim() || appointment.client?.phone || '';
+      const clientName = this.formatClientName(appointment.client);
+      const servicesName = this.formatAppointmentServices(appointment);
       const description = [
-        'Ночная оплата через Nextbot. Чек получен, визуально сверен ассистентом.',
-        'Проверь поступление в выписке Kaspi и переведи запись в BOOKED.',
-        `Запись: ${appointment.id} (${appointment.startAt.toISOString()})`,
-        clientPhone ? `WhatsApp клиента: ${clientPhone}` : null,
+        `Клиент: ${clientName}`,
+        `совершил предоплату по услуге/ам: ${servicesName}`,
+        'Необходтмо свериться с приложением каспи-пэй.',
+        'Если все корректно сменить статус на "забронировано"',
+        'Если оплата в системе каспи-пэй не найдена, необходимо связаться с клиентом по данному вопросу',
+        'привязка к записи и клиенту',
       ]
         .filter(Boolean)
         .join('\n');
@@ -1297,7 +1355,7 @@ export class NextbotService {
         data: {
           id: generateId(IdPrefix.StudioTask),
           organizationId: appointment.studio.organizationId,
-          title: `Сверить ночной чек Kaspi по записи ${appointment.id}`,
+          title: 'Сверить оплату с каспи-пэй',
           description,
           assigneeUserId: assignee.id,
           createdByUserId: assignee.id,

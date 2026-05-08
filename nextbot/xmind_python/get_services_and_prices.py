@@ -4,7 +4,7 @@
 # Args (kwargs): base_url, api_key, studio_id, organization_id, category, audience
 # Ответ бэкенда уже отфильтрован по студии / категории / полу. Обёртка оставляет
 # только минимально необходимые поля для презентации клиенту:
-#   data[].id, data[].name, data[].defaultPrice, data[].defaultDurationMin
+#   data[].id, data[].name, data[].description, data[].defaultPrice, data[].defaultDurationMin
 # plus prompt — системная инструкция для бота.
 
 base = args.get("base_url", "").rstrip("/")
@@ -55,6 +55,7 @@ try:
       services.append({
         "id": s.get("id"),
         "name": s.get("name"),
+        "description": s.get("description"),
         "defaultPrice": s.get("defaultPrice"),
         "defaultDurationMin": s.get("defaultDurationMin"),
       })
