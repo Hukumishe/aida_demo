@@ -39,19 +39,24 @@ export class UsersController {
   @ApiOperation({
     summary: 'Сетевой персонал организации (без привязки к филиалу)',
     description:
-      'Пользователи с `studioId = null`: OWNER, DEPUTY_OWNER, SERVICE, MANAGER. Один и тот же список при любом выбранном филиале сети. Для блока «администрирование» на экране сотрудников.',
+      'Пользователи с `studioId = null`: OWNER, DEPUTY_OWNER, SERVICE, MANAGER. Один и тот же список при любом выбранном филиале сети. Для блока «администрирование» на экране сотрудников. ' +
+      'Параметр includeDismissed=true добавляет уволенных (isActive=false).',
   })
   @ApiResponse({ status: 200, description: 'List of organization-level staff' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findNetworkStaff(
     @Param('studioId') studioId: string,
     @CurrentUser() user: any,
+    @Query('includeDismissed') includeDismissed?: string,
   ) {
+    const includeDismissedFlag =
+      includeDismissed === 'true' || includeDismissed === '1' || includeDismissed === 'yes';
     return this.usersService.findNetworkStaff(
       studioId,
       user.role,
       user.studioId,
       user.organizationId,
+      includeDismissedFlag,
     );
   }
 
@@ -59,7 +64,8 @@ export class UsersController {
   @ApiOperation({
     summary: 'Get all staff members for a studio',
     description:
-      'Возвращает сотрудников филиала. При includeNetwork=true дополнительно включает сетевых сотрудников организации (studioId = null).',
+      'Возвращает сотрудников филиала. При includeNetwork=true дополнительно включает сетевых сотрудников организации (studioId = null). ' +
+      'При includeDismissed=true в выборку попадают и уволенные (isActive=false), чтобы можно было восстановить.',
   })
   @ApiResponse({ status: 200, description: 'List of staff members' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
@@ -67,15 +73,19 @@ export class UsersController {
     @Param('studioId') studioId: string,
     @CurrentUser() user: any,
     @Query('includeNetwork') includeNetwork?: string,
+    @Query('includeDismissed') includeDismissed?: string,
   ) {
     const includeNetworkFlag =
       includeNetwork === 'true' || includeNetwork === '1' || includeNetwork === 'yes';
+    const includeDismissedFlag =
+      includeDismissed === 'true' || includeDismissed === '1' || includeDismissed === 'yes';
     return this.usersService.findAll(
       studioId,
       user.role,
       user.studioId,
       user.organizationId,
       includeNetworkFlag,
+      includeDismissedFlag,
     );
   }
 
@@ -184,6 +194,23 @@ export class UsersController {
     @CurrentUser() user: any,
   ) {
     return this.usersService.remove(userId, user.role, user.studioId);
+  }
+
+  @Post('staff/:userId/restore')
+  @ApiOperation({
+    summary: 'Restore dismissed staff member',
+    description:
+      'Восстанавливает уволенного сотрудника: isActive = true. Данные, роль и привязки к услугам не менялись при увольнении — доступ в JWT снова действует.',
+  })
+  @ApiResponse({ status: 200, description: 'Staff member restored' })
+  @ApiResponse({ status: 400, description: 'Bad request (already active or cannot restore role)' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Staff member not found' })
+  async restore(
+    @Param('userId') userId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.restore(userId, user.role, user.studioId);
   }
 
   @Delete('staff/:userId/hard')

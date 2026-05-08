@@ -44,6 +44,7 @@ export class UsersService {
     userRole: string,
     userStudioId?: string,
     userOrganizationId?: string,
+    includeDismissed = false,
   ) {
     if (!isOwnerLevelRole(userRole)) {
       if (userRole === UserRole.MANAGER) {
@@ -71,7 +72,7 @@ export class UsersService {
       where: {
         organizationId: studio.organizationId,
         studioId: null,
-        isActive: true,
+        ...(includeDismissed ? {} : { isActive: true }),
         role: { in: NETWORK_STAFF_ROLES },
       },
       include: {
@@ -93,6 +94,7 @@ export class UsersService {
     userStudioId?: string,
     userOrganizationId?: string,
     includeNetwork = false,
+    includeDismissed = false,
   ) {
     // Check access:
     // - owner-level: any studio
@@ -115,7 +117,7 @@ export class UsersService {
     const users = await this.prisma.user.findMany({
       where: {
         studioId,
-        isActive: true,
+        ...(includeDismissed ? {} : { isActive: true }),
         role: {
           in: [UserRole.ADMIN, UserRole.MANAGER, UserRole.MASTER],
         },
@@ -137,7 +139,7 @@ export class UsersService {
         return this.prisma.user.findMany({
           where: {
             studioId,
-            isActive: true,
+            ...(includeDismissed ? {} : { isActive: true }),
             role: {
               in: [UserRole.MANAGER, UserRole.MASTER],
             },
@@ -167,7 +169,7 @@ export class UsersService {
         where: {
           organizationId: studio.organizationId,
           studioId: null,
-          isActive: true,
+          ...(includeDismissed ? {} : { isActive: true }),
           role: { in: NETWORK_STAFF_ROLES },
         },
         include: {
@@ -807,6 +809,52 @@ export class UsersService {
     const updated = await this.prisma.user.update({
       where: { id: userId },
       data: { isActive: false },
+      include: { staffProfile: true },
+    });
+
+    if (!isOwnerLevelRole(userRole)) {
+      const { password, ...rest } = updated;
+      return rest;
+    }
+    return updated;
+  }
+
+  /**
+   * Restore dismissed staff: set isActive = true. Role, studio, staff_services and other
+   * data were never removed at dismissal — JWT again accepts the user as active.
+   */
+  async restore(
+    userId: string,
+    userRole: string,
+    userStudioId?: string,
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { staffProfile: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    if (user.isActive) {
+      throw new BadRequestException('User is already active');
+    }
+
+    if (!isOwnerLevelRole(userRole) && userStudioId !== user.studioId) {
+      throw new ForbiddenException('Access denied to this user');
+    }
+
+    if (user.role === UserRole.OWNER && !canManageOwners(userRole)) {
+      throw new BadRequestException('Cannot restore OWNER role');
+    }
+    if (user.role === UserRole.DEPUTY_OWNER && !canManageDeputies(userRole)) {
+      throw new BadRequestException('Cannot restore DEPUTY_OWNER role');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { isActive: true },
       include: { staffProfile: true },
     });
 
