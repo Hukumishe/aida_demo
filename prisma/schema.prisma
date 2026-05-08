@@ -248,9 +248,26 @@ model Studio {
   Notification            Notification[]
   warehouse               Warehouse?
   waitlistEntries         WaitlistEntry[]
+  userMemberships         UserStudioMembership[]
 
   @@index([organizationId])
   @@map("studios")
+}
+
+/// Привязка сотрудника к филиалам сети (несколько филиалов у одного мастера/админа филиала). Сетевые роли (studioId user = null) не используют эту таблицу.
+model UserStudioMembership {
+  id        String   @id
+  userId    String
+  studioId  String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, studioId])
+  @@index([studioId])
+  @@index([userId])
+  @@map("user_studio_memberships")
 }
 
 /// Уровень лояльности (CUSTOM) на уровне организации
@@ -369,6 +386,8 @@ model User {
   transfers                 Transfer[]
   stockMovementsCreated     StockMovement[]        @relation("StockMovementCreatedBy")
   stockMovementsForStaff    StockMovement[]        @relation("StockMovementForStaff")
+  /// Филиалы, в которых работает сотрудник (только для штатного персонала с studioId ≠ null; не для сетевых ролей).
+  studioMemberships     UserStudioMembership[]
 
   landingMasters        LandingMaster[]
   tasksCreated          StudioTask[]           @relation("StudioTaskCreatedBy")

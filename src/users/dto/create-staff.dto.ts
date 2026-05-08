@@ -7,6 +7,8 @@ import {
   MinLength,
   IsArray,
   IsUrl,
+  ArrayUnique,
+  ArrayMinSize,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '../../common/decorators/roles.decorator';
@@ -82,6 +84,19 @@ export class CreateStaffDto {
   @IsString()
   @IsOptional()
   rank?: string;
+
+  @ApiProperty({
+    required: false,
+    type: [String],
+    description:
+      'Филиалы, где работает сотрудник (MASTER, ADMIN филиала). Обязан включать id филиала из URL. Не используется для сетевых ролей (MANAGER/OWNER без филиала и т.д.).',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  studioIds?: string[];
 }
 
 

@@ -7,6 +7,8 @@ import {
   MinLength,
   IsArray,
   IsUrl,
+  ArrayUnique,
+  ArrayMinSize,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '../../common/decorators/roles.decorator';
@@ -88,6 +90,19 @@ export class UpdateStaffDto {
   @IsString()
   @IsOptional()
   rank?: string;
+
+  @ApiProperty({
+    required: false,
+    type: [String],
+    description:
+      'Полный список филиалов, где работает сотрудник (только если у пользователя есть привязка к филиалу, studioId ≠ null). Первый элемент — основной филиал (user.studioId).',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  studioIds?: string[];
 }
 
 

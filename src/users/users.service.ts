@@ -35,6 +35,46 @@ const NETWORK_STAFF_ROLES: UserRole[] = [
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
+  /** Доступ к карточке филиального сотрудника: основной филиал или запись в user_studio_memberships. */
+  private async assertActorCanAccessStaff(
+    staff: { id: string; studioId: string | null },
+    actorRole: string,
+    actorStudioId: string | undefined,
+  ): Promise<void> {
+    if (isOwnerLevelRole(actorRole)) return;
+    const sid = (actorStudioId ?? '').trim();
+    if (sid && staff.studioId === sid) return;
+    if (sid) {
+      const m = await this.prisma.userStudioMembership.findUnique({
+        where: {
+          userId_studioId: { userId: staff.id, studioId: sid },
+        },
+      });
+      if (m) return;
+    }
+    throw new ForbiddenException('Access denied to this staff member');
+  }
+
+  private async validateStudioIdsBelongToOrganization(
+    studioIds: string[],
+    organizationId: string,
+  ): Promise<string[]> {
+    const unique = [...new Set(studioIds.map((s) => s.trim()).filter(Boolean))];
+    if (unique.length === 0) {
+      throw new BadRequestException('At least one studio id is required');
+    }
+    const studios = await this.prisma.studio.findMany({
+      where: { id: { in: unique }, organizationId },
+      select: { id: true },
+    });
+    if (studios.length !== unique.length) {
+      throw new BadRequestException(
+        'One or more studios not found or not in this organization',
+      );
+    }
+    return unique;
+  }
+
   /**
    * Пользователи организации без привязки к филиалу (административный персонал сети).
    * Не включает DEVELOPER (платформа) и роли филиала (ADMIN/MASTER с studioId).
@@ -114,16 +154,26 @@ export class UsersService {
       }
     }
 
-    const users = await this.prisma.user.findMany({
-      where: {
-        studioId,
-        ...(includeDismissed ? {} : { isActive: true }),
-        role: {
-          in: [UserRole.ADMIN, UserRole.MANAGER, UserRole.MASTER],
-        },
+    const branchStaffWhere = {
+      ...(includeDismissed ? {} : { isActive: true }),
+      role: {
+        in: [UserRole.ADMIN, UserRole.MANAGER, UserRole.MASTER],
       },
+      OR: [
+        { studioId },
+        { studioMemberships: { some: { studioId } } },
+      ],
+    };
+
+    const users = await this.prisma.user.findMany({
+      where: branchStaffWhere,
       include: {
         staffProfile: true,
+        studioMemberships: {
+          include: {
+            studio: { select: { id: true, name: true } },
+          },
+        },
         staffServices: {
           include: {
             service: true,
@@ -137,15 +187,14 @@ export class UsersService {
       // Если таблица staff_services еще не создана, возвращаем без staffServices
       if (error.message?.includes('staff_services') || error.message?.includes('does not exist')) {
         return this.prisma.user.findMany({
-          where: {
-            studioId,
-            ...(includeDismissed ? {} : { isActive: true }),
-            role: {
-              in: [UserRole.MANAGER, UserRole.MASTER],
-            },
-          },
+          where: branchStaffWhere,
           include: {
             staffProfile: true,
+            studioMemberships: {
+              include: {
+                studio: { select: { id: true, name: true } },
+              },
+            },
           },
           orderBy: {
             createdAt: 'desc',
@@ -261,34 +310,87 @@ export class UsersService {
     ];
     const assignStudioId = orgWideRoles.includes(createStaffDto.role) ? null : studioId;
 
-    const createdUser = await this.prisma.user.create({
-      data: {
-        id: generateId(IdPrefix.User),
-        email: createStaffDto.email,
-        phone: createStaffDto.phone,
-        passwordHash,
-        password: createStaffDto.password, // Store plain password for OWNER/DEPUTY_OWNER visibility
-        role: createStaffDto.role,
-        organizationId: studioRow.organizationId,
-        studioId: assignStudioId,
-        staffProfile: {
-          create: {
-            firstName: createStaffDto.firstName,
-            lastName: createStaffDto.lastName,
-            title: createStaffDto.title,
-            category: createStaffDto.category,
-            providesServices: createStaffDto.providesServices ?? true,
-            avatar: createStaffDto.avatar,
-            bio: createStaffDto.bio,
-            portfolioPhotos: createStaffDto.portfolioPhotos || [],
-            rank: createStaffDto.rank,
+    if (createStaffDto.studioIds?.length && assignStudioId === null) {
+      throw new BadRequestException('studioIds applies only to staff assigned to a branch');
+    }
+
+    let primaryStudioId: string | null = assignStudioId;
+    let membershipStudioIds: string[] = [];
+    if (assignStudioId !== null) {
+      if (createStaffDto.studioIds?.length) {
+        const ids = await this.validateStudioIdsBelongToOrganization(
+          createStaffDto.studioIds,
+          studioRow.organizationId,
+        );
+        if (!ids.includes(studioId)) {
+          throw new BadRequestException(
+            'studioIds must include the studio id from the request path',
+          );
+        }
+        membershipStudioIds = ids;
+        primaryStudioId = ids[0]!;
+      } else {
+        membershipStudioIds = [studioId];
+        primaryStudioId = studioId;
+      }
+    }
+
+    const createdUser = await this.prisma.$transaction(async (tx) => {
+      const u = await tx.user.create({
+        data: {
+          id: generateId(IdPrefix.User),
+          email: createStaffDto.email,
+          phone: createStaffDto.phone,
+          passwordHash,
+          password: createStaffDto.password, // Store plain password for OWNER/DEPUTY_OWNER visibility
+          role: createStaffDto.role,
+          organizationId: studioRow.organizationId,
+          studioId: primaryStudioId,
+          staffProfile: {
+            create: {
+              firstName: createStaffDto.firstName,
+              lastName: createStaffDto.lastName,
+              title: createStaffDto.title,
+              category: createStaffDto.category,
+              providesServices: createStaffDto.providesServices ?? true,
+              avatar: createStaffDto.avatar,
+              bio: createStaffDto.bio,
+              portfolioPhotos: createStaffDto.portfolioPhotos || [],
+              rank: createStaffDto.rank,
+            },
           },
         },
-      },
-      include: {
-        staffProfile: true,
-      },
+        include: {
+          staffProfile: true,
+        },
+      });
+
+      if (membershipStudioIds.length > 0) {
+        await tx.userStudioMembership.createMany({
+          data: membershipStudioIds.map((sid) => ({
+            id: generateId(IdPrefix.UserStudioMembership),
+            userId: u.id,
+            studioId: sid,
+          })),
+        });
+      }
+
+      return tx.user.findUnique({
+        where: { id: u.id },
+        include: {
+          staffProfile: true,
+          studioMemberships: {
+            include: {
+              studio: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
     });
+
+    if (!createdUser) {
+      throw new NotFoundException('Failed to create staff member');
+    }
 
     // Remove password from response if user is not OWNER or DEPUTY_OWNER
     if (!isOwnerLevelRole(userRole)) {
@@ -383,10 +485,7 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== user.studioId) {
-      throw new ForbiddenException('Access denied to this user');
-    }
+    await this.assertActorCanAccessStaff(user, userRole, userStudioId);
 
     // Cannot change to OWNER role (only OWNER can do this, and only via special endpoint)
     if (updateStaffDto.role === UserRole.OWNER && !canManageOwners(userRole)) {
@@ -442,29 +541,60 @@ export class UsersService {
       updateStaffDto.portfolioPhotos !== undefined ||
       updateStaffDto.rank !== undefined;
 
-    const updatedUser = await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        ...updateData,
-        staffProfile: hasProfileUpdate
-          ? {
-              update: {
-                firstName: updateStaffDto.firstName,
-                lastName: updateStaffDto.lastName,
-                title: updateStaffDto.title,
-                category: updateStaffDto.category,
-                providesServices: updateStaffDto.providesServices,
-                avatar: updateStaffDto.avatar,
-                bio: updateStaffDto.bio,
-                portfolioPhotos: updateStaffDto.portfolioPhotos,
-                rank: updateStaffDto.rank,
-              },
-            }
-          : undefined,
-      },
-      include: {
-        staffProfile: true,
-      },
+    let membershipStudioIds: string[] | undefined;
+    if (updateStaffDto.studioIds !== undefined) {
+      if (user.studioId === null) {
+        throw new BadRequestException(
+          'studioIds can only be set for staff assigned to a branch',
+        );
+      }
+      membershipStudioIds = await this.validateStudioIdsBelongToOrganization(
+        updateStaffDto.studioIds,
+        user.organizationId,
+      );
+      updateData.studioId = membershipStudioIds[0]!;
+    }
+
+    const updatedUser = await this.prisma.$transaction(async (tx) => {
+      if (membershipStudioIds) {
+        await tx.userStudioMembership.deleteMany({ where: { userId } });
+        await tx.userStudioMembership.createMany({
+          data: membershipStudioIds.map((sid) => ({
+            id: generateId(IdPrefix.UserStudioMembership),
+            userId,
+            studioId: sid,
+          })),
+        });
+      }
+      return tx.user.update({
+        where: { id: userId },
+        data: {
+          ...updateData,
+          staffProfile: hasProfileUpdate
+            ? {
+                update: {
+                  firstName: updateStaffDto.firstName,
+                  lastName: updateStaffDto.lastName,
+                  title: updateStaffDto.title,
+                  category: updateStaffDto.category,
+                  providesServices: updateStaffDto.providesServices,
+                  avatar: updateStaffDto.avatar,
+                  bio: updateStaffDto.bio,
+                  portfolioPhotos: updateStaffDto.portfolioPhotos,
+                  rank: updateStaffDto.rank,
+                },
+              }
+            : undefined,
+        },
+        include: {
+          staffProfile: true,
+          studioMemberships: {
+            include: {
+              studio: { select: { id: true, name: true } },
+            },
+          },
+        },
+      });
     });
 
     // Remove password from response if user is not OWNER or DEPUTY_OWNER
@@ -492,10 +622,7 @@ export class UsersService {
       throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
     }
 
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
-      throw new ForbiddenException('Access denied to this staff member');
-    }
+    await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
 
     const staffBranch = staff.studioId
       ? await this.prisma.studio.findUnique({
@@ -558,10 +685,7 @@ export class UsersService {
       throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
     }
 
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
-      throw new ForbiddenException('Access denied to this staff member');
-    }
+    await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
 
     // Find and delete staff service
     const staffService = await this.prisma.staffService.findUnique({
@@ -597,10 +721,7 @@ export class UsersService {
       throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
     }
 
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
-      throw new ForbiddenException('Access denied to this staff member');
-    }
+    await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
 
     const staffServices = await this.prisma.staffService.findMany({
       where: {
@@ -644,6 +765,12 @@ export class UsersService {
       where: { id: userId },
       include: {
         staffProfile: true,
+        studio: { select: { id: true, name: true } },
+        studioMemberships: {
+          include: {
+            studio: { select: { id: true, name: true } },
+          },
+        },
         staffServices: {
           include: {
             service: true,
@@ -656,10 +783,7 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== user.studioId) {
-      throw new ForbiddenException('Access denied to this user');
-    }
+    await this.assertActorCanAccessStaff(user, userRole, userStudioId);
 
     // Get all overrides for this staff member
     const overrides = await this.prisma.staffServiceOverride.findMany({
@@ -679,6 +803,18 @@ export class UsersService {
       override: overrideMap.get(ss.serviceId) || null,
     }));
 
+    const workStudios: { id: string; name: string }[] = [];
+    const seenStudio = new Set<string>();
+    for (const m of user.studioMemberships) {
+      if (!seenStudio.has(m.studioId)) {
+        seenStudio.add(m.studioId);
+        workStudios.push({ id: m.studio.id, name: m.studio.name });
+      }
+    }
+    if (user.studioId && user.studio && !seenStudio.has(user.studioId)) {
+      workStudios.push({ id: user.studio.id, name: user.studio.name });
+    }
+
     // Return user with profile, services, and basic info
     const result: any = {
       id: user.id,
@@ -686,7 +822,10 @@ export class UsersService {
       phone: user.phone,
       role: user.role,
       isActive: user.isActive,
+      studioId: user.studioId,
       staffProfile: user.staffProfile,
+      studioMemberships: user.studioMemberships,
+      workStudios,
       services: servicesWithOverrides,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
@@ -715,10 +854,7 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== user.studioId) {
-      throw new ForbiddenException('Access denied to this user');
-    }
+    await this.assertActorCanAccessStaff(user, userRole, userStudioId);
 
     // Ensure staff profile exists
     if (!user.staffProfile) {
@@ -792,10 +928,7 @@ export class UsersService {
       throw new BadRequestException('User is already dismissed');
     }
 
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== user.studioId) {
-      throw new ForbiddenException('Access denied to this user');
-    }
+    await this.assertActorCanAccessStaff(user, userRole, userStudioId);
 
     // Cannot dismiss OWNER (only OWNER can do this, and only via special endpoint)
     if (user.role === UserRole.OWNER && !canManageOwners(userRole)) {
@@ -841,9 +974,7 @@ export class UsersService {
       throw new BadRequestException('User is already active');
     }
 
-    if (!isOwnerLevelRole(userRole) && userStudioId !== user.studioId) {
-      throw new ForbiddenException('Access denied to this user');
-    }
+    await this.assertActorCanAccessStaff(user, userRole, userStudioId);
 
     if (user.role === UserRole.OWNER && !canManageOwners(userRole)) {
       throw new BadRequestException('Cannot restore OWNER role');
@@ -921,10 +1052,7 @@ export class UsersService {
       throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
     }
 
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
-      throw new ForbiddenException('Access denied to this staff member');
-    }
+    await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
 
     // Verify service exists and belongs to same studio
     const service = await this.prisma.service.findUnique({
@@ -1016,10 +1144,7 @@ export class UsersService {
       throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
     }
 
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
-      throw new ForbiddenException('Access denied to this staff member');
-    }
+    await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
 
     // Find existing override
     const existing = await this.prisma.staffServiceOverride.findUnique({
@@ -1081,10 +1206,7 @@ export class UsersService {
       throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
     }
 
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
-      throw new ForbiddenException('Access denied to this staff member');
-    }
+    await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
 
     // Find override
     const override = await this.prisma.staffServiceOverride.findUnique({
@@ -1129,10 +1251,7 @@ export class UsersService {
       throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
     }
 
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
-      throw new ForbiddenException('Access denied to this staff member');
-    }
+    await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
 
     return this.prisma.staffServiceOverride.findMany({
       where: {
@@ -1172,10 +1291,7 @@ export class UsersService {
       throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
     }
 
-    // Check access
-    if (!isOwnerLevelRole(userRole) && userStudioId !== staff.studioId) {
-      throw new ForbiddenException('Access denied to this staff member');
-    }
+    await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
 
     // Find override
     const override = await this.prisma.staffServiceOverride.findUnique({

@@ -10,6 +10,8 @@ export const IdPrefix = {
   OrganizationFaq: 'ofq',
   Studio: 'stu',
   User: 'usr',
+  /** Привязка сотрудника к филиалу (несколько филиалов) */
+  UserStudioMembership: 'usm',
   Client: 'cli',
   Prompt: 'prm',
   WorkScheduleDay: 'wsd',
