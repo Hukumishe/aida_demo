@@ -45,12 +45,12 @@ export class TasksService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  private async assertUserIsStudioStaff(studioId: string, userId: string) {
+  private async assertUserIsOrganizationStaff(organizationId: string, userId: string) {
     const u = await this.prisma.user.findFirst({
-      where: { id: userId, studioId, isActive: true },
+      where: { id: userId, organizationId, isActive: true },
     });
     if (!u) {
-      throw new BadRequestException('Пользователь не найден в этом филиале или неактивен');
+      throw new BadRequestException('Пользователь не найден в этой организации или неактивен');
     }
     return u;
   }
@@ -246,8 +246,8 @@ export class TasksService {
     }
     this.assertStudioScope(studioId, userRole, userStudioId);
 
-    await this.assertUserIsStudioStaff(studioId, dto.assigneeUserId);
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    await this.assertUserIsOrganizationStaff(organizationId, dto.assigneeUserId);
 
     const deadlineAt = new Date(dto.deadlineAt);
     if (Number.isNaN(deadlineAt.getTime())) {
@@ -431,7 +431,7 @@ export class TasksService {
     }
 
     if (dto.assigneeUserId) {
-      await this.assertUserIsStudioStaff(studioId, dto.assigneeUserId);
+      await this.assertUserIsOrganizationStaff(organizationId, dto.assigneeUserId);
     }
     if (dto.controllerUserIds) {
       await this.assertControllersAreManagers(studioId, dto.controllerUserIds);

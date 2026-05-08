@@ -17,7 +17,7 @@ export class CreateStudioTaskDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ description: 'Ответственный — id сотрудника филиала (любая роль штата)' })
+  @ApiProperty({ description: 'Ответственный — id активного сотрудника организации (любая роль штата)' })
   @IsString()
   @IsNotEmpty()
   assigneeUserId: string;
