@@ -47,6 +47,7 @@ export const IdPrefix = {
   StudioReferralLink: 'srl',
   DevTicket: 'dtk',
   DevTicketMessage: 'dtm',
+  NextbotAutoMessageTemplate: 'nat',
 } as const;
 
 export type IdPrefixType = (typeof IdPrefix)[keyof typeof IdPrefix];

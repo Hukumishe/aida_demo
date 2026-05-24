@@ -148,6 +148,19 @@ enum ClientGender {
   FEMALE
 }
 
+/// Когда отправлять автосообщение Nextbot относительно записи.
+enum NextbotAutoMessageTiming {
+  BEFORE_PROCEDURE
+  AFTER_PROCEDURE
+}
+
+/// Единица смещения для автосообщения Nextbot.
+enum NextbotAutoMessageOffsetUnit {
+  MINUTES
+  HOURS
+  DAYS
+}
+
 /// Тенант: сеть салонов в одной БД. Каталог услуг, CRM, маркетинг, склад, задачи и т.д. — на уровне организации.
 model Organization {
   id                             String                         @id
@@ -247,8 +260,9 @@ model Studio {
   noShowIncomes              NoShowIncome[]
   Notification            Notification[]
   warehouse               Warehouse?
-  waitlistEntries         WaitlistEntry[]
-  userMemberships         UserStudioMembership[]
+  waitlistEntries              WaitlistEntry[]
+  userMemberships              UserStudioMembership[]
+  nextbotAutoMessageTemplates  NextbotAutoMessageTemplate[]
 
   @@index([organizationId])
   @@map("studios")
@@ -594,11 +608,34 @@ model ServiceCategory {
   organization             Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   services                 Service[]
   subcategories            ServiceSubcategory[]
-  studioDisabledCategories StudioDisabledCategory[]
+  studioDisabledCategories      StudioDisabledCategory[]
+  nextbotAutoMessageTemplates   NextbotAutoMessageTemplate[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
   @@map("service_categories")
+}
+
+/// Шаблон автосообщения Nextbot для филиала (маркетинг): до/после процедуры по категории услуг.
+model NextbotAutoMessageTemplate {
+  id                String                       @id
+  studioId          String
+  serviceCategoryId String
+  timing            NextbotAutoMessageTiming
+  offsetValue       Int
+  offsetUnit        NextbotAutoMessageOffsetUnit
+  messageText       String
+  isActive          Boolean                      @default(true)
+  sortOrder         Int                          @default(0)
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+
+  studio   Studio          @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  category ServiceCategory @relation(fields: [serviceCategoryId], references: [id], onDelete: Cascade)
+
+  @@index([studioId])
+  @@index([studioId, serviceCategoryId, timing])
+  @@map("nextbot_auto_message_templates")
 }
 
 model ServiceSubcategory {
