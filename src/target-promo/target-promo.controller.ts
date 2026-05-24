@@ -92,7 +92,7 @@ export class TargetPromoController {
     const organizationId = await this.targetPromoService.resolveOrganizationId(
       user?.role,
       user?.organizationId,
-      organizationIdQuery,
+      organizationIdQuery ?? dto.organizationId,
     );
     return this.targetPromoService.create(organizationId, dto, user?.role);
   }
@@ -109,7 +109,7 @@ export class TargetPromoController {
     const organizationId = await this.targetPromoService.resolveOrganizationId(
       user?.role,
       user?.organizationId,
-      organizationIdQuery,
+      organizationIdQuery ?? dto.organizationId,
     );
     return this.targetPromoService.update(organizationId, id, dto, user?.role);
   }

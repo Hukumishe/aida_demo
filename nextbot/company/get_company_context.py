@@ -13,7 +13,7 @@ def get_company_context(cfg: AidaConfig) -> Dict[str, Any]:
   resp = requests.get(url, headers=build_headers(cfg), timeout=10)
   resp.raise_for_status()
   raw = resp.json()
-  studios, organization_id_from_api = parse_company_context_json(raw)
+  studios, organization_id_from_api, extras = parse_company_context_json(raw)
   effective_org_id = organization_id_from_api or cfg.organization_id
 
   current_studio: Optional[Dict[str, Any]] = None
@@ -27,6 +27,7 @@ def get_company_context(cfg: AidaConfig) -> Dict[str, Any]:
     "organizationId": effective_org_id,
     "studios": studios,
     "currentStudio": current_studio,
+    **extras,
   }
   if cfg.company_id is not None:
     out["companyId"] = cfg.company_id

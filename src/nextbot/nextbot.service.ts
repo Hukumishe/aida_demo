@@ -103,6 +103,16 @@ export const NEXTBOT_UPDATE_OLD_CLIENT_PROFILE_PROMPT = [
   'Переведи диалог к подбору услуги: предложи выбрать направление/услугу или перейти к записи.',
 ].join('\n');
 
+/** Фолбэк-промпт для get_company_context (филиалы + Target-промо). */
+export const NEXTBOT_GET_COMPANY_CONTEXT_PROMPT = [
+  'СИСТЕМНОЕ СООБЩЕНИЕ: Контекст организации загружен (organizationId, studios, targetPromos, promo_text).',
+  '',
+  'ФИЛИАЛЫ: Список studios — единственный источник id, name, address и timezone для записи. Запиши studioId из поля id выбранной студии. Не выдумывай филиалы.',
+  '',
+  'ПРОМОКОДЫ TARGET: Если текст сообщения клиента после trim совпадает дословно с одной строкой из promo_text — немедленно вызови target_promo (promoText, phone, dialogId) и действуй строго по полю target_promo в ответе. Не выдумывай промотексты и не применяй скидку/бонусы без вызова target_promo.',
+  'При нескольких совпадениях уточни у клиента; при отсутствии совпадения — обычный сценарий записи.',
+].join('\n');
+
 export const NEXTBOT_CREATE_ESCALATION_TICKET_PROMPT = [
   'СИСТЕМНОЕ СООБЩЕНИЕ: сложный кейс клиента зафиксирован и передан менеджерам.',
   '',
@@ -446,9 +456,27 @@ export class NextbotService {
     );
   }
 
-  /** get_company_context — явный слой организации + список филиалов (у каждой студии своё organizationId в полях Prisma). */
+  private mapStudiosForNextbotContext(
+    studios: Array<{
+      id: string;
+      organizationId: string;
+      name: string;
+      address: string | null;
+      timezone: string;
+    }>,
+  ) {
+    return studios.map((s) => ({
+      id: s.id,
+      organizationId: s.organizationId,
+      name: s.name,
+      address: s.address ?? null,
+      timezone: s.timezone || DEFAULT_IANA_TIMEZONE,
+    }));
+  }
+
+  /** get_company_context — organizationId, филиалы, активные Target-промо (promo_text). */
   async getCompanyContext(user: CurrentUserPayload) {
-    const studios = await this.studiosService.findAll(
+    const studiosRaw = await this.studiosService.findAll(
       user.role,
       user.studioId,
       user.organizationId,
@@ -457,11 +485,17 @@ export class NextbotService {
     const promoContext = orgId
       ? await this.targetPromoService.listActiveForNextbotContext(orgId)
       : { targetPromos: [], promoText: [] as string[] };
-    return this.withNextbotPrompt(user.organizationId, 'get_company_context', {
-      studios,
-      targetPromos: promoContext.targetPromos,
-      promo_text: promoContext.promoText,
-    });
+    return this.withNextbotPrompt(
+      user.organizationId,
+      'get_company_context',
+      {
+        organizationId: orgId ?? null,
+        studios: this.mapStudiosForNextbotContext(studiosRaw),
+        targetPromos: promoContext.targetPromos,
+        promo_text: promoContext.promoText,
+      },
+      NEXTBOT_GET_COMPANY_CONTEXT_PROMPT,
+    );
   }
 
   /**

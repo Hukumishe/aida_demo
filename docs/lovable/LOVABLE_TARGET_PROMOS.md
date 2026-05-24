@@ -5,7 +5,7 @@
 | Метод | Путь |
 |-------|------|
 | GET | `/target-promos?organizationId=` |
-| POST | `/target-promos` |
+| POST | `/target-promos` (тело: поля промо; `organizationId` в теле или query — опционально, для DEVELOPER) |
 | PATCH | `/target-promos/:id` |
 | DELETE | `/target-promos/:id` |
 | GET | `/target-promos/activations?targetPromoId=` |

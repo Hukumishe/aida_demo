@@ -46,13 +46,18 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
       if (headerKey && this.constantTimeCompare(headerKey, apiKey)) {
         const orgHeader = request.headers['x-organization-id'];
-        const organizationId = typeof orgHeader === 'string'
-          ? orgHeader.trim()
-          : Array.isArray(orgHeader) ? orgHeader[0]?.trim() : undefined;
+        const organizationId =
+          (typeof orgHeader === 'string'
+            ? orgHeader.trim()
+            : Array.isArray(orgHeader)
+              ? orgHeader[0]?.trim()
+              : undefined) ||
+          this.configService.get<string>('NEXTBOT_ORGANIZATION_ID')?.trim() ||
+          undefined;
 
         if (!organizationId) {
           throw new BadRequestException(
-            'При авторизации по API-ключу обязателен заголовок X-Organization-Id с идентификатором организации.',
+            'При авторизации по API-ключу укажите заголовок X-Organization-Id или задайте NEXTBOT_ORGANIZATION_ID на сервере.',
           );
         }
 

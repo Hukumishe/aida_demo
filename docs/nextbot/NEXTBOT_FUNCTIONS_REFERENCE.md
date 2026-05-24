@@ -30,7 +30,7 @@ result = { "ok": <bool>, "status": <HTTP-код>, "data": <тело ответа
 | **HTTP** | `GET /nextbot/context` |
 | **Параметры URL** | нет |
 | **`args` (Python)** | `base_url`, `api_key` |
-| **Ответ API (`data`)** | Массив студий: у каждой элемента поля вроде `id`, `name`, `address`, … (как в CRM `studiosService.findAll`). Используйте `id` как `studio_id` для остальных вызовов. |
+| **Ответ API (`data`)** | `{ organizationId, studios[], targetPromos[], promo_text[], get_company_context }`. У студии: `id`, `name`, `address`, `timezone`, `organizationId`. `promo_text` — строки для дословного сопоставления с сообщением клиента; при совпадении вызывайте `target_promo`. |
 
 ---
 

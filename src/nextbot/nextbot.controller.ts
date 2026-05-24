@@ -55,7 +55,7 @@ export class NextbotController {
   @ApiOperation({
     summary: 'get_company_context',
     description:
-      'Возвращает studios, targetPromos, promo_text (список промотекстов для Target). У каждой студии есть organizationId.',
+      'organizationId, studios (id, name, address, timezone), targetPromos (с mechanics), promo_text, get_company_context (промпт).',
   })
   @ApiResponse({ status: 200 })
   getContext(@CurrentUser() user: CurrentUserPayload) {

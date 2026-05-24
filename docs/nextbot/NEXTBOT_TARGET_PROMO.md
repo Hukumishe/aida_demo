@@ -8,8 +8,14 @@
 
 ```json
 {
-  "studios": [...],
-  "targetPromos": [{ "id": "tpr_...", "promoText": "ХОЧУ СКИДКУ", "title": "..." }],
+  "organizationId": "org_...",
+  "studios": [{ "id": "stu_...", "name": "...", "address": null, "timezone": "Asia/Almaty", "organizationId": "org_..." }],
+  "targetPromos": [{
+    "id": "tpr_...",
+    "promoText": "ХОЧУ СКИДКУ",
+    "title": "...",
+    "mechanics": { "type": "BONUS_POINTS", "label": "Бонусы", "bonusPoints": 500, "note": null }
+  }],
   "promo_text": ["ХОЧУ СКИДКУ"],
   "get_company_context": "..."
 }

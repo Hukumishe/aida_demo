@@ -15,7 +15,10 @@ import { CreateTargetPromoDto } from './dto/create-target-promo.dto';
 import { UpdateTargetPromoDto } from './dto/update-target-promo.dto';
 import { normalizeTargetPromoText } from './target-promo-text.util';
 
-import { TargetPromoActivationStatus } from './target-promo-nextbot.constants';
+import {
+  buildTargetPromoMechanicsPayload,
+  TargetPromoActivationStatus,
+} from './target-promo-nextbot.constants';
 
 @Injectable()
 export class TargetPromoService {
@@ -151,6 +154,10 @@ export class TargetPromoService {
         id: true,
         promoText: true,
         title: true,
+        mechanicsType: true,
+        discountPercent: true,
+        bonusPoints: true,
+        mechanicsNote: true,
       },
       orderBy: [{ sortOrder: 'asc' }, { promoText: 'asc' }],
     });
@@ -158,6 +165,7 @@ export class TargetPromoService {
       id: r.id,
       promoText: r.promoText,
       title: r.title,
+      mechanics: buildTargetPromoMechanicsPayload(r),
     }));
     return {
       targetPromos: items,

@@ -2,21 +2,30 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 
-def parse_company_context_json(raw: Any) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+def parse_company_context_json(
+  raw: Any,
+) -> Tuple[List[Dict[str, Any]], Optional[str], Dict[str, Any]]:
   """
   Нормализует тело GET /nextbot/context:
-  - новый формат: { "organizationId": "...", "studios": [...] }
+  - новый формат: { "organizationId", "studios", "targetPromos", "promo_text", ... }
   - старый: голый массив студий (без корневого organizationId)
   """
+  extras: Dict[str, Any] = {}
   if isinstance(raw, list):
-    return raw, None
+    return raw, None, extras
   if isinstance(raw, dict):
     org = raw.get("organizationId")
     studios = raw.get("studios")
     if isinstance(studios, list):
       oid = org.strip() if isinstance(org, str) else None
-      return studios, oid or None
-  return [], None
+      target_promos = raw.get("targetPromos")
+      extras["targetPromos"] = target_promos if isinstance(target_promos, list) else []
+      promo_text = raw.get("promo_text")
+      if not isinstance(promo_text, list):
+        promo_text = raw.get("promoText")
+      extras["promo_text"] = promo_text if isinstance(promo_text, list) else []
+      return studios, oid or None, extras
+  return [], None, extras
 
 
 @dataclass

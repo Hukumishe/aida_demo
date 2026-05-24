@@ -83,4 +83,12 @@ export class CreateTargetPromoDto {
   @IsOptional()
   @IsInt()
   sortOrder?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Организация (часто в теле с фронта). Для DEVELOPER — выбор организации; для OWNER/DEPUTY игнорируется, берётся из JWT.',
+  })
+  @IsOptional()
+  @IsString()
+  organizationId?: string;
 }
