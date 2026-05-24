@@ -66,6 +66,12 @@ export class AppointmentsService {
     return endAt;
   }
 
+  private normalizeAppointmentComment(value: string | undefined | null): string | null {
+    if (value == null) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
   /** Основная услуга + доп. основные услуги (без дублей, с сохранением порядка). */
   private buildAppointmentServiceIds(dto: CreateAppointmentDto): string[] {
     const ids: string[] = [];
@@ -383,6 +389,7 @@ export class AppointmentsService {
           startAt,
           endAt,
           prepaymentAmount: createAppointmentDto.prepaymentAmount,
+          comment: this.normalizeAppointmentComment(createAppointmentDto.comment),
           status: initialStatus,
           ...(initialStatus === AppointmentStatus.BOOKED
             ? { bookedAt: new Date() }
@@ -827,6 +834,9 @@ export class AppointmentsService {
           startAt: updateAppointmentDto.startAt ? startAt : undefined,
           endAt: updateAppointmentDto.startAt ? endAt : undefined,
           prepaymentAmount: updateAppointmentDto.prepaymentAmount,
+          ...(updateAppointmentDto.comment !== undefined
+            ? { comment: this.normalizeAppointmentComment(updateAppointmentDto.comment) }
+            : {}),
           status: updateAppointmentDto.status,
           ...(becomingBooked ? { bookedAt: new Date() } : {}),
           ...(shouldClearHold ? { holdExpiresAt: null } : {}),

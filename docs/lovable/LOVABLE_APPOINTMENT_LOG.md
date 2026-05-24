@@ -44,6 +44,7 @@ Authorization: Bearer <accessToken>
     "endAt": "2024-01-30T11:00:00.000Z",
     "status": "BOOKED",
     "prepaymentAmount": 1000,
+    "comment": "Клиент просит мастера Майру",
     "arrivedAt": null,
     "arrivedByUserId": null,
     "createdAt": "2024-01-29T00:00:00.000Z",
@@ -183,7 +184,8 @@ Content-Type: application/json
   "clientId": "uuid",
   "serviceId": "uuid",
   "startAt": "2024-01-30T10:00:00+06:00",
-  "prepaymentAmount": 1000
+  "prepaymentAmount": 1000,
+  "comment": "Комментарий к записи (опционально)"
 }
 ```
 
@@ -196,7 +198,8 @@ Content-Type: application/json
 
 **Другие важные моменты:**
 - `endAt` вычисляется автоматически на основе длительности услуги
-- `prepaymentAmount` опционально (в рублях, целое число)
+- `prepaymentAmount` опционально (в тенге, целое число)
+- `comment` опционально — комментарий к записи (текст, в карточке «Детали записи»)
 
 **Response (201):**
 ```json
@@ -295,11 +298,12 @@ Content-Type: application/json
 {
   "startAt": "2024-01-30T11:00:00Z",
   "prepaymentAmount": 1500,
+  "comment": "Обновлённый комментарий",
   "status": "BOOKED"
 }
 ```
 
-**Важно:** Все поля опциональны. Можно изменить только время, предоплату или статус.
+**Важно:** Все поля опциональны. Можно изменить только время, предоплату, комментарий или статус. Пустая строка `comment` очищает поле.
 
 ---
 
@@ -459,6 +463,7 @@ function changeDate(days) {
 - **Услуга** (serviceId) - dropdown из списка активных услуг
 - **Дата и время** (startAt) - date picker + time picker
 - **Предоплата** (prepaymentAmount) - опционально, числовое поле
+- **Комментарий** (comment) - опционально, textarea
 
 **Валидация:**
 - Все обязательные поля должны быть заполнены

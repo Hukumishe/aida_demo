@@ -60,6 +60,14 @@ export class CreateAppointmentDto {
   @Min(0)
   prepaymentAmount?: number;
 
+  @ApiPropertyOptional({
+    description: 'Комментарий к записи (отображается в карточке визита)',
+    example: 'Клиент просит мастера Майру',
+  })
+  @IsOptional()
+  @IsString()
+  comment?: string;
+
   @ApiProperty({
     required: false,
     description:

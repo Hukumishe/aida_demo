@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Автосообщения Nextbot — логика сценариев</title>
+  <style>
+    @page { margin: 18mm 16mm; }
+    body { font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #1a1a1a; max-width: 210mm; margin: 0 auto; padding: 12mm; }
+    h1 { font-size: 20pt; border-bottom: 2px solid #6b21a8; padding-bottom: 8px; color: #4c1d95; }
+    h2 { font-size: 14pt; margin-top: 22px; color: #5b21b6; page-break-after: avoid; }
+    h3 { font-size: 12pt; margin-top: 14px; color: #333; page-break-after: avoid; }
+    p, li { margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }
+    th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #f3e8ff; }
+    .meta { color: #555; font-size: 10pt; margin-bottom: 16px; }
+    .note { background: #faf5ff; border-left: 4px solid #7c3aed; padding: 10px 12px; margin: 12px 0; }
+    .warn { background: #fff7ed; border-left: 4px solid #ea580c; padding: 10px 12px; margin: 12px 0; }
+    blockquote { margin: 8px 0; padding: 8px 12px; background: #f9fafb; border-left: 3px solid #9ca3af; font-style: italic; }
+    ul { padding-left: 20px; }
+    .page-break { page-break-before: always; }
+    code { font-size: 9.5pt; background: #f3f4f6; padding: 1px 4px; }
+  </style>
+</head>
+<body>
+
+<h1>Автосообщения Nextbot в AIDA</h1>
+<p class="meta"><strong>Логика сценариев</strong> — справочник для владельцев сети и администраторов.<br>
+Сформировано по модулю <code>nextbot-auto-messages</code> (бэкенд AIDA).</p>
+
+<h2>1. Общая схема</h2>
+<ol>
+  <li>В филиале настраиваются <strong>шаблоны</strong> (текст + тип сценария + тайминг).</li>
+  <li>При создании/изменении записи движок <strong>планирует</strong> отправки (статус <code>PENDING</code> в журнале).</li>
+  <li><strong>Каждую минуту</strong> крон отправляет сообщения, у которых наступило время <code>scheduledAt</code>.</li>
+  <li>Отправка идёт через <strong>webhook организации</strong> (<code>nextbotOutboundWebhookUrl</code>) в Nextbot.</li>
+</ol>
+
+<h3>Условия отправки (все сценарии)</h3>
+<table>
+  <tr><th>Условие</th><th>Если не выполнено</th></tr>
+  <tr><td>У клиента есть <code>nextbotDialogId</code></td><td>SKIPPED — нет привязки к диалогу</td></tr>
+  <tr><td>Клиент не в чёрном списке</td><td>SKIPPED</td></tr>
+  <tr><td>Запись не отменена</td><td>CANCELLED в логе</td></tr>
+  <tr><td>Шаблон активен на момент отправки</td><td>SKIPPED (неактивный шаблон)</td></tr>
+  <tr><td>Задан URL webhook</td><td>FAILED / ошибка</td></tr>
+</table>
+
+<div class="note">
+  <strong>Важно:</strong> выключили шаблон — уже стоящие в очереди <code>PENDING</code> всё равно отправятся; новые не планируются.
+  Отмена записи отменяет все PENDING по этой записи.
+</div>
+
+<h3>Переменные в тексте</h3>
+<p>Синтаксис <code>{{ключ}}</code>: <code>name</code>, <code>patronymic</code>, <code>lastName</code>, <code>phone</code>, <code>service</code>, <code>services</code>, <code>category</code>, <code>studio</code>, <code>appointmentDate</code>, <code>appointmentTime</code>, <code>master</code>, <code>comment</code>, <code>prepayment</code>.</p>
+
+<h2>2. Подтверждение записи</h2>
+<p><strong>Тип:</strong> <code>BOOKING_CONFIRMED</code></p>
+<ul>
+  <li><strong>Когда:</strong> запись переходит в «Забронировано» (<code>BOOKED</code>); фиксируется <code>bookedAt</code>.</li>
+  <li><strong>Отправка:</strong> сразу (смещение в шаблоне не влияет).</li>
+  <li><strong>Категория:</strong> не фильтрует (один шаблон на филиал).</li>
+</ul>
+<blockquote>{{name}}, ваша запись подтверждена: {{service}}, {{appointmentDate}} в {{appointmentTime}}, мастер {{master}}, {{studio}}.</blockquote>
+<p>При BOOKED отменяется предупреждение по холду; при новой брони в той же категории отменяются ожидающие follow-up и запрос оценки.</p>
+
+<h2>3. Напоминание о визите</h2>
+<p><strong>Тип:</strong> <code>REMINDER_BEFORE_VISIT</code> — обычно <strong>два отдельных шаблона</strong>.</p>
+
+<h3>Вариант A — за сутки</h3>
+<ul>
+  <li>Смещение: <strong>1 день</strong> до начала визита.</li>
+  <li><code>minLeadDays: 2</code> — только если с момента брони до визита ≥ 2 суток.</li>
+  <li>Если записались «на завтра» — напоминание за сутки <strong>не ставится</strong>.</li>
+</ul>
+
+<h3>Вариант B — за 4 часа</h3>
+<ul>
+  <li>Смещение: <strong>4 часа</strong> до визита.</li>
+  <li>Без <code>minLeadDays</code> — планируется всегда (при BOOKED и визите в будущем).</li>
+</ul>
+<blockquote>Здравствуйте, {{name}}! Напоминаем о записи на {{service}} {{appointmentDate}} в {{appointmentTime}}.</blockquote>
+<p>При переносе <code>startAt</code> время пересчитывается. При отмене записи — все напоминания отменяются.</p>
+
+<div class="page-break"></div>
+
+<h2>4. Истечение брони (ночной холд)</h2>
+<p><strong>Тип:</strong> <code>HOLD_EXPIRY_WARNING</code></p>
+<ul>
+  <li><strong>Когда:</strong> статус <code>TENTATIVE</code> и задан <code>holdExpiresAt</code> (ночной сценарий Nextbot).</li>
+  <li><strong>Отправка:</strong> за <strong>5 минут</strong> до конца холда (типовой пресет).</li>
+  <li>При переходе в BOOKED — предупреждение отменяется.</li>
+</ul>
+<blockquote>{{name}}, ваша предварительная бронь скоро истечёт. Успейте оплатить…</blockquote>
+
+<h2>5. Follow-up после визита</h2>
+<p><strong>Тип:</strong> <code>FOLLOWUP_AFTER_VISIT</code></p>
+<div class="warn">
+  <strong>Не путать с «клиент 24 дня не ходил».</strong> Система не сканирует всю базу. После <strong>конкретного</strong> завершённого визита (DONE) в выбранной <strong>категории</strong> ставится таймер на N дней (по умолчанию 24). Если до этой даты клиент снова записался (BOOKED) в <strong>ту же категорию</strong> — сообщение отменяется. Бронь в <strong>другой</strong> категории follow-up не отменяет.
+</div>
+<table>
+  <tr><th>Дата</th><th>Событие</th></tr>
+  <tr><td>1 мая</td><td>Визит «Депиляция» → Завершить → follow-up на 25 мая</td></tr>
+  <tr><td>10 мая</td><td>Новая запись на депиляцию → follow-up отменён</td></tr>
+  <tr><td>15 мая</td><td>Запись на маникюр → follow-up по депиляции остаётся</td></tr>
+  <tr><td>25 мая</td><td>Отправка (если есть dialog_id)</td></tr>
+</table>
+<p><strong>Категория в шаблоне обязательна.</strong></p>
+
+<h2>6. Запрос оценки</h2>
+<p><strong>Тип:</strong> <code>FEEDBACK_REQUEST</code></p>
+<ul>
+  <li>После <code>DONE</code>, через N минут (пресет: <strong>15 мин</strong>).</li>
+  <li>Категория в шаблоне <strong>обязательна</strong>.</li>
+  <li>Бот собирает оценку 1–5 → <code>POST /nextbot/appointments/:id/feedback</code>.</li>
+</ul>
+<table>
+  <tr><th>Оценка</th><th>Действие</th></tr>
+  <tr><td>4–5</td><td>Сообщение со ссылкой 2GIS филиала</td></tr>
+  <tr><td>1–3</td><td>Задача менеджеру организации</td></tr>
+  <tr><td>Повтор</td><td>Одна оценка на визит</td></tr>
+</table>
+<p>Отмена при новой BOOKED в той же категории — как у follow-up.</p>
+
+<h2>7. Сводная таблица</h2>
+<table>
+  <tr><th>Сценарий</th><th>Статус</th><th>Категория</th><th>Типовое время</th></tr>
+  <tr><td>Подтверждение</td><td>BOOKED</td><td>не нужна</td><td>сразу</td></tr>
+  <tr><td>Напоминание (сутки)</td><td>BOOKED</td><td>не нужна</td><td>−1 день, minLead 2 дня</td></tr>
+  <tr><td>Напоминание (4 ч)</td><td>BOOKED</td><td>не нужна</td><td>−4 часа</td></tr>
+  <tr><td>Холд</td><td>TENTATIVE + hold</td><td>не нужна</td><td>−5 мин до holdExpiresAt</td></tr>
+  <tr><td>Follow-up</td><td>DONE</td><td>обязательна</td><td>+24 дня</td></tr>
+  <tr><td>Оценка</td><td>DONE</td><td>обязательна</td><td>+15 мин</td></tr>
+</table>
+
+<h2>8. Журнал</h2>
+<p><code>GET /studios/:studioId/nextbot-auto-messages/logs</code></p>
+<p>Статусы: <code>PENDING</code>, <code>SENT</code>, <code>SKIPPED</code>, <code>FAILED</code>, <code>CANCELLED</code>.</p>
+
+<h2>9. Рекомендуемый набор на филиал</h2>
+<ol>
+  <li>1× Подтверждение</li>
+  <li>1× Напоминание за сутки (minLeadDays 2)</li>
+  <li>1× Напоминание за 4 часа</li>
+  <li>1× Предупреждение холда (5 мин)</li>
+  <li>По шаблону follow-up и запрос оценки на каждую нужную категорию</li>
+</ol>
+
+<p class="meta" style="margin-top:24px">Полная версия с Mermaid-диаграммой: <code>docs/NEXTBOT_AUTO_MESSAGES_SCENARIOS.md</code></p>
+
+</body>
+</html>

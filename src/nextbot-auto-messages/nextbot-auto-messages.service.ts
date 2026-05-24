@@ -28,6 +28,12 @@ import {
 import { TestSendNextbotMessageDto } from './dto/test-send-nextbot-message.dto';
 import { NextbotOutboundService } from './nextbot-outbound.service';
 import { NextbotAutoMessageOrchestratorService } from './nextbot-auto-message-orchestrator.service';
+import {
+  assertValidTemplateSchedule,
+  getCustomScheduleFormSchema,
+  NEXTBOT_TRIGGER_TYPE_LABELS,
+  requiresServiceCategory,
+} from './nextbot-auto-message-template-config';
 
 const MAX_OFFSET_MINUTES = 365 * 24 * 60;
 
@@ -75,10 +81,20 @@ export class NextbotAutoMessagesService {
   }
 
   private requiresCategory(triggerType: NextbotAutoMessageTriggerType): boolean {
-    return (
-      triggerType === NextbotAutoMessageTriggerType.FOLLOWUP_AFTER_VISIT ||
-      triggerType === NextbotAutoMessageTriggerType.FEEDBACK_REQUEST
-    );
+    return requiresServiceCategory(triggerType);
+  }
+
+  private validateTemplateScheduleOrThrow(params: {
+    triggerType: NextbotAutoMessageTriggerType;
+    anchor: import('@prisma/client').NextbotAutoMessageAnchor;
+    direction: import('@prisma/client').NextbotAutoMessageDirection;
+    serviceCategoryId?: string | null;
+  }) {
+    try {
+      assertValidTemplateSchedule(params);
+    } catch (e) {
+      throw new BadRequestException(e instanceof Error ? e.message : String(e));
+    }
   }
 
   private async assertCategoryOfferedInStudio(studioId: string, categoryId: string) {
@@ -112,6 +128,11 @@ export class NextbotAutoMessagesService {
     return {
       category: { select: { id: true, name: true, isActive: true } },
     } satisfies Prisma.NextbotAutoMessageTemplateInclude;
+  }
+
+  /** Схема формы «своё сообщение» (до/после процедуры по категории). */
+  getCustomScheduleFormSchema() {
+    return getCustomScheduleFormSchema();
   }
 
   /** Пресеты для админки (типовые сценарии из ТЗ). */
@@ -197,6 +218,10 @@ export class NextbotAutoMessagesService {
       serviceCategoryId: row.serviceCategoryId,
       serviceCategoryName: row.category?.name ?? null,
       triggerType: row.triggerType,
+      triggerTypeLabel:
+        NEXTBOT_TRIGGER_TYPE_LABELS[
+          row.triggerType as keyof typeof NEXTBOT_TRIGGER_TYPE_LABELS
+        ] ?? row.triggerType,
       anchor: row.anchor,
       direction: row.direction,
       offsetValue: row.offsetValue,
@@ -383,11 +408,12 @@ export class NextbotAutoMessagesService {
       userRole,
     );
     this.validateOffset(dto.offsetValue, dto.offsetUnit);
-    if (this.requiresCategory(dto.triggerType) && !dto.serviceCategoryId?.trim()) {
-      throw new BadRequestException(
-        'Для follow-up и feedback укажите serviceCategoryId',
-      );
-    }
+    this.validateTemplateScheduleOrThrow({
+      triggerType: dto.triggerType,
+      anchor: dto.anchor,
+      direction: dto.direction,
+      serviceCategoryId: dto.serviceCategoryId,
+    });
     if (dto.serviceCategoryId?.trim()) {
       await this.assertCategoryOfferedInStudio(studioId, dto.serviceCategoryId);
     }
@@ -439,17 +465,23 @@ export class NextbotAutoMessagesService {
     this.validateOffset(nextOffsetValue, nextOffsetUnit);
 
     const nextTrigger = dto.triggerType ?? existing.triggerType;
+    const nextAnchor = dto.anchor ?? existing.anchor;
+    const nextDirection = dto.direction ?? existing.direction;
+    const nextCategoryId =
+      dto.serviceCategoryId !== undefined
+        ? dto.serviceCategoryId
+        : existing.serviceCategoryId;
+
     if (dto.serviceCategoryId) {
       await this.assertCategoryOfferedInStudio(studioId, dto.serviceCategoryId);
     }
-    if (
-      this.requiresCategory(nextTrigger) &&
-      dto.serviceCategoryId === null
-    ) {
-      throw new BadRequestException(
-        'Для follow-up и feedback категория обязательна',
-      );
-    }
+
+    this.validateTemplateScheduleOrThrow({
+      triggerType: nextTrigger,
+      anchor: nextAnchor,
+      direction: nextDirection,
+      serviceCategoryId: nextCategoryId,
+    });
 
     const data: Prisma.NextbotAutoMessageTemplateUpdateInput = {};
     if (dto.triggerType !== undefined) data.triggerType = dto.triggerType;

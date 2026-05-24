@@ -25,6 +25,14 @@ export class UpdateAppointmentDto {
   @Min(0)
   prepaymentAmount?: number;
 
+  @ApiProperty({
+    required: false,
+    description: 'Комментарий к записи; пустая строка очищает поле',
+  })
+  @IsOptional()
+  @IsString()
+  comment?: string;
+
   @ApiProperty({ enum: AppointmentStatus, required: false })
   @IsEnum(AppointmentStatus)
   @IsOptional()

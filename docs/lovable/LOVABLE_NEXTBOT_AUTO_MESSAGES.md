@@ -33,7 +33,7 @@
 
 `GET .../presets` — типовые пресеты из ТЗ.
 
-`GET .../variables` — переменные `{{name}}`, `{{service}}`, …
+`GET .../variables` — переменные `{{name}}`, `{{service}}`, `{{comment}}`, `{{prepayment}}`, …
 
 `GET .../logs` — журнал отправок (PENDING/SENT/SKIPPED/…).
 
@@ -64,7 +64,7 @@
 
 | Поле | Описание |
 |------|----------|
-| `triggerType` | `BOOKING_CONFIRMED`, `REMINDER_BEFORE_VISIT`, `HOLD_EXPIRY_WARNING`, `FOLLOWUP_AFTER_VISIT`, `FEEDBACK_REQUEST` |
+| `triggerType` | `BOOKING_CONFIRMED`, `REMINDER_BEFORE_VISIT`, `HOLD_EXPIRY_WARNING`, `FOLLOWUP_AFTER_VISIT`, `FEEDBACK_REQUEST`, **`CUSTOM_SCHEDULED`** (своё расписание) |
 | `anchor` | `NONE`, `APPOINTMENT_START`, `HOLD_EXPIRES_AT`, `VISIT_DONE_AT` |
 | `direction` | `BEFORE` / `AFTER` относительно anchor |
 | `offsetValue` + `offsetUnit` | MINUTES / HOURS / DAYS |
@@ -81,6 +81,16 @@
 4. **HOLD_EXPIRY_WARNING** — за 5 мин до `holdExpiresAt` (ночной холд)
 5. **FOLLOWUP** +24 дня после `DONE` (категория)
 6. **FEEDBACK** +N мин после `DONE` (категория)
+
+### Своё сообщение (`CUSTOM_SCHEDULED`)
+
+Произвольный текст + категория + смещение **до** или **после** процедуры.
+
+- **До:** `APPOINTMENT_START` + `BEFORE` — при `BOOKED`, за N мин/ч/дн до визита; опционально `minLeadDays`.
+- **После:** `VISIT_DONE_AT` + `AFTER` — при `DONE`, через N мин/ч/дн после завершения; при новой брони в той же категории — отмена (как follow-up).
+
+`GET .../custom-schedule-schema` — схема формы для UI.  
+Промпт Lovable: **`LOVABLE_NEXTBOT_CUSTOM_AUTO_MESSAGES.md`**.
 
 ## Оценка после визита
 

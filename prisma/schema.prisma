@@ -155,6 +155,8 @@ enum NextbotAutoMessageTriggerType {
   HOLD_EXPIRY_WARNING
   FOLLOWUP_AFTER_VISIT
   FEEDBACK_REQUEST
+  /// Свой сценарий: до/после процедуры по категории с настраиваемым смещением.
+  CUSTOM_SCHEDULED
 }
 
 /// Точка отсчёта смещения.
@@ -939,6 +941,8 @@ model Appointment {
   endAt                     DateTime
   status                    AppointmentStatus @default(BOOKED)
   prepaymentAmount          Int?
+  /// Комментарий к записи (заметка администратора / из CRM).
+  comment                   String?
   forfeitedPrepaymentAmount Int? // Предоплата, сгоревшая при поздней отмене
   completedBonusesUsed      Int? // Сколько бонусов списано при завершении (DONE)
   completedMoneyPaid        Int? // Сумма, оплаченная деньгами при DONE (для уровня и кэшбэка)

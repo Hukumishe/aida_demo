@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   AppointmentStatus,
   NextbotAutoMessageAnchor,
+  NextbotAutoMessageDirection,
   NextbotAutoMessageLogStatus,
   NextbotAutoMessageTriggerType,
   Prisma,
@@ -18,6 +19,8 @@ import {
   renderNextbotAutoMessageTemplate,
 } from './nextbot-auto-message-variables';
 import { NextbotOutboundService } from './nextbot-outbound.service';
+
+import { isCustomScheduledAfterVisit } from './nextbot-auto-message-template-config';
 
 const FOLLOWUP_TRIGGERS: NextbotAutoMessageTriggerType[] = [
   NextbotAutoMessageTriggerType.FOLLOWUP_AFTER_VISIT,
@@ -111,8 +114,13 @@ export class NextbotAutoMessageOrchestratorService {
         continue;
       }
 
+      const usesMinLeadDays =
+        template.triggerType === NextbotAutoMessageTriggerType.REMINDER_BEFORE_VISIT ||
+        (template.triggerType === NextbotAutoMessageTriggerType.CUSTOM_SCHEDULED &&
+          template.anchor === NextbotAutoMessageAnchor.APPOINTMENT_START &&
+          template.direction === NextbotAutoMessageDirection.BEFORE);
       if (
-        template.triggerType === NextbotAutoMessageTriggerType.REMINDER_BEFORE_VISIT &&
+        usesMinLeadDays &&
         !meetsMinLeadDays(appointment.bookedAt, appointment.startAt, template.minLeadDays)
       ) {
         await this.cancelPendingForTemplate(appointmentId, template.id, 'min_lead_days');
@@ -210,7 +218,12 @@ export class NextbotAutoMessageOrchestratorService {
   }
 
   private templateApplies(
-    template: { triggerType: NextbotAutoMessageTriggerType; serviceCategoryId: string | null },
+    template: {
+      triggerType: NextbotAutoMessageTriggerType;
+      serviceCategoryId: string | null;
+      anchor: NextbotAutoMessageAnchor;
+      direction: NextbotAutoMessageDirection;
+    },
     appointment: AppointmentCtx,
     categoryIds: Set<string>,
   ): boolean {
@@ -237,6 +250,23 @@ export class NextbotAutoMessageOrchestratorService {
       case NextbotAutoMessageTriggerType.FOLLOWUP_AFTER_VISIT:
       case NextbotAutoMessageTriggerType.FEEDBACK_REQUEST:
         return appointment.status === AppointmentStatus.DONE;
+      case NextbotAutoMessageTriggerType.CUSTOM_SCHEDULED:
+        if (
+          template.anchor === NextbotAutoMessageAnchor.APPOINTMENT_START &&
+          template.direction === NextbotAutoMessageDirection.BEFORE
+        ) {
+          return (
+            appointment.status === AppointmentStatus.BOOKED &&
+            appointment.startAt.getTime() > Date.now()
+          );
+        }
+        if (
+          template.anchor === NextbotAutoMessageAnchor.VISIT_DONE_AT &&
+          template.direction === NextbotAutoMessageDirection.AFTER
+        ) {
+          return appointment.status === AppointmentStatus.DONE;
+        }
+        return false;
       default:
         return false;
     }
@@ -246,7 +276,7 @@ export class NextbotAutoMessageOrchestratorService {
     template: {
       triggerType: NextbotAutoMessageTriggerType;
       anchor: NextbotAutoMessageAnchor;
-      direction: import('@prisma/client').NextbotAutoMessageDirection;
+      direction: NextbotAutoMessageDirection;
       offsetValue: number;
       offsetUnit: import('@prisma/client').NextbotAutoMessageOffsetUnit;
     },
@@ -324,6 +354,11 @@ export class NextbotAutoMessageOrchestratorService {
       appointmentDate: datePart ?? '',
       appointmentTime: timePart ?? '',
       master: masterName,
+      comment: appointment.comment ?? '',
+      prepayment:
+        appointment.prepaymentAmount != null
+          ? String(appointment.prepaymentAmount)
+          : '',
     };
   }
 
@@ -419,15 +454,22 @@ export class NextbotAutoMessageOrchestratorService {
     categoryId: string,
     reason: string,
   ) {
-    await this.prisma.nextbotAutoMessageLog.updateMany({
+    const pending = await this.prisma.nextbotAutoMessageLog.findMany({
       where: {
         clientId,
         status: NextbotAutoMessageLogStatus.PENDING,
-        template: {
-          triggerType: { in: FOLLOWUP_TRIGGERS },
-          serviceCategoryId: categoryId,
-        },
+        template: { serviceCategoryId: categoryId },
       },
+      include: { template: true },
+    });
+    const toCancel = pending.filter(
+      (row) =>
+        FOLLOWUP_TRIGGERS.includes(row.template.triggerType) ||
+        isCustomScheduledAfterVisit(row.template),
+    );
+    if (toCancel.length === 0) return;
+    await this.prisma.nextbotAutoMessageLog.updateMany({
+      where: { id: { in: toCancel.map((r) => r.id) } },
       data: { status: NextbotAutoMessageLogStatus.CANCELLED, skipReason: reason },
     });
   }

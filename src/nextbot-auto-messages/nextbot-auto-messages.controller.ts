@@ -36,6 +36,16 @@ export class NextbotAutoMessagesController {
     return this.service.listTriggerPresets();
   }
 
+  @Get('custom-schedule-schema')
+  @ApiOperation({
+    summary: 'Схема формы «своё автосообщение»',
+    description:
+      'До/после процедуры, категория, смещение. triggerType=CUSTOM_SCHEDULED при сохранении.',
+  })
+  getCustomScheduleSchema() {
+    return this.service.getCustomScheduleFormSchema();
+  }
+
   @Get('logs')
   @ApiOperation({ summary: 'Журнал исходящих автосообщений филиала' })
   findLogs(

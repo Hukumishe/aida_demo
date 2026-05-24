@@ -66,6 +66,18 @@ export const NEXTBOT_AUTO_MESSAGE_VARIABLES = [
     description: 'Имя мастера записи',
     example: 'Мария',
   },
+  {
+    key: 'comment',
+    label: 'Комментарий к записи',
+    description: 'Комментарий из карточки визита (поле comment записи)',
+    example: 'Просит мастера Майру',
+  },
+  {
+    key: 'prepayment',
+    label: 'Предоплата',
+    description: 'Сумма предоплаты в тенге (если указана)',
+    example: '4000',
+  },
 ] as const;
 
 export type NextbotAutoMessageVariableKey =
