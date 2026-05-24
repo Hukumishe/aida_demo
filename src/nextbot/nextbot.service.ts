@@ -45,6 +45,14 @@ import { PromptsService } from '../prompts/prompts.service';
 import { NextbotAutoMessageOrchestratorService } from '../nextbot-auto-messages/nextbot-auto-message-orchestrator.service';
 import { NextbotAppointmentFeedbackService } from '../nextbot-auto-messages/nextbot-appointment-feedback.service';
 import { SubmitAppointmentFeedbackDto } from './dto/submit-appointment-feedback.dto';
+import { TargetPromoActivateDto } from '../target-promo/dto/target-promo-activate.dto';
+import { TargetPromoService } from '../target-promo/target-promo.service';
+import {
+  TargetPromoActivationStatus,
+  TARGET_PROMO_PROMPT_FALLBACKS,
+  TARGET_PROMO_PROMPT_KEYS,
+  targetPromoPromptKeyForId,
+} from '../target-promo/target-promo-nextbot.constants';
 import {
   VERIFY_CLIENT_STATUS_PROMPT_KEYS,
   VerifyClientVerificationStatus,
@@ -172,6 +180,7 @@ export class NextbotService {
     private readonly notificationsService: NotificationsService,
     private readonly autoMessages: NextbotAutoMessageOrchestratorService,
     private readonly appointmentFeedback: NextbotAppointmentFeedbackService,
+    private readonly targetPromoService: TargetPromoService,
   ) {}
 
   submitAppointmentFeedback(
@@ -444,9 +453,62 @@ export class NextbotService {
       user.studioId,
       user.organizationId,
     );
+    const orgId = user.organizationId?.trim();
+    const promoContext = orgId
+      ? await this.targetPromoService.listActiveForNextbotContext(orgId)
+      : { targetPromos: [], promoText: [] as string[] };
     return this.withNextbotPrompt(user.organizationId, 'get_company_context', {
       studios,
+      targetPromos: promoContext.targetPromos,
+      promo_text: promoContext.promoText,
     });
+  }
+
+  /**
+   * target_promo — активация промотекста Target.
+   * Организационный вызов (без studioId в URL). Ответ: activationStatus + target_promo (промпт с портала).
+   */
+  async targetPromo(dto: TargetPromoActivateDto, user: CurrentUserPayload) {
+    const organizationId = user.organizationId?.trim();
+    if (!organizationId) {
+      throw new BadRequestException('Organization context required');
+    }
+    const dialogId = this.parseNextbotDialogId(dto.dialogId);
+    const activation = await this.targetPromoService.activateForNextbot(organizationId, {
+      promoId: dto.promoId,
+      promoText: dto.promoText,
+      phone: dto.phone,
+      dialogId,
+    });
+
+    const status = activation.status;
+    const promptKey =
+      status === TargetPromoActivationStatus.MATCHED && activation.promoId
+        ? targetPromoPromptKeyForId(activation.promoId)
+        : TARGET_PROMO_PROMPT_KEYS[status];
+
+    const promptFallback =
+      status === TargetPromoActivationStatus.MATCHED
+        ? activation.promptFallback ?? TARGET_PROMO_PROMPT_FALLBACKS[status]
+        : TARGET_PROMO_PROMPT_FALLBACKS[status];
+
+    return this.withNextbotPrompt(
+      organizationId,
+      'target_promo',
+      {
+        activationStatus: status,
+        matched: activation.matched,
+        promoId: activation.promoId,
+        promoText: activation.promoText,
+        title: activation.title,
+        mechanics: activation.mechanics,
+        clientId: activation.clientId,
+        clientFound: activation.clientFound,
+        bonusGranted: activation.bonusGranted,
+      },
+      promptFallback || undefined,
+      promptKey,
+    );
   }
 
   /** Без промпта — общая логика для verify / loyalty / referral. */

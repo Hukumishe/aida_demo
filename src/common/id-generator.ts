@@ -51,6 +51,8 @@ export const IdPrefix = {
   NextbotAutoMessageLog: 'nml',
   AppointmentFeedback: 'afb',
   NextbotBirthdayMessageLog: 'nbl',
+  TargetPromo: 'tpr',
+  TargetPromoActivation: 'tpa',
 } as const;
 
 export type IdPrefixType = (typeof IdPrefix)[keyof typeof IdPrefix];

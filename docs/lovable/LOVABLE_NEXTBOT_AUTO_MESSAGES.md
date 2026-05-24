@@ -1,6 +1,7 @@
 # Автосообщения Nextbot — справка API
 
-> Промпт для вёрстки в Lovable: **`LOVABLE_NEXTBOT_AUTO_MESSAGES_PROMPT.md`**
+> Промпт для вёрстки в Lovable: **`LOVABLE_NEXTBOT_AUTO_MESSAGES_PROMPT.md`**  
+> Промокоды Target (CRM): **`LOVABLE_TARGET_PROMOS.md`**
 
 ## Навигация UI (Lovable)
 

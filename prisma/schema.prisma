@@ -112,6 +112,13 @@ enum LandingPromotionType {
   SERVICE_BUNDLE // Набор из N услуг (1+1+1+…): одна общая цена, состав в landing_promotion_services
 }
 
+/// Промокоды Target: точное совпадение promoText в чате → сценарий агента.
+enum TargetPromoMechanicsType {
+  INSTRUCTIONS_ONLY // только agentPrompt
+  DISCOUNT_PERCENT
+  BONUS_POINTS
+}
+
 /// Лояльность: классический пресет (BRONZE/SILVER/GOLD/DIAMOND из кода) или свои уровни по студии
 enum StudioLoyaltyMode {
   PRESET
@@ -265,6 +272,7 @@ model Organization {
   blacklistRequests     BlacklistRequest[]
   bonusHistory          BonusHistoryEntry[]
   landingPromotions     LandingPromotion[]
+  targetPromos          TargetPromo[]
   landingMasters        LandingMaster[]
   landingServiceCards   LandingServiceCard[]
   loyaltyTiers          StudioLoyaltyTier[]
@@ -576,6 +584,7 @@ model Client {
   nextbotAutoMessageLogs NextbotAutoMessageLog[]
   appointmentFeedbacks   AppointmentFeedback[]
   birthdayMessageLogs    NextbotBirthdayMessageLog[]
+  targetPromoActivations TargetPromoActivation[]
 
   @@unique([organizationId, phone])
   @@unique([organizationId, referralCode])
@@ -920,6 +929,53 @@ model LandingPromotionCode {
 
   @@index([promotionId])
   @@map("landing_promotion_codes")
+}
+
+/// Промо из рекламы Target: клиент пишет точный promoText → Nextbot вызывает target_promo.
+model TargetPromo {
+  id                 String                 @id
+  organizationId     String
+  title              String
+  promoText          String
+  promoTextNormalized String
+  isActive           Boolean                @default(true)
+  validFrom          DateTime?
+  validUntil         DateTime?
+  mechanicsType      TargetPromoMechanicsType @default(INSTRUCTIONS_ONLY)
+  discountPercent    Int?
+  bonusPoints        Int?
+  mechanicsNote      String?
+  agentPrompt        String
+  maxActivations     Int?
+  activationCount    Int                    @default(0)
+  sortOrder          Int                    @default(0)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  activations  TargetPromoActivation[]
+
+  @@unique([organizationId, promoTextNormalized])
+  @@index([organizationId, isActive])
+  @@map("target_promos")
+}
+
+model TargetPromoActivation {
+  id             String   @id
+  targetPromoId  String
+  organizationId String
+  clientId       String?
+  phone          String?
+  dialogId       Int?
+  createdAt      DateTime @default(now())
+
+  targetPromo TargetPromo @relation(fields: [targetPromoId], references: [id], onDelete: Cascade)
+  client      Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([targetPromoId])
+  @@index([organizationId, createdAt])
+  @@index([clientId])
+  @@map("target_promo_activations")
 }
 
 model LandingMaster {

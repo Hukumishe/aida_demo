@@ -19,7 +19,8 @@
 
 | Функция xmind | Метод | Путь |
 |---------------|--------|------|
-| `get_company_context` | GET | `/nextbot/context` |
+| `get_company_context` | GET | `/nextbot/context` (в т.ч. `targetPromos[]`) |
+| `target_promo` | POST | `/nextbot/target-promo` |
 | `verify_client_status` | GET | `/nextbot/studios/:studioId/clients/verify?q=` |
 | `register_new_client` | POST | `/nextbot/clients/register` |
 | `update_old_client_profile` | PATCH | `/nextbot/clients/:clientId/update` (тело `UpdateClientDto`; в ответе строка **`update_old_client_profile`** — промпт из панели AIDA) |

@@ -36,6 +36,7 @@ import { VerifyReceiptNighttimeDto } from './dto/verify-receipt-nighttime.dto';
 import { CreateEscalationTicketDto } from './dto/create-escalation-ticket.dto';
 import { LinkNextbotDialogDto } from './dto/link-nextbot-dialog.dto';
 import { SubmitAppointmentFeedbackDto } from './dto/submit-appointment-feedback.dto';
+import { TargetPromoActivateDto } from '../target-promo/dto/target-promo-activate.dto';
 
 /**
  * Эндпоинты строго по функциям из системного промпта xmind (aida_xmind.pdf).
@@ -54,11 +55,53 @@ export class NextbotController {
   @ApiOperation({
     summary: 'get_company_context',
     description:
-      'Возвращает { studios } — список филиалов (как в панели). У каждой студии в массиве есть поле organizationId.',
+      'Возвращает studios, targetPromos, promo_text (список промотекстов для Target). У каждой студии есть organizationId.',
   })
   @ApiResponse({ status: 200 })
   getContext(@CurrentUser() user: CurrentUserPayload) {
     return this.nextbotService.getCompanyContext(user);
+  }
+
+  @Post('target-promo')
+  @ApiOperation({
+    summary: 'target_promo',
+    description:
+      'Активация промотекста Target (уровень организации, без studioId в URL). ' +
+      'Тело или query: promoText (точное совпадение после trim) или promoId из get_company_context. ' +
+      'Ответ: activationStatus, matched, mechanics, target_promo (промпт). Опционально phone, dialogId.',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 400 })
+  targetPromoPost(
+    @Body() dto: TargetPromoActivateDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.nextbotService.targetPromo(dto, user);
+  }
+
+  @Get('target-promo')
+  @ApiOperation({
+    summary: 'target_promo (GET)',
+    description: 'То же, что POST /nextbot/target-promo — удобно для Custom API с query-параметрами.',
+  })
+  @ApiQuery({ name: 'promoText', required: false })
+  @ApiQuery({ name: 'promoId', required: false })
+  @ApiQuery({ name: 'phone', required: false })
+  @ApiQuery({ name: 'dialogId', required: false })
+  targetPromoGet(
+    @Query('promoText') promoText: string | undefined,
+    @Query('promoId') promoId: string | undefined,
+    @Query('phone') phone: string | undefined,
+    @Query('dialogId') dialogId: string | undefined,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    const dto: TargetPromoActivateDto = {
+      promoText,
+      promoId,
+      phone,
+      dialogId: dialogId != null && dialogId !== '' ? Number(dialogId) : undefined,
+    };
+    return this.nextbotService.targetPromo(dto, user);
   }
 
   // --- verify_client_status ---

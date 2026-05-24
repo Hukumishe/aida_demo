@@ -17,6 +17,7 @@ import { NextbotAppointmentFeedbackService } from './nextbot-appointment-feedbac
   ],
   exports: [
     NextbotAutoMessagesService,
+    NextbotOutboundService,
     NextbotAutoMessageOrchestratorService,
     NextbotAppointmentFeedbackService,
   ],
