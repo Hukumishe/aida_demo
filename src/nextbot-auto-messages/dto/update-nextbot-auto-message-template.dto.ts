@@ -1,7 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  NextbotAutoMessageAnchor,
+  NextbotAutoMessageDirection,
   NextbotAutoMessageOffsetUnit,
-  NextbotAutoMessageTiming,
+  NextbotAutoMessageTriggerType,
 } from '@prisma/client';
 import {
   IsBoolean,
@@ -15,15 +17,26 @@ import {
 } from 'class-validator';
 
 export class UpdateNextbotAutoMessageTemplateDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: NextbotAutoMessageTriggerType })
   @IsOptional()
-  @IsString()
-  serviceCategoryId?: string;
+  @IsEnum(NextbotAutoMessageTriggerType)
+  triggerType?: NextbotAutoMessageTriggerType;
 
-  @ApiPropertyOptional({ enum: NextbotAutoMessageTiming })
+  @ApiPropertyOptional({ enum: NextbotAutoMessageAnchor })
   @IsOptional()
-  @IsEnum(NextbotAutoMessageTiming)
-  timing?: NextbotAutoMessageTiming;
+  @IsEnum(NextbotAutoMessageAnchor)
+  anchor?: NextbotAutoMessageAnchor;
+
+  @ApiPropertyOptional({ enum: NextbotAutoMessageDirection })
+  @IsOptional()
+  @IsEnum(NextbotAutoMessageDirection)
+  direction?: NextbotAutoMessageDirection;
+
+  @ApiPropertyOptional({ description: 'null — снять привязку к категории' })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  serviceCategoryId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -40,6 +53,13 @@ export class UpdateNextbotAutoMessageTemplateDto {
   @ApiPropertyOptional()
   @IsOptional()
   @ValidateIf((_, v) => v != null)
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  minLeadDays?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   messageText?: string;
 

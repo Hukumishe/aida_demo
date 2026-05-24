@@ -1,7 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  NextbotAutoMessageAnchor,
+  NextbotAutoMessageDirection,
   NextbotAutoMessageOffsetUnit,
-  NextbotAutoMessageTiming,
+  NextbotAutoMessageTriggerType,
 } from '@prisma/client';
 import {
   IsBoolean,
@@ -12,24 +14,31 @@ import {
   IsString,
   Max,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreateNextbotAutoMessageTemplateDto {
-  @ApiProperty({
-    description: 'Категория услуг (должна быть доступна в выбранном филиале)',
+  @ApiProperty({ enum: NextbotAutoMessageTriggerType })
+  @IsEnum(NextbotAutoMessageTriggerType)
+  triggerType: NextbotAutoMessageTriggerType;
+
+  @ApiProperty({ enum: NextbotAutoMessageAnchor })
+  @IsEnum(NextbotAutoMessageAnchor)
+  anchor: NextbotAutoMessageAnchor;
+
+  @ApiProperty({ enum: NextbotAutoMessageDirection })
+  @IsEnum(NextbotAutoMessageDirection)
+  direction: NextbotAutoMessageDirection;
+
+  @ApiPropertyOptional({
+    description:
+      'Категория услуг. Не передавать — без фильтра (подтверждение, напоминания, холд). Для follow-up/feedback — обязательна.',
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  serviceCategoryId: string;
+  serviceCategoryId?: string;
 
-  @ApiProperty({
-    enum: NextbotAutoMessageTiming,
-    description: 'BEFORE_PROCEDURE — до процедуры; AFTER_PROCEDURE — после',
-  })
-  @IsEnum(NextbotAutoMessageTiming)
-  timing: NextbotAutoMessageTiming;
-
-  @ApiProperty({ example: 2, description: 'Число единиц смещения (минут/часов/дней)' })
+  @ApiProperty({ example: 2 })
   @IsInt()
   @Min(1)
   @Max(365)
@@ -39,9 +48,20 @@ export class CreateNextbotAutoMessageTemplateDto {
   @IsEnum(NextbotAutoMessageOffsetUnit)
   offsetUnit: NextbotAutoMessageOffsetUnit;
 
+  @ApiPropertyOptional({
+    example: 2,
+    description:
+      'Только для REMINDER_BEFORE_VISIT: мин. суток между bookedAt и startAt (например 2 для напоминания за сутки).',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  minLeadDays?: number;
+
   @ApiProperty({
-    example: 'Здравствуйте, {{name}}! Напоминаем о записи на {{service}} {{appointmentDate}} в {{appointmentTime}}.',
-    description: 'Текст с переменными {{name}}, {{service}}, … — см. GET .../variables',
+    example:
+      'Здравствуйте, {{name}}! Напоминаем о записи на {{service}} {{appointmentDate}} в {{appointmentTime}}.',
   })
   @IsString()
   @IsNotEmpty()

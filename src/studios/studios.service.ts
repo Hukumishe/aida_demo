@@ -96,6 +96,7 @@ export class StudiosService {
       select: {
         id: true,
         organizationId: true,
+        feedbackTwoGisUrl: true,
         organization: {
           select: {
             loyaltyMode: true,
@@ -116,6 +117,9 @@ export class StudiosService {
             nightReceiptTaskDeadlineHours: true,
             highPriorityGapMinutes: true,
             normalPriorityToleranceMinutes: true,
+            nextbotOutboundWebhookUrl: true,
+            nextbotOutboundWebhookApiKey: true,
+            feedbackLowRatingTaskTitle: true,
           },
         },
       },
@@ -144,6 +148,10 @@ export class StudiosService {
       nightReceiptTaskDeadlineHours: org.nightReceiptTaskDeadlineHours,
       highPriorityGapMinutes: org.highPriorityGapMinutes,
       normalPriorityToleranceMinutes: org.normalPriorityToleranceMinutes,
+      nextbotOutboundWebhookUrl: org.nextbotOutboundWebhookUrl,
+      nextbotOutboundWebhookApiKey: org.nextbotOutboundWebhookApiKey,
+      feedbackLowRatingTaskTitle: org.feedbackLowRatingTaskTitle,
+      feedbackTwoGisUrl: studio.feedbackTwoGisUrl,
     };
   }
 
@@ -167,6 +175,10 @@ export class StudiosService {
       nightReceiptTaskDeadlineHours?: number | null;
       highPriorityGapMinutes?: number | null;
       normalPriorityToleranceMinutes?: number | null;
+      nextbotOutboundWebhookUrl?: string | null;
+      nextbotOutboundWebhookApiKey?: string | null;
+      feedbackLowRatingTaskTitle?: string | null;
+      feedbackTwoGisUrl?: string | null;
     },
     userRole: string,
   ) {
@@ -312,11 +324,37 @@ export class StudiosService {
       data.normalPriorityToleranceMinutes =
         dto.normalPriorityToleranceMinutes ?? null;
     }
+    if (Object.prototype.hasOwnProperty.call(dto, 'nextbotOutboundWebhookUrl')) {
+      data.nextbotOutboundWebhookUrl = dto.nextbotOutboundWebhookUrl ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(dto, 'nextbotOutboundWebhookApiKey')) {
+      data.nextbotOutboundWebhookApiKey = dto.nextbotOutboundWebhookApiKey ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(dto, 'feedbackLowRatingTaskTitle')) {
+      data.feedbackLowRatingTaskTitle = dto.feedbackLowRatingTaskTitle ?? null;
+    }
 
-    return this.prisma.organization.update({
-      where: { id: studio.organizationId },
-      data: data as any,
-    });
+    const studioData: { feedbackTwoGisUrl?: string | null } = {};
+    if (Object.prototype.hasOwnProperty.call(dto, 'feedbackTwoGisUrl')) {
+      studioData.feedbackTwoGisUrl = dto.feedbackTwoGisUrl ?? null;
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.organization.update({
+        where: { id: studio.organizationId },
+        data: data as any,
+      }),
+      ...(Object.keys(studioData).length
+        ? [
+            this.prisma.studio.update({
+              where: { id: studioId },
+              data: studioData,
+            }),
+          ]
+        : []),
+    ]);
+
+    return this.getSettings(studioId, userRole, studioId);
   }
 
   private validateCustomLoyaltyPayload(

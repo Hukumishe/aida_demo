@@ -43,6 +43,7 @@ import {
 } from '../common/organization-scope';
 import { assertStaffWorksAtStudio } from '../common/staff-studio-membership';
 import { assertServiceBookableAtStudio } from '../common/service-studio-offering';
+import { NextbotAutoMessageOrchestratorService } from '../nextbot-auto-messages/nextbot-auto-message-orchestrator.service';
 
 @Injectable()
 export class AppointmentsService {
@@ -50,7 +51,14 @@ export class AppointmentsService {
     private prisma: PrismaService,
     private availabilityService: AvailabilityService,
     private notificationsService: NotificationsService,
+    private autoMessages: NextbotAutoMessageOrchestratorService,
   ) {}
+
+  private scheduleAutoMessages(appointmentId: string, visitDoneAt?: Date): void {
+    void this.autoMessages.syncAppointment(appointmentId, visitDoneAt).catch((err) => {
+      console.error(`[auto-messages] sync failed for ${appointmentId}:`, err);
+    });
+  }
 
   private calculateEndAt(startAt: Date, durationMinutes: number): Date {
     const endAt = new Date(startAt);
@@ -376,6 +384,9 @@ export class AppointmentsService {
           endAt,
           prepaymentAmount: createAppointmentDto.prepaymentAmount,
           status: initialStatus,
+          ...(initialStatus === AppointmentStatus.BOOKED
+            ? { bookedAt: new Date() }
+            : {}),
         },
         include: {
           staff: {
@@ -450,6 +461,15 @@ export class AppointmentsService {
         return { outcome: 'booked' as const, appointment: appointmentWithItems };
       }
       return appointmentWithItems;
+    }).then((result) => {
+      const appt =
+        result && typeof result === 'object' && 'appointment' in result
+          ? result.appointment
+          : result;
+      if (appt && typeof appt === 'object' && 'id' in appt) {
+        this.scheduleAutoMessages(String(appt.id));
+      }
+      return result;
     });
   }
 
@@ -797,6 +817,10 @@ export class AppointmentsService {
         updateAppointmentDto.status !== undefined &&
         clearHoldStatuses.includes(updateAppointmentDto.status);
 
+      const becomingBooked =
+        updateAppointmentDto.status === AppointmentStatus.BOOKED &&
+        appointment.status !== AppointmentStatus.BOOKED;
+
       const updated = await tx.appointment.update({
         where: { id },
         data: {
@@ -804,6 +828,7 @@ export class AppointmentsService {
           endAt: updateAppointmentDto.startAt ? endAt : undefined,
           prepaymentAmount: updateAppointmentDto.prepaymentAmount,
           status: updateAppointmentDto.status,
+          ...(becomingBooked ? { bookedAt: new Date() } : {}),
           ...(shouldClearHold ? { holdExpiresAt: null } : {}),
           ...(forfeitedToSet !== undefined ? { forfeitedPrepaymentAmount: forfeitedToSet } : {}),
         },
@@ -834,7 +859,14 @@ export class AppointmentsService {
       }
 
       return updated;
-    });
+    })
+      .then((updated) => {
+        this.scheduleAutoMessages(
+          id,
+          updated.status === AppointmentStatus.DONE ? new Date() : undefined,
+        );
+        return updated;
+      });
   }
 
   async markNoShow(id: string, userRole?: string, userStudioId?: string, userStaffId?: string) {
@@ -1552,6 +1584,7 @@ export class AppointmentsService {
       };
     }
 
+    this.scheduleAutoMessages(id, new Date());
     return appointment;
   }
 }

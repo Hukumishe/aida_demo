@@ -148,10 +148,27 @@ enum ClientGender {
   FEMALE
 }
 
-/// Когда отправлять автосообщение Nextbot относительно записи.
-enum NextbotAutoMessageTiming {
-  BEFORE_PROCEDURE
-  AFTER_PROCEDURE
+/// Тип сценария автосообщения Nextbot.
+enum NextbotAutoMessageTriggerType {
+  BOOKING_CONFIRMED
+  REMINDER_BEFORE_VISIT
+  HOLD_EXPIRY_WARNING
+  FOLLOWUP_AFTER_VISIT
+  FEEDBACK_REQUEST
+}
+
+/// Точка отсчёта смещения.
+enum NextbotAutoMessageAnchor {
+  NONE
+  APPOINTMENT_START
+  HOLD_EXPIRES_AT
+  VISIT_DONE_AT
+}
+
+/// Направление смещения относительно anchor.
+enum NextbotAutoMessageDirection {
+  BEFORE
+  AFTER
 }
 
 /// Единица смещения для автосообщения Nextbot.
@@ -159,6 +176,14 @@ enum NextbotAutoMessageOffsetUnit {
   MINUTES
   HOURS
   DAYS
+}
+
+enum NextbotAutoMessageLogStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+  CANCELLED
 }
 
 /// Тенант: сеть салонов в одной БД. Каталог услуг, CRM, маркетинг, склад, задачи и т.д. — на уровне организации.
@@ -209,6 +234,11 @@ model Organization {
   /// (в сторону свободного гэпа, без пересечения с записью). 0/null → только
   /// «впритык» с техническим полом 60 сек на округление шага. High побеждает normal.
   normalPriorityToleranceMinutes Int?
+  /// Исходящие сообщения Nextbot (webhook URL задаётся с frontend / маркетинг).
+  nextbotOutboundWebhookUrl      String?
+  nextbotOutboundWebhookApiKey   String?
+  /// Задача менеджерам при оценке визита ≤3 (заголовок).
+  feedbackLowRatingTaskTitle     String?
   createdAt                      DateTime                       @default(now())
   updatedAt                      DateTime                       @updatedAt
 
@@ -245,6 +275,8 @@ model Studio {
   name           String
   address        String?
   timezone       String   @default("Asia/Almaty")
+  /// Ссылка на отзыв в 2GIS для сценария feedback (оценка 4–5).
+  feedbackTwoGisUrl String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -523,6 +555,8 @@ model Client {
   studioLoyalties    ClientStudioLoyalty[]
   studioTasks        StudioTask[]
   waitlistEntries    WaitlistEntry[]
+  nextbotAutoMessageLogs NextbotAutoMessageLog[]
+  appointmentFeedbacks   AppointmentFeedback[]
 
   @@unique([organizationId, phone])
   @@unique([organizationId, referralCode])
@@ -616,26 +650,73 @@ model ServiceCategory {
   @@map("service_categories")
 }
 
-/// Шаблон автосообщения Nextbot для филиала (маркетинг): до/после процедуры по категории услуг.
+/// Шаблон автосообщения Nextbot для филиала (маркетинг).
 model NextbotAutoMessageTemplate {
-  id                String                       @id
+  id                String                        @id
   studioId          String
-  serviceCategoryId String
-  timing            NextbotAutoMessageTiming
+  /// null — без фильтра по категории (подтверждение, напоминания, холд).
+  serviceCategoryId String?
+  triggerType       NextbotAutoMessageTriggerType
+  anchor            NextbotAutoMessageAnchor
+  direction         NextbotAutoMessageDirection
   offsetValue       Int
   offsetUnit        NextbotAutoMessageOffsetUnit
+  /// Мин. число суток между bookedAt и startAt, чтобы планировать (например 2 для напоминания за сутки).
+  minLeadDays       Int?
   messageText       String
-  isActive          Boolean                      @default(true)
-  sortOrder         Int                          @default(0)
-  createdAt         DateTime                     @default(now())
-  updatedAt         DateTime                     @updatedAt
+  isActive          Boolean                       @default(true)
+  sortOrder         Int                           @default(0)
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
 
-  studio   Studio          @relation(fields: [studioId], references: [id], onDelete: Cascade)
-  category ServiceCategory @relation(fields: [serviceCategoryId], references: [id], onDelete: Cascade)
+  studio   Studio                    @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  category ServiceCategory?          @relation(fields: [serviceCategoryId], references: [id], onDelete: SetNull)
+  logs     NextbotAutoMessageLog[]
 
   @@index([studioId])
-  @@index([studioId, serviceCategoryId, timing])
+  @@index([studioId, triggerType])
+  @@index([studioId, serviceCategoryId])
   @@map("nextbot_auto_message_templates")
+}
+
+/// Очередь / журнал исходящих автосообщений Nextbot.
+model NextbotAutoMessageLog {
+  id            String                      @id
+  templateId    String
+  appointmentId String
+  clientId      String
+  scheduledAt   DateTime
+  sentAt        DateTime?
+  status        NextbotAutoMessageLogStatus @default(PENDING)
+  renderedText  String?
+  skipReason    String?
+  error         String?
+  createdAt     DateTime                    @default(now())
+  updatedAt     DateTime                    @updatedAt
+
+  template    NextbotAutoMessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  appointment Appointment                @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  client      Client                     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([appointmentId, templateId])
+  @@index([status, scheduledAt])
+  @@index([clientId])
+  @@map("nextbot_auto_message_logs")
+}
+
+/// Оценка визита из чата Nextbot (один раз на запись).
+model AppointmentFeedback {
+  id            String   @id
+  appointmentId String   @unique
+  clientId      String
+  rating        Int
+  createdAt     DateTime @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  client      Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("appointment_feedbacks")
 }
 
 model ServiceSubcategory {
@@ -864,6 +945,8 @@ model Appointment {
   /// Дедлайн авто-отмены для статуса TENTATIVE (Nextbot, ночной путь оплаты).
   /// При переходе записи в PENDING_CONFIRMATION / BOOKED / DONE очищается.
   holdExpiresAt             DateTime?
+  /// Момент первого (или повторного) перехода в BOOKED — для правила minLeadDays напоминаний.
+  bookedAt                  DateTime?
   arrivedAt                 DateTime?
   arrivedByUserId           String?
   createdAt                 DateTime          @default(now())
@@ -878,6 +961,8 @@ model Appointment {
   upsells       AppointmentUpsell[]
   studioTasks   StudioTask[]
   fulfilledWaitlistEntry WaitlistEntry?
+  nextbotAutoMessageLogs NextbotAutoMessageLog[]
+  feedback               AppointmentFeedback?
 
   @@index([studioId, staffUserId, startAt])
   @@index([studioId, startAt])

@@ -42,6 +42,9 @@ import {
 } from '../availability/availability.service';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { PromptsService } from '../prompts/prompts.service';
+import { NextbotAutoMessageOrchestratorService } from '../nextbot-auto-messages/nextbot-auto-message-orchestrator.service';
+import { NextbotAppointmentFeedbackService } from '../nextbot-auto-messages/nextbot-appointment-feedback.service';
+import { SubmitAppointmentFeedbackDto } from './dto/submit-appointment-feedback.dto';
 import {
   VERIFY_CLIENT_STATUS_PROMPT_KEYS,
   VerifyClientVerificationStatus,
@@ -167,7 +170,22 @@ export class NextbotService {
     private readonly availabilityService: AvailabilityService,
     private readonly promptsService: PromptsService,
     private readonly notificationsService: NotificationsService,
+    private readonly autoMessages: NextbotAutoMessageOrchestratorService,
+    private readonly appointmentFeedback: NextbotAppointmentFeedbackService,
   ) {}
+
+  submitAppointmentFeedback(
+    appointmentId: string,
+    dto: SubmitAppointmentFeedbackDto,
+    user: CurrentUserPayload,
+  ) {
+    return this.appointmentFeedback.submitRating({
+      appointmentId,
+      rating: dto.rating,
+      organizationId: user.organizationId,
+      positiveFollowUpText: dto.positiveFollowUpText,
+    });
+  }
 
   private formatClientName(client: {
     firstName?: string | null;
@@ -1198,6 +1216,7 @@ export class NextbotService {
         where: { id: appointment.id },
         data: { holdExpiresAt },
       });
+      void this.autoMessages.syncAppointment(appointment.id).catch(() => undefined);
 
       const fallback = this.buildNightInvoicePrompt({
         remotePaymentMethod:
@@ -1424,6 +1443,7 @@ export class NextbotService {
       user.userId,
       user.organizationId,
     );
+    void this.autoMessages.syncAppointment(appointment.id).catch(() => undefined);
 
     // Утренняя общая задача для всех менеджеров организации на сверку чека с выпиской Kaspi.
     const managerPool = await this.getOrganizationManagerPool(

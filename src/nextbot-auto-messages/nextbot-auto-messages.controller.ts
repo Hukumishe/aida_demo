@@ -29,6 +29,21 @@ import { UpdateNextbotAutoMessageTemplateDto } from './dto/update-nextbot-auto-m
 export class NextbotAutoMessagesController {
   constructor(private readonly service: NextbotAutoMessagesService) {}
 
+  @Get('presets')
+  @ApiOperation({ summary: 'Типовые пресеты триггеров (подсказки для админки)' })
+  listPresets() {
+    return this.service.listTriggerPresets();
+  }
+
+  @Get('logs')
+  @ApiOperation({ summary: 'Журнал исходящих автосообщений филиала' })
+  findLogs(
+    @Param('studioId') studioId: string,
+    @CurrentUser() user: { role: string; organizationId?: string },
+  ) {
+    return this.service.findLogs(studioId, user.role, user.organizationId);
+  }
+
   @Get('variables')
   @ApiOperation({
     summary: 'Список переменных для текста шаблона',

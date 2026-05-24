@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   NextbotAutoMessageOffsetUnit,
+  NextbotAutoMessageTriggerType,
   Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -28,18 +29,13 @@ export class NextbotAutoMessagesService {
   constructor(private readonly prisma: PrismaService) {}
 
   private canEdit(role: string | undefined): boolean {
-    return (
-      isDeveloperRole(role) ||
-      isOwnerLevelRole(role) ||
-      role === UserRole.MARKETER ||
-      role === UserRole.SERVICE
-    );
+    return isDeveloperRole(role) || isOwnerLevelRole(role);
   }
 
   private assertCanEdit(role: string | undefined) {
     if (!this.canEdit(role)) {
       throw new ForbiddenException(
-        'Редактировать автосообщения могут владелец, заместитель, маркетолог, SERVICE или разработчик',
+        'Редактировать автосообщения может только владелец сети (или разработчик)',
       );
     }
   }
@@ -65,6 +61,13 @@ export class NextbotAutoMessagesService {
     if (minutes > MAX_OFFSET_MINUTES) {
       throw new BadRequestException('Смещение не может превышать 365 дней');
     }
+  }
+
+  private requiresCategory(triggerType: NextbotAutoMessageTriggerType): boolean {
+    return (
+      triggerType === NextbotAutoMessageTriggerType.FOLLOWUP_AFTER_VISIT ||
+      triggerType === NextbotAutoMessageTriggerType.FEEDBACK_REQUEST
+    );
   }
 
   private async assertCategoryOfferedInStudio(studioId: string, categoryId: string) {
@@ -100,34 +103,139 @@ export class NextbotAutoMessagesService {
     } satisfies Prisma.NextbotAutoMessageTemplateInclude;
   }
 
+  /** Пресеты для админки (типовые сценарии из ТЗ). */
+  listTriggerPresets() {
+    return [
+      {
+        triggerType: NextbotAutoMessageTriggerType.BOOKING_CONFIRMED,
+        anchor: 'NONE',
+        direction: 'AFTER',
+        offsetValue: 0,
+        offsetUnit: 'MINUTES',
+        minLeadDays: null,
+        hint: 'Сразу при переходе записи в BOOKED',
+      },
+      {
+        triggerType: NextbotAutoMessageTriggerType.REMINDER_BEFORE_VISIT,
+        anchor: 'APPOINTMENT_START',
+        direction: 'BEFORE',
+        offsetValue: 1,
+        offsetUnit: 'DAYS',
+        minLeadDays: 2,
+        hint: 'За 24 ч до визита, если с BOOKED до startAt ≥ 2 суток',
+      },
+      {
+        triggerType: NextbotAutoMessageTriggerType.REMINDER_BEFORE_VISIT,
+        anchor: 'APPOINTMENT_START',
+        direction: 'BEFORE',
+        offsetValue: 4,
+        offsetUnit: 'HOURS',
+        minLeadDays: null,
+        hint: 'За 4 ч до визита, всегда',
+      },
+      {
+        triggerType: NextbotAutoMessageTriggerType.HOLD_EXPIRY_WARNING,
+        anchor: 'HOLD_EXPIRES_AT',
+        direction: 'BEFORE',
+        offsetValue: 5,
+        offsetUnit: 'MINUTES',
+        minLeadDays: null,
+        hint: 'За 5 мин до конца ночного холда',
+      },
+      {
+        triggerType: NextbotAutoMessageTriggerType.FOLLOWUP_AFTER_VISIT,
+        anchor: 'VISIT_DONE_AT',
+        direction: 'AFTER',
+        offsetValue: 24,
+        offsetUnit: 'DAYS',
+        minLeadDays: null,
+        hint: 'Через N дней после DONE (категория обязательна)',
+      },
+      {
+        triggerType: NextbotAutoMessageTriggerType.FEEDBACK_REQUEST,
+        anchor: 'VISIT_DONE_AT',
+        direction: 'AFTER',
+        offsetValue: 15,
+        offsetUnit: 'MINUTES',
+        minLeadDays: null,
+        hint: 'Через N мин после DONE — запрос оценки (категория обязательна)',
+      },
+    ];
+  }
+
   private mapTemplate(row: {
     id: string;
     studioId: string;
-    serviceCategoryId: string;
-    timing: string;
+    serviceCategoryId: string | null;
+    triggerType: string;
+    anchor: string;
+    direction: string;
     offsetValue: number;
     offsetUnit: string;
+    minLeadDays: number | null;
     messageText: string;
     isActive: boolean;
     sortOrder: number;
     createdAt: Date;
     updatedAt: Date;
-    category: { id: string; name: string; isActive: boolean };
+    category: { id: string; name: string; isActive: boolean } | null;
   }) {
     return {
       id: row.id,
       studioId: row.studioId,
       serviceCategoryId: row.serviceCategoryId,
-      serviceCategoryName: row.category.name,
-      timing: row.timing,
+      serviceCategoryName: row.category?.name ?? null,
+      triggerType: row.triggerType,
+      anchor: row.anchor,
+      direction: row.direction,
       offsetValue: row.offsetValue,
       offsetUnit: row.offsetUnit,
+      minLeadDays: row.minLeadDays,
       messageText: row.messageText,
       isActive: row.isActive,
       sortOrder: row.sortOrder,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
+  }
+
+  async findLogs(
+    studioId: string,
+    userRole?: string,
+    userOrganizationId?: string,
+    limit = 100,
+  ) {
+    await assertUserOrganizationMatchesStudio(
+      this.prisma,
+      studioId,
+      userOrganizationId,
+      userRole,
+    );
+    const rows = await this.prisma.nextbotAutoMessageLog.findMany({
+      where: { appointment: { studioId } },
+      take: Math.min(limit, 500),
+      orderBy: { scheduledAt: 'desc' },
+      include: {
+        template: { select: { id: true, triggerType: true, messageText: true } },
+        appointment: { select: { id: true, startAt: true, status: true } },
+        client: { select: { id: true, firstName: true, phone: true } },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      templateId: r.templateId,
+      triggerType: r.template.triggerType,
+      appointmentId: r.appointmentId,
+      appointmentStatus: r.appointment.status,
+      clientId: r.clientId,
+      clientName: r.client.firstName,
+      scheduledAt: r.scheduledAt,
+      sentAt: r.sentAt,
+      status: r.status,
+      skipReason: r.skipReason,
+      error: r.error,
+      renderedText: r.renderedText,
+    }));
   }
 
   listVariables() {
@@ -188,16 +296,26 @@ export class NextbotAutoMessagesService {
       userRole,
     );
     this.validateOffset(dto.offsetValue, dto.offsetUnit);
-    await this.assertCategoryOfferedInStudio(studioId, dto.serviceCategoryId);
+    if (this.requiresCategory(dto.triggerType) && !dto.serviceCategoryId?.trim()) {
+      throw new BadRequestException(
+        'Для follow-up и feedback укажите serviceCategoryId',
+      );
+    }
+    if (dto.serviceCategoryId?.trim()) {
+      await this.assertCategoryOfferedInStudio(studioId, dto.serviceCategoryId);
+    }
 
     const created = await this.prisma.nextbotAutoMessageTemplate.create({
       data: {
         id: generateId(IdPrefix.NextbotAutoMessageTemplate),
         studioId,
-        serviceCategoryId: dto.serviceCategoryId,
-        timing: dto.timing,
+        serviceCategoryId: dto.serviceCategoryId?.trim() || null,
+        triggerType: dto.triggerType,
+        anchor: dto.anchor,
+        direction: dto.direction,
         offsetValue: dto.offsetValue,
         offsetUnit: dto.offsetUnit,
+        minLeadDays: dto.minLeadDays ?? null,
         messageText: dto.messageText.trim(),
         isActive: dto.isActive ?? true,
         sortOrder: dto.sortOrder ?? 0,
@@ -233,17 +351,31 @@ export class NextbotAutoMessagesService {
     const nextOffsetUnit = dto.offsetUnit ?? existing.offsetUnit;
     this.validateOffset(nextOffsetValue, nextOffsetUnit);
 
+    const nextTrigger = dto.triggerType ?? existing.triggerType;
     if (dto.serviceCategoryId) {
       await this.assertCategoryOfferedInStudio(studioId, dto.serviceCategoryId);
     }
+    if (
+      this.requiresCategory(nextTrigger) &&
+      dto.serviceCategoryId === null
+    ) {
+      throw new BadRequestException(
+        'Для follow-up и feedback категория обязательна',
+      );
+    }
 
     const data: Prisma.NextbotAutoMessageTemplateUpdateInput = {};
+    if (dto.triggerType !== undefined) data.triggerType = dto.triggerType;
+    if (dto.anchor !== undefined) data.anchor = dto.anchor;
+    if (dto.direction !== undefined) data.direction = dto.direction;
     if (dto.serviceCategoryId !== undefined) {
-      data.category = { connect: { id: dto.serviceCategoryId } };
+      data.category = dto.serviceCategoryId
+        ? { connect: { id: dto.serviceCategoryId } }
+        : { disconnect: true };
     }
-    if (dto.timing !== undefined) data.timing = dto.timing;
     if (dto.offsetValue !== undefined) data.offsetValue = dto.offsetValue;
     if (dto.offsetUnit !== undefined) data.offsetUnit = dto.offsetUnit;
+    if (dto.minLeadDays !== undefined) data.minLeadDays = dto.minLeadDays;
     if (dto.messageText !== undefined) data.messageText = dto.messageText.trim();
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
     if (dto.sortOrder !== undefined) data.sortOrder = dto.sortOrder;

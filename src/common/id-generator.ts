@@ -48,6 +48,8 @@ export const IdPrefix = {
   DevTicket: 'dtk',
   DevTicketMessage: 'dtm',
   NextbotAutoMessageTemplate: 'nat',
+  NextbotAutoMessageLog: 'nml',
+  AppointmentFeedback: 'afb',
 } as const;
 
 export type IdPrefixType = (typeof IdPrefix)[keyof typeof IdPrefix];

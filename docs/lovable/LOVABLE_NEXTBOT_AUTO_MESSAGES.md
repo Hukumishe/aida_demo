@@ -1,102 +1,80 @@
-# Автосообщения Nextbot (шаблоны) — Lovable
+# Автосообщения Nextbot — Lovable
 
-Блок настройки в **Маркетинг / Nextbot** (или аналог): шаблоны исходящих сообщений по записям для выбранного **филиала**.
+## Настройки интеграции
 
-## Категории услуг (п.2)
+`GET/PATCH /studios/:studioId/settings` — дополнительные поля:
 
-Список для селекта — существующий API:
+| Поле | Уровень | Описание |
+|------|---------|----------|
+| `nextbotOutboundWebhookUrl` | организация | URL webhook исходящих сообщений (задаётся с frontend) |
+| `nextbotOutboundWebhookApiKey` | организация | Bearer для webhook, опционально |
+| `feedbackLowRatingTaskTitle` | организация | Заголовок задачи при оценке ≤3 |
+| `feedbackTwoGisUrl` | **филиал** | Ссылка 2GIS после оценки 4–5 |
 
-`GET /services/categories?studioId={studioId}`
+Тело webhook (POST): `{ dialogId, text, appointmentId?, clientId?, templateId? }`.
 
-Показывать только категории с **`isOfferedInStudio === true`** (категория активна в сети и не отключена в филиале).
+## Шаблоны
 
-## Переменные в тексте (п.4)
+`GET/POST/PATCH/DELETE /studios/:studioId/nextbot-auto-messages`
 
-`GET /studios/{studioId}/nextbot-auto-messages/variables`
+`GET .../presets` — типовые пресеты из ТЗ.
 
-```json
-{
-  "syntax": "{{variableKey}}",
-  "variables": [
-    { "key": "name", "label": "Имя клиента", "description": "...", "example": "Анна" }
-  ]
-}
-```
+`GET .../variables` — переменные `{{name}}`, `{{service}}`, …
 
-В редакторе текста — кнопки «вставить переменную», вставляют `{{name}}`, `{{service}}` и т.д.
+`GET .../logs` — журнал отправок (PENDING/SENT/SKIPPED/…).
 
-Доступные ключи: `name`, `patronymic`, `lastName`, `phone`, `service`, `services`, `category`, `studio`, `appointmentDate`, `appointmentTime`, `master`.
+### Поля шаблона
 
-## CRUD шаблонов
+| Поле | Описание |
+|------|----------|
+| `triggerType` | `BOOKING_CONFIRMED`, `REMINDER_BEFORE_VISIT`, `HOLD_EXPIRY_WARNING`, `FOLLOWUP_AFTER_VISIT`, `FEEDBACK_REQUEST` |
+| `anchor` | `NONE`, `APPOINTMENT_START`, `HOLD_EXPIRES_AT`, `VISIT_DONE_AT` |
+| `direction` | `BEFORE` / `AFTER` относительно anchor |
+| `offsetValue` + `offsetUnit` | MINUTES / HOURS / DAYS |
+| `minLeadDays` | Только для напоминаний: мин. суток между `bookedAt` и `startAt` |
+| `serviceCategoryId` | null — без фильтра; для follow-up/feedback **обязательна** |
+| `messageText` | Текст с `{{переменными}}` |
+| `isActive` | Выключение не отменяет уже стоящие в очереди PENDING |
 
-Базовый путь: `/studios/{studioId}/nextbot-auto-messages`
+### Пресеты (подсказки)
 
-| Метод | Путь | Описание |
-|--------|------|----------|
-| GET | `.../variables` | Справочник переменных |
-| GET | `...` | Список шаблонов филиала |
-| GET | `.../{templateId}` | Один шаблон |
-| POST | `...` | Создать |
-| PATCH | `.../{templateId}` | Обновить |
-| DELETE | `.../{templateId}` | Удалить |
+1. **BOOKING_CONFIRMED** — сразу при `BOOKED`
+2. **REMINDER** −1 день, `minLeadDays: 2`
+3. **REMINDER** −4 часа
+4. **HOLD_EXPIRY_WARNING** — за 5 мин до `holdExpiresAt` (ночной холд)
+5. **FOLLOWUP** +24 дня после `DONE` (категория)
+6. **FEEDBACK** +N мин после `DONE` (категория)
 
-Права на **запись**: OWNER, DEPUTY_OWNER, MARKETER, SERVICE, DEVELOPER.  
-**Чтение**: все роли с доступом к филиалу (JWT + `studioId` в пути).
+## Оценка после визита
 
-### Создание (POST body)
-
-```json
-{
-  "serviceCategoryId": "sca_xxxxxxxxxx",
-  "timing": "BEFORE_PROCEDURE",
-  "offsetValue": 2,
-  "offsetUnit": "HOURS",
-  "messageText": "Здравствуйте, {{name}}! Напоминаем о записи на {{service}} {{appointmentDate}} в {{appointmentTime}}.",
-  "isActive": true,
-  "sortOrder": 0
-}
-```
-
-**timing**
-
-- `BEFORE_PROCEDURE` — **до** процедуры (п.1 «До процедуры»)
-- `AFTER_PROCEDURE` — **после** процедуры (п.1 «После процедуры»)
-
-**offsetUnit** + **offsetValue** (п.3)
-
-- До: «за сколько» → `BEFORE_PROCEDURE` + например `{ "offsetValue": 1, "offsetUnit": "DAYS" }`
-- После: «через сколько» → `AFTER_PROCEDURE` + например `{ "offsetValue": 30, "offsetUnit": "MINUTES" }`
-
-Допустимые единицы: `MINUTES`, `HOURS`, `DAYS`.  
-`offsetValue`: 1–365 (в сумме не больше 365 дней).
-
-### Ответ шаблона
+`POST /nextbot/appointments/:appointmentId/feedback`
 
 ```json
-{
-  "id": "nat_xxxxxxxxxx",
-  "studioId": "stu_xxxxxxxxxx",
-  "serviceCategoryId": "sca_xxxxxxxxxx",
-  "serviceCategoryName": "Маникюр",
-  "timing": "BEFORE_PROCEDURE",
-  "offsetValue": 2,
-  "offsetUnit": "HOURS",
-  "messageText": "...",
-  "isActive": true,
-  "sortOrder": 0,
-  "createdAt": "...",
-  "updatedAt": "..."
-}
+{ "rating": 5, "positiveFollowUpText": "опционально" }
 ```
 
-## UI (рекомендуемый блок)
+- Один раз на запись, только `DONE`
+- 4–5: исходящее с `feedbackTwoGisUrl` филиала
+- ≤3: задача менеджеру организации
+- Оценка в таблице `appointment_feedbacks`
 
-1. **Когда** — radio: «До процедуры» / «После процедуры» → `timing`.
-2. **Категория** — select из `GET /services/categories?studioId=...` (только `isOfferedInStudio`).
-3. **Тайминг** — число + select единицы (минуты / часы / дни) → `offsetValue`, `offsetUnit`.
-4. **Текст** — textarea + панель переменных из `.../variables`.
-5. Список сохранённых шаблонов — таблица/карточки с toggle `isActive`, редактирование, удаление.
+Сценарий Nextbot: после сообщения `FEEDBACK_REQUEST` клиент пишет оценку → вызов API.
 
-## Отправка
+## Поведение движка (бэкенд)
 
-Сейчас бэкенд хранит **шаблоны**; крон/отправка в Nextbot webhook — отдельный этап (нужен `nextbotDialogId` у клиента и интеграция с API Nextbot).
+- При `BOOKED`: подтверждение + планирование напоминаний; `bookedAt` фиксируется
+- При переносе `startAt`: пересчёт PENDING напоминаний; правило `minLeadDays` перепроверяется
+- При `CANCELLED`: отмена всех PENDING по записи
+- При `DONE`: follow-up + feedback по категории
+- При новом `BOOKED` в той же категории: отмена старых PENDING follow-up/feedback клиента по этой категории
+- Чёрный список / нет `nextbotDialogId` → SKIPPED в логе
+- Крон каждую минуту отправляет `scheduledAt <= now`
+- Выключили шаблон: **уже в очереди** — отправятся; **новые** — не планируются
+
+## Категории для селекта
+
+`GET /services/categories?studioId=...` — только `isOfferedInStudio === true`.
+
+## Права
+
+Редактирование шаблонов: **OWNER**, **DEPUTY_OWNER**, **DEVELOPER**.

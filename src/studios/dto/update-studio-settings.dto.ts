@@ -237,4 +237,40 @@ export class UpdateStudioSettingsDto {
   @Min(0)
   @Max(30)
   normalPriorityToleranceMinutes?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Webhook URL исходящих сообщений Nextbot (организация).',
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  nextbotOutboundWebhookUrl?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'API-ключ для webhook Nextbot (Bearer), опционально.',
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  nextbotOutboundWebhookApiKey?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Заголовок задачи менеджерам при оценке ≤3.',
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  feedbackLowRatingTaskTitle?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Ссылка на 2GIS для филиала (после оценки 4–5).',
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsString()
+  feedbackTwoGisUrl?: string | null;
 }

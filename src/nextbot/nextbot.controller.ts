@@ -35,6 +35,7 @@ import { RequestManagerInvoiceDto } from './dto/request-manager-invoice.dto';
 import { VerifyReceiptNighttimeDto } from './dto/verify-receipt-nighttime.dto';
 import { CreateEscalationTicketDto } from './dto/create-escalation-ticket.dto';
 import { LinkNextbotDialogDto } from './dto/link-nextbot-dialog.dto';
+import { SubmitAppointmentFeedbackDto } from './dto/submit-appointment-feedback.dto';
 
 /**
  * Эндпоинты строго по функциям из системного промпта xmind (aida_xmind.pdf).
@@ -170,6 +171,20 @@ export class NextbotController {
     @Body() _body?: Record<string, unknown>,
   ) {
     return this.nextbotService.notImplemented('process_survey_answers_failed');
+  }
+
+  @Post('appointments/:appointmentId/feedback')
+  @ApiOperation({
+    summary: 'submit_appointment_feedback',
+    description:
+      'Оценка 1–5 из чата Nextbot после визита. 4–5: опционально 2GIS; ≤3: задача менеджерам.',
+  })
+  submitAppointmentFeedback(
+    @Param('appointmentId') appointmentId: string,
+    @Body() dto: SubmitAppointmentFeedbackDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.nextbotService.submitAppointmentFeedback(appointmentId, dto, user);
   }
 
   // --- get_service_categories ---

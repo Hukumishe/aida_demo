@@ -9,6 +9,7 @@ import { AppointmentsModule } from '../appointments/appointments.module';
 import { AvailabilityModule } from '../availability/availability.module';
 import { PromptsModule } from '../prompts/prompts.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { NextbotAutoMessagesModule } from '../nextbot-auto-messages/nextbot-auto-messages.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     AvailabilityModule,
     PromptsModule,
     NotificationsModule,
+    NextbotAutoMessagesModule,
   ],
   controllers: [NextbotController],
   providers: [NextbotService],
