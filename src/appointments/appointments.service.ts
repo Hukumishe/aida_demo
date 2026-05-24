@@ -41,6 +41,7 @@ import {
   assertUserOrganizationMatchesStudio,
   assertUserOrganizationMatchesStudioOrganizationId,
 } from '../common/organization-scope';
+import { assertStaffWorksAtStudio } from '../common/staff-studio-membership';
 import { assertServiceBookableAtStudio } from '../common/service-studio-offering';
 
 @Injectable()
@@ -243,14 +244,11 @@ export class AppointmentsService {
     );
     const org = studio.organization;
 
-    // Verify staff user exists and belongs to studio
-    const staff = await this.prisma.user.findUnique({
-      where: { id: createAppointmentDto.staffUserId },
-    });
-
-    if (!staff || staff.studioId !== studioId) {
-      throw new NotFoundException('Staff member not found or does not belong to this studio');
-    }
+    await assertStaffWorksAtStudio(
+      this.prisma,
+      createAppointmentDto.staffUserId,
+      studioId,
+    );
 
     // Verify client exists and belongs to studio
     const client = await this.prisma.client.findUnique({

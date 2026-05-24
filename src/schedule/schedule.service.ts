@@ -10,6 +10,7 @@ import { CreateScheduleDayDto } from './dto/create-schedule-day.dto';
 import { UpdateScheduleDayDto } from './dto/update-schedule-day.dto';
 import { GenerateScheduleDto, SchedulePattern } from './dto/generate-schedule.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { assertStaffWorksAtStudio } from '../common/staff-studio-membership';
 
 @Injectable()
 export class ScheduleService {
@@ -124,14 +125,11 @@ export class ScheduleService {
       throw new NotFoundException(`Studio with ID ${studioId} not found`);
     }
 
-    // Verify staff user exists and belongs to studio
-    const staff = await this.prisma.user.findUnique({
-      where: { id: createScheduleDayDto.staffUserId },
-    });
-
-    if (!staff || staff.studioId !== studioId) {
-      throw new NotFoundException('Staff member not found or does not belong to this studio');
-    }
+    await assertStaffWorksAtStudio(
+      this.prisma,
+      createScheduleDayDto.staffUserId,
+      studioId,
+    );
 
     // Normalize date: when date comes as "2024-02-08", interpret it as Feb 8 in Almaty
     // For PostgreSQL @db.Date, we need to store it as UTC midnight of that date
@@ -199,14 +197,11 @@ export class ScheduleService {
       throw new NotFoundException(`Studio with ID ${studioId} not found`);
     }
 
-    // Verify staff user exists and belongs to studio
-    const staff = await this.prisma.user.findUnique({
-      where: { id: generateScheduleDto.staffUserId },
-    });
-
-    if (!staff || staff.studioId !== studioId) {
-      throw new NotFoundException('Staff member not found or does not belong to this studio');
-    }
+    await assertStaffWorksAtStudio(
+      this.prisma,
+      generateScheduleDto.staffUserId,
+      studioId,
+    );
 
     // Validate time range
     this.validateTimeRange(generateScheduleDto.startTime, generateScheduleDto.endTime);

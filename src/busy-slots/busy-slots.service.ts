@@ -10,6 +10,7 @@ import { CreateBusySlotDto } from './dto/create-busy-slot.dto';
 import { UpdateBusySlotDto } from './dto/update-busy-slot.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { AvailabilityService } from '../availability/availability.service';
+import { assertStaffWorksAtStudio } from '../common/staff-studio-membership';
 
 @Injectable()
 export class BusySlotsService {
@@ -91,14 +92,11 @@ export class BusySlotsService {
       throw new NotFoundException(`Studio with ID ${studioId} not found`);
     }
 
-    // Verify staff user exists and belongs to studio
-    const staff = await this.prisma.user.findUnique({
-      where: { id: createBusySlotDto.staffUserId },
-    });
-
-    if (!staff || staff.studioId !== studioId) {
-      throw new NotFoundException('Staff member not found or does not belong to this studio');
-    }
+    await assertStaffWorksAtStudio(
+      this.prisma,
+      createBusySlotDto.staffUserId,
+      studioId,
+    );
 
     const startAt = new Date(createBusySlotDto.startAt);
     const endAt = new Date(createBusySlotDto.endAt);
