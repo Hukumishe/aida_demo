@@ -493,6 +493,8 @@ model Client {
   studioReferralLinkId            String?
   referredByClientId              String? // Кто привёл этого клиента (заполняется при первом визите с кодом)
   referralFirstVisitBonusCredited Boolean     @default(false) // 20% за первый визит уже начислены
+  /// ID диалога Nextbot (dialog_id) для исходящих webhook-сообщений клиенту
+  nextbotDialogId                   Int?
   createdAt                       DateTime    @default(now())
   updatedAt                       DateTime    @updatedAt
 

@@ -34,6 +34,7 @@ import { UpdateClientDto } from '../clients/dto/update-client.dto';
 import { CreateAppointmentDto } from '../appointments/dto/create-appointment.dto';
 import { UpdateAppointmentDto } from '../appointments/dto/update-appointment.dto';
 import { NextbotSurveyDto } from './dto/nextbot-survey.dto';
+import { LinkNextbotDialogDto } from './dto/link-nextbot-dialog.dto';
 import { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import {
   AvailabilityService,
@@ -258,6 +259,24 @@ export class NextbotService {
     return safeClient;
   }
 
+  private parseNextbotDialogId(raw: string | number | undefined): number | undefined {
+    if (raw == null || raw === '') return undefined;
+    const n = typeof raw === 'number' ? raw : Number(String(raw).trim());
+    if (!Number.isFinite(n) || n < 1) return undefined;
+    return Math.trunc(n);
+  }
+
+  private async saveNextbotDialogId(
+    clientId: string,
+    organizationId: string,
+    dialogId: number,
+  ): Promise<void> {
+    await this.prisma.client.updateMany({
+      where: { id: clientId, organizationId },
+      data: { nextbotDialogId: dialogId },
+    });
+  }
+
   private normalizePhoneDigits(raw: string | undefined): string {
     const src = String(raw ?? '').trim();
     if (!src) return '';
@@ -455,8 +474,25 @@ export class NextbotService {
    * verify_client_status — промпт под ключом `verify_client_status` подбирается по сценарию
    * (ключи в БД: verify_client_status_not_found | …_with_birth_date | …_without_birth_date).
    */
-  async verifyClient(phone: string | undefined, user: CurrentUserPayload) {
-    const profile = await this.resolveClientProfile(phone, user);
+  async verifyClient(
+    phone: string | undefined,
+    user: CurrentUserPayload,
+    dialogIdRaw?: string | number,
+  ) {
+    let profile = await this.resolveClientProfile(phone, user);
+    const dialogId = this.parseNextbotDialogId(dialogIdRaw);
+    if (profile && dialogId) {
+      const clientId = String((profile as Record<string, unknown>)['id'] ?? '');
+      if (clientId) {
+        await this.saveNextbotDialogId(clientId, user.organizationId, dialogId);
+        profile = await this.clientsService.findOne(
+          clientId,
+          user.role,
+          user.studioId,
+          user.organizationId,
+        );
+      }
+    }
     if (!profile) {
       return this.withNextbotPrompt(
         user.organizationId,
@@ -488,6 +524,8 @@ export class NextbotService {
         level: c['level'] ?? null,
         bonuses: c['bonuses'] ?? null,
         cashbackPercent: c['cashbackPercent'] ?? null,
+        nextbotDialogId: c['nextbotDialogId'] ?? null,
+        dialogId: c['nextbotDialogId'] ?? null,
       },
       undefined,
       VERIFY_CLIENT_STATUS_PROMPT_KEYS[status],
@@ -540,6 +578,33 @@ export class NextbotService {
       referralCode: c['referralCode'] ?? null,
       rawClient: profile,
     });
+  }
+
+  /** Привязка dialog_id Nextbot к клиенту по телефону (первый контакт / смена диалога). */
+  async linkNextbotDialog(dto: LinkNextbotDialogDto, user: CurrentUserPayload) {
+    const dialogId = dto.dialogId ?? dto.nextbotDialogId;
+    if (!dialogId) {
+      throw new BadRequestException('Укажите dialogId');
+    }
+    const profile = await this.resolveClientProfile(dto.phone, user);
+    if (!profile) {
+      throw new NotFoundException('Клиент с таким телефоном не найден');
+    }
+    const clientId = String((profile as Record<string, unknown>)['id'] ?? '');
+    await this.saveNextbotDialogId(clientId, user.organizationId, dialogId);
+    const updated = await this.clientsService.findOne(
+      clientId,
+      user.role,
+      user.studioId,
+      user.organizationId,
+    );
+    const c = updated as Record<string, unknown>;
+    return {
+      clientId: c['id'],
+      phone: c['phone'],
+      nextbotDialogId: c['nextbotDialogId'] ?? dialogId,
+      dialogId: c['nextbotDialogId'] ?? dialogId,
+    };
   }
 
   /** register_new_client */

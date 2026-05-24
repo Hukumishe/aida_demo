@@ -145,6 +145,26 @@ export class UpdateClientDto {
   @IsOptional()
   @IsBoolean()
   customLoyaltyClearManual?: boolean;
+
+  @ApiPropertyOptional({
+    example: 14325361,
+    description: 'ID диалога Nextbot (dialog_id). null — очистить привязку.',
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsInt()
+  @Min(1)
+  nextbotDialogId?: number | null;
+
+  @ApiPropertyOptional({
+    example: 14325361,
+    description: 'Алиас nextbotDialogId',
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsInt()
+  @Min(1)
+  dialogId?: number | null;
 }
 
 

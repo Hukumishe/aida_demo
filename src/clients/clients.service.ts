@@ -48,6 +48,15 @@ export class ClientsService {
     return hasFirstName && hasLastName && hasBirthDate;
   }
 
+  private resolveNextbotDialogId(dto: {
+    nextbotDialogId?: number;
+    dialogId?: number;
+  }): number | undefined {
+    const raw = dto.nextbotDialogId ?? dto.dialogId;
+    if (raw == null) return undefined;
+    return raw;
+  }
+
   /** Генерирует уникальный реферальный код в пределах организации. */
   private async generateReferralCode(organizationId: string): Promise<string> {
     for (let attempt = 0; attempt < 50; attempt++) {
@@ -521,6 +530,7 @@ export class ClientsService {
     );
     const loyaltyEnabledOnCreate =
       loyaltyEligibleOnCreate && (createClientDto.loyaltyEnabled ?? true);
+    const nextbotDialogId = this.resolveNextbotDialogId(createClientDto);
 
     let registrationSource: string | undefined;
     let studioReferralLinkId: string | undefined;
@@ -561,6 +571,7 @@ export class ClientsService {
             referredByClientId,
             registrationSource,
             studioReferralLinkId,
+            nextbotDialogId,
           },
           include: {
             referredByClient: {
@@ -924,8 +935,15 @@ export class ClientsService {
       customLoyaltyStudioId,
       customLoyaltyTierId,
       customLoyaltyClearManual,
+      dialogId,
+      nextbotDialogId,
       ...patchDto
     } = updateClientDto;
+
+    if (nextbotDialogId !== undefined || dialogId !== undefined) {
+      (patchDto as { nextbotDialogId?: number | null }).nextbotDialogId =
+        nextbotDialogId !== undefined ? nextbotDialogId : dialogId;
+    }
 
     const client = await this.prisma.client.findUnique({
       where: { id },

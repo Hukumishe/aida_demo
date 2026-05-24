@@ -119,6 +119,26 @@ export class CreateClientDto {
   @IsOptional()
   @IsString()
   referralLinkId?: string;
+
+  @ApiProperty({
+    required: false,
+    example: 14325361,
+    description: 'ID диалога Nextbot (dialog_id) для исходящих сообщений',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  nextbotDialogId?: number;
+
+  @ApiProperty({
+    required: false,
+    example: 14325361,
+    description: 'Алиас nextbotDialogId (как в webhook Nextbot: dialog_id)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  dialogId?: number;
 }
 
 

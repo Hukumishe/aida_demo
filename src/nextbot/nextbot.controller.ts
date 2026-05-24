@@ -34,6 +34,7 @@ import { NextbotSurveyDto } from './dto/nextbot-survey.dto';
 import { RequestManagerInvoiceDto } from './dto/request-manager-invoice.dto';
 import { VerifyReceiptNighttimeDto } from './dto/verify-receipt-nighttime.dto';
 import { CreateEscalationTicketDto } from './dto/create-escalation-ticket.dto';
+import { LinkNextbotDialogDto } from './dto/link-nextbot-dialog.dto';
 
 /**
  * Эндпоинты строго по функциям из системного промпта xmind (aida_xmind.pdf).
@@ -77,13 +78,35 @@ export class NextbotController {
     required: false,
     description: 'Устарело: то же, что phone (если phone не передан)',
   })
+  @ApiQuery({
+    name: 'dialogId',
+    required: false,
+    description:
+      'dialog_id из Nextbot: при найденном клиенте сохраняется в профиль (nextbotDialogId) для исходящих сообщений',
+  })
   verifyClient(
     @Query('phone') phone: string | undefined,
     @Query('q') legacyQ: string | undefined,
+    @Query('dialogId') dialogId: string | undefined,
     @CurrentUser() user: CurrentUserPayload,
   ) {
     const resolved = phone?.trim() || legacyQ?.trim();
-    return this.nextbotService.verifyClient(resolved || undefined, user);
+    return this.nextbotService.verifyClient(resolved || undefined, user, dialogId);
+  }
+
+  @Patch('clients/link-dialog')
+  @ApiOperation({
+    summary: 'link_nextbot_dialog',
+    description:
+      'Привязать dialog_id Nextbot к клиенту по телефону. Поле в CRM: nextbotDialogId (в ответе также dialogId).',
+  })
+  @ApiResponse({ status: 200, description: 'Dialog linked' })
+  @ApiResponse({ status: 404, description: 'Client not found' })
+  linkNextbotDialog(
+    @Body() dto: LinkNextbotDialogDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.nextbotService.linkNextbotDialog(dto, user);
   }
 
   // --- register_new_client ---
