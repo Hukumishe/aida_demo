@@ -20,13 +20,24 @@ import { getDisabledCategoryIdsForStudio } from '../common/service-studio-offeri
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateNextbotAutoMessageTemplateDto } from './dto/create-nextbot-auto-message-template.dto';
 import { UpdateNextbotAutoMessageTemplateDto } from './dto/update-nextbot-auto-message-template.dto';
-import { NEXTBOT_AUTO_MESSAGE_VARIABLES } from './nextbot-auto-message-variables';
+import {
+  NEXTBOT_AUTO_MESSAGE_VARIABLES,
+  NextbotAutoMessageVariableKey,
+  renderNextbotAutoMessageTemplate,
+} from './nextbot-auto-message-variables';
+import { TestSendNextbotMessageDto } from './dto/test-send-nextbot-message.dto';
+import { NextbotOutboundService } from './nextbot-outbound.service';
+import { NextbotAutoMessageOrchestratorService } from './nextbot-auto-message-orchestrator.service';
 
 const MAX_OFFSET_MINUTES = 365 * 24 * 60;
 
 @Injectable()
 export class NextbotAutoMessagesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly outbound: NextbotOutboundService,
+    private readonly orchestrator: NextbotAutoMessageOrchestratorService,
+  ) {}
 
   private canEdit(role: string | undefined): boolean {
     return isDeveloperRole(role) || isOwnerLevelRole(role);
@@ -242,6 +253,82 @@ export class NextbotAutoMessagesService {
     return {
       syntax: '{{variableKey}}',
       variables: NEXTBOT_AUTO_MESSAGE_VARIABLES,
+    };
+  }
+
+  /**
+   * Тестовая отправка в Nextbot с вашими данными (не пишет в очередь автосообщений).
+   */
+  async testSend(
+    studioId: string,
+    dto: TestSendNextbotMessageDto,
+    userRole?: string,
+    userOrganizationId?: string,
+  ) {
+    this.assertCanEdit(userRole);
+    await assertUserOrganizationMatchesStudio(
+      this.prisma,
+      studioId,
+      userOrganizationId,
+      userRole,
+    );
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { organizationId: true },
+    });
+    if (!studio) {
+      throw new NotFoundException(`Studio with ID ${studioId} not found`);
+    }
+
+    let rawText = dto.messageText?.trim() ?? '';
+    if (!rawText && dto.templateId?.trim()) {
+      const template = await this.prisma.nextbotAutoMessageTemplate.findFirst({
+        where: { id: dto.templateId.trim(), studioId },
+      });
+      if (!template) {
+        throw new NotFoundException('Шаблон не найден в этом филиале');
+      }
+      rawText = template.messageText;
+    }
+    if (!rawText) {
+      throw new BadRequestException('Укажите messageText или templateId');
+    }
+
+    let variables: Partial<Record<NextbotAutoMessageVariableKey, string>> = {};
+    if (dto.appointmentId?.trim()) {
+      variables = await this.orchestrator.getVariablesForAppointment(
+        dto.appointmentId.trim(),
+        studioId,
+      );
+    }
+    if (dto.variables && typeof dto.variables === 'object') {
+      for (const [key, value] of Object.entries(dto.variables)) {
+        if (value != null) {
+          variables[key as NextbotAutoMessageVariableKey] = String(value);
+        }
+      }
+    }
+
+    const renderedText = renderNextbotAutoMessageTemplate(rawText, variables);
+    const dialogId = dto.dialogId;
+
+    try {
+      await this.outbound.send(studio.organizationId, {
+        dialogId,
+        text: renderedText,
+        appointmentId: dto.appointmentId?.trim() || undefined,
+        templateId: dto.templateId?.trim() || undefined,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      throw new BadRequestException(message);
+    }
+
+    return {
+      ok: true,
+      dialogId,
+      renderedText,
+      variablesUsed: variables,
     };
   }
 

@@ -21,6 +21,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { NextbotAutoMessagesService } from './nextbot-auto-messages.service';
 import { CreateNextbotAutoMessageTemplateDto } from './dto/create-nextbot-auto-message-template.dto';
 import { UpdateNextbotAutoMessageTemplateDto } from './dto/update-nextbot-auto-message-template.dto';
+import { TestSendNextbotMessageDto } from './dto/test-send-nextbot-message.dto';
 
 @ApiTags('nextbot-auto-messages')
 @Controller('studios/:studioId/nextbot-auto-messages')
@@ -52,6 +53,23 @@ export class NextbotAutoMessagesController {
   @ApiResponse({ status: 200 })
   listVariables() {
     return this.service.listVariables();
+  }
+
+  @Post('test-send')
+  @ApiOperation({
+    summary: 'Тестовая отправка сообщения в Nextbot',
+    description:
+      'Отправка на webhook организации с вашим dialogId и текстом. ' +
+      'Переменные — из appointmentId и/или поля variables. Не создаёт запись в очереди автосообщений.',
+  })
+  @ApiResponse({ status: 200, description: 'Сообщение отправлено' })
+  @ApiResponse({ status: 400, description: 'Нет webhook / ошибка Nextbot' })
+  testSend(
+    @Param('studioId') studioId: string,
+    @Body() dto: TestSendNextbotMessageDto,
+    @CurrentUser() user: { role: string; organizationId?: string },
+  ) {
+    return this.service.testSend(studioId, dto, user.role, user.organizationId);
   }
 
   @Get()

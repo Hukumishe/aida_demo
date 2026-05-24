@@ -1,0 +1,198 @@
+# Автосообщения Nextbot + тестовая отправка — промпт для Lovable
+
+Скопируй этот текст в Lovable как задачу на UI. Бэкенд уже реализован; менять API не нужно.
+
+---
+
+## Контекст
+
+Во вкладке **«Маркетинг»** (или отдельный подраздел **«Автосообщения Nextbot»**) владелец сети настраивает:
+
+1. **Подключение исходящих сообщений** (webhook Nextbot).
+2. **Шаблоны** автосообщений (подтверждение брони, напоминания, холд, follow-up, запрос оценки).
+3. **Тестовую отправку** со своими данными (`dialogId`, текст, переменные).
+4. **Журнал** отправок.
+
+Все запросы — с Bearer JWT. Подставляй **реальный** `studioId` выбранного филиала (из `GET /studios` или контекста приложения), не плейсхолдер `{studioId}`.
+
+Доступ к редактированию: роли **OWNER**, **DEPUTY_OWNER**, **DEVELOPER**. Остальным — только просмотр или скрыть раздел.
+
+---
+
+## 1. Блок «Подключение Nextbot»
+
+Используй существующий экран настроек маркетинга:
+
+- `GET /studios/:studioId/settings`
+- `PATCH /studios/:studioId/settings`
+
+Добавь поля (организация + филиал):
+
+| Поле в UI | Поле API | Подсказка |
+|-----------|----------|-----------|
+| URL webhook исходящих сообщений | `nextbotOutboundWebhookUrl` | Обязательно для теста и автосообщений |
+| API-ключ (Bearer), опционально | `nextbotOutboundWebhookApiKey` | Пароль/скрытое поле |
+| Ссылка 2GIS (филиал) | `feedbackTwoGisUrl` | После оценки 4–5 в сценарии feedback |
+| Заголовок задачи при оценке ≤3 | `feedbackLowRatingTaskTitle` | Организация |
+
+Кнопка **«Сохранить»** — PATCH с изменёнными полями.
+
+Если `nextbotOutboundWebhookUrl` пустой — показывай предупреждение в блоке тестовой отправки и в списке шаблонов: «Сначала укажите URL webhook».
+
+---
+
+## 2. Список шаблонов автосообщений
+
+**GET** `/studios/:studioId/nextbot-auto-messages`
+
+Карточки/таблица: название сценария (по `triggerType`), категория (`serviceCategoryName` или «Все категории»), тайминг (`offsetValue` + `offsetUnit` + `direction` + `anchor`), переключатель `isActive`, кнопки «Изменить» / «Удалить».
+
+**DELETE** `/studios/:studioId/nextbot-auto-messages/:templateId`
+
+---
+
+## 3. Создание / редактирование шаблона
+
+**Пресеты (подсказки):** `GET /studios/:studioId/nextbot-auto-messages/presets`  
+При выборе пресета подставляй в форму: `triggerType`, `anchor`, `direction`, `offsetValue`, `offsetUnit`, `minLeadDays`, `hint` (показать под полем).
+
+**Переменные для редактора текста:** `GET /studios/:studioId/nextbot-auto-messages/variables`  
+Синтаксис: `{{name}}`, `{{service}}`, `{{appointmentDate}}`, … — кнопки «Вставить переменную».
+
+**Категории** (если нужна привязка):  
+`GET /services/categories?studioId=:studioId` — в селект только категории с `isOfferedInStudio === true`.  
+Для типов **подтверждение**, **напоминание за 24 ч/4 ч**, **предупреждение холда** — категорию **не показывай** (в API `serviceCategoryId` не передаём / null).  
+Для **follow-up** и **feedback** — категория **обязательна**.
+
+### Поля формы → API
+
+| UI | API | Значения |
+|----|-----|----------|
+| Тип сценария | `triggerType` | `BOOKING_CONFIRMED`, `REMINDER_BEFORE_VISIT`, `HOLD_EXPIRY_WARNING`, `FOLLOWUP_AFTER_VISIT`, `FEEDBACK_REQUEST` |
+| Относительно | `anchor` + `direction` | см. пресеты |
+| Число | `offsetValue` | 1–365 |
+| Единица | `offsetUnit` | `MINUTES`, `HOURS`, `DAYS` |
+| Мин. дней с брони (только напоминания) | `minLeadDays` | например `2` для «за сутки» |
+| Категория | `serviceCategoryId` | id или не передавать |
+| Текст | `messageText` | textarea + вставка `{{…}}` |
+| Активен | `isActive` | switch |
+
+**POST** `/studios/:studioId/nextbot-auto-messages` — создание  
+**PATCH** `/studios/:studioId/nextbot-auto-messages/:templateId` — изменение
+
+Подписи для владельца (человеческий язык):
+
+- **Подтверждение брони** — сразу при статусе «Забронировано».
+- **Напоминание** — за N минут/часов/дней до визита; для «за сутки» укажите `minLeadDays: 2`.
+- **Предупреждение по холду** — за 5 минут до конца ночной предброни (пресет).
+- **Follow-up** — через N дней после визита, только выбранная категория.
+- **Запрос оценки** — через N минут после визита; ответ обрабатывает бот → `POST /nextbot/appointments/:id/feedback`.
+
+---
+
+## 4. Блок «Тестовая отправка» (обязательный отдельный UI)
+
+Отдельная карточка **над или под** списком шаблонов, не путать с боевой очередью.
+
+**POST** `/studios/:studioId/nextbot-auto-messages/test-send`
+
+### Поля формы
+
+| Поле | Обязательность | Описание |
+|------|----------------|----------|
+| ID диалога Nextbot (`dialogId`) | да | число, например `14325361` |
+| Текст сообщения | да*, если не выбран шаблон | textarea с `{{переменными}}` |
+| Шаблон (select) | опционально | список из GET шаблонов; если выбран — можно подставить текст шаблона в preview |
+| ID записи (`appointmentId`) | опционально | для подстановки реальных `{{name}}`, `{{service}}`, даты/времени |
+| Доп. переменные (key-value) | опционально | перекрывают значения из записи; пример: `name` → `Анна` |
+
+\* Нужно **либо** `messageText`, **либо** выбранный шаблон (тогда на бэкенд уходит `templateId`).
+
+### Поведение кнопки «Отправить тест»
+
+1. Валидация на клиенте: `dialogId` > 0, есть текст или `templateId`, webhook URL задан (из settings).
+2. POST test-send.
+3. Успех — показать:
+   - «Сообщение отправлено»
+   - **Превью итогового текста** из ответа `renderedText`
+   - опционально раскрываемый JSON `variablesUsed`
+4. Ошибка 400 — показать `message` (нет webhook, ошибка Nextbot и т.д.).
+
+Пример тела запроса:
+
+```json
+{
+  "dialogId": 14325361,
+  "messageText": "Тест, {{name}}! Запись: {{appointmentDate}} {{appointmentTime}}.",
+  "appointmentId": "apt_xxxxxxxxxx",
+  "variables": {
+    "name": "Анна"
+  }
+}
+```
+
+Пример ответа:
+
+```json
+{
+  "ok": true,
+  "dialogId": 14325361,
+  "renderedText": "Тест, Анна! Запись: 26.05.2026 14:30.",
+  "variablesUsed": {
+    "name": "Анна",
+    "appointmentDate": "26.05.2026",
+    "appointmentTime": "14:30"
+  }
+}
+```
+
+Тест **не** создаёт строку в журнале автосообщений — это только проверка webhook.
+
+Подсказка под формой: «Укажите свой `dialog_id` из Nextbot. Для проверки шаблона выберите запись в CRM или введите переменные вручную.»
+
+---
+
+## 5. Журнал отправок
+
+**GET** `/studios/:studioId/nextbot-auto-messages/logs`
+
+Таблица: дата `scheduledAt` / `sentAt`, клиент, запись (`appointmentId`), тип (`triggerType`), статус (`PENDING` | `SENT` | `SKIPPED` | `FAILED` | `CANCELLED`), при `SKIPPED`/`FAILED` — `skipReason` или `error`, превью `renderedText`.
+
+Фильтр по статусу — на фронте (опционально).
+
+---
+
+## 6. UX / визуал
+
+- Язык интерфейса: **русский**.
+- Стиль — как у остальной вкладки «Маркетинг» (те же карточки, отступы, primary-кнопки).
+- Тип сценария — select с понятными подписями, не только enum.
+- Для `isActive: false` — визуально приглушить карточку; подсказка: «Уже запланированные сообщения всё равно отправятся; новые не создаются».
+- Не вызывай Nextbot webhook с фронта напрямую — только через API AIDA.
+
+---
+
+## 7. Чеклист приёмки
+
+- [ ] Сохранение webhook URL и 2GIS в settings.
+- [ ] CRUD шаблонов с пресетами и вставкой переменных.
+- [ ] Тестовая отправка с `dialogId`, своим текстом, превью `renderedText`.
+- [ ] Тест с `appointmentId` подставляет переменные из записи.
+- [ ] Ошибка без webhook — понятное сообщение.
+- [ ] Журнал логов отображается.
+- [ ] Раздел скрыт/readonly для ролей без прав owner/deputy/developer.
+
+---
+
+## Справка API (кратко)
+
+| Метод | Путь |
+|-------|------|
+| GET/PATCH | `/studios/:studioId/settings` |
+| GET | `/studios/:studioId/nextbot-auto-messages` |
+| GET | `.../presets`, `.../variables`, `.../logs` |
+| POST | `.../test-send` |
+| POST/PATCH/DELETE | `...` / `.../:templateId` |
+| GET | `/services/categories?studioId=...` |
+
+Полное описание полей: `docs/lovable/LOVABLE_NEXTBOT_AUTO_MESSAGES.md` в репозитории бэкенда.

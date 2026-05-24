@@ -1,4 +1,6 @@
-# Автосообщения Nextbot — Lovable
+# Автосообщения Nextbot — справка API
+
+> Промпт для вёрстки в Lovable: **`LOVABLE_NEXTBOT_AUTO_MESSAGES_PROMPT.md`**
 
 ## Настройки интеграции
 
@@ -22,6 +24,29 @@
 `GET .../variables` — переменные `{{name}}`, `{{service}}`, …
 
 `GET .../logs` — журнал отправок (PENDING/SENT/SKIPPED/…).
+
+### Тестовая отправка (свои данные)
+
+`POST /studios/:studioId/nextbot-auto-messages/test-send` — только **owner** / **deputy** / **developer**.
+
+Перед тестом задайте `nextbotOutboundWebhookUrl` в настройках студии.
+
+```json
+{
+  "dialogId": 14325361,
+  "messageText": "Тест, {{name}}! Услуга: {{service}}.",
+  "appointmentId": "apt_xxxxxxxxxx",
+  "variables": {
+    "name": "Анна"
+  }
+}
+```
+
+- `messageText` **или** `templateId` (текст из шаблона филиала)
+- `appointmentId` — подставить переменные из записи
+- `variables` — свои значения (перекрывают appointment)
+- Ответ: `{ "ok": true, "dialogId", "renderedText", "variablesUsed" }`
+- В очередь автосообщений **не** попадает
 
 ### Поля шаблона
 

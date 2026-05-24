@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   AppointmentStatus,
   NextbotAutoMessageAnchor,
@@ -274,6 +274,21 @@ export class NextbotAutoMessageOrchestratorService {
       if (item.service?.categoryId) ids.add(item.service.categoryId);
     }
     return ids;
+  }
+
+  /** Переменные для подстановки в текст (тестовая и боевая отправка). */
+  async getVariablesForAppointment(
+    appointmentId: string,
+    studioId: string,
+  ): Promise<Partial<Record<NextbotAutoMessageVariableKey, string>>> {
+    const appointment = await this.prisma.appointment.findFirst({
+      where: { id: appointmentId, studioId },
+      include: appointmentInclude,
+    });
+    if (!appointment) {
+      throw new NotFoundException('Запись не найдена в этом филиале');
+    }
+    return this.buildVariableMap(appointment);
   }
 
   private buildVariableMap(
