@@ -1,10 +1,23 @@
-import { IsOptional, IsInt, Min, IsString, MaxLength } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsInt, Min, IsString, MaxLength, IsEnum } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { VisitPaymentMethod } from '@prisma/client';
 import { Type } from 'class-transformer';
 
 export class MarkAppointmentDoneDto {
   @ApiPropertyOptional({
-    description: 'Сколько бонусов клиент использовал при оплате этого визита',
+    description:
+      'Сумма оплаты деньгами за визит (в тенге, с учётом предоплаты). Если не указано — считается из услуг минус бонусы.',
+    example: 8500,
+    minimum: 0,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  completedMoneyPaid?: number;
+
+  @ApiPropertyOptional({
+    description: 'Сколько бонусов (кэшбека) списано при оплате',
     example: 500,
     minimum: 0,
   })
@@ -13,6 +26,15 @@ export class MarkAppointmentDoneDto {
   @IsInt()
   @Min(0)
   bonusesUsed?: number;
+
+  @ApiPropertyOptional({
+    enum: VisitPaymentMethod,
+    description: 'Тип оплаты: наличные, перевод, Kaspi Pay',
+    example: VisitPaymentMethod.CASH,
+  })
+  @IsOptional()
+  @IsEnum(VisitPaymentMethod)
+  paymentMethod?: VisitPaymentMethod;
 
   @ApiPropertyOptional({
     description:
@@ -25,14 +47,7 @@ export class MarkAppointmentDoneDto {
   @MaxLength(20)
   referralCode?: string;
 
-  /** Игнорируется: бэкенд считает сам. Разрешено только чтобы не падала валидация при лишних полях от фронта. */
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  completedMoneyPaid?: number;
-
-  /** Игнорируется: бэкенд считает сам. Разрешено только чтобы не падала валидация при лишних полях от фронта. */
+  /** @deprecated Используйте bonusesUsed */
   @IsOptional()
   @Type(() => Number)
   @IsInt()

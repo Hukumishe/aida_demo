@@ -26,6 +26,7 @@ import { ReferralLinksModule } from './referral-links/referral-links.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { DevTicketsModule } from './dev-tickets/dev-tickets.module';
 import { NextbotAutoMessagesModule } from './nextbot-auto-messages/nextbot-auto-messages.module';
+import { NextbotBirthdayModule } from './nextbot-birthday/nextbot-birthday.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -60,6 +61,7 @@ import { AppController } from './app.controller';
     OrganizationsModule,
     DevTicketsModule,
     NextbotAutoMessagesModule,
+    NextbotBirthdayModule,
   ],
   controllers: [AppController],
 })

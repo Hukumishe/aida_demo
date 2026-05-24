@@ -19,9 +19,17 @@
 
 **Тело запроса (JSON, опционально):**
 ```json
-{ "bonusesUsed": 0 }
+{
+  "completedMoneyPaid": 8500,
+  "bonusesUsed": 500,
+  "paymentMethod": "CASH"
+}
 ```
-- `bonusesUsed` (number, необязательно) — сколько бонусов клиент списал при оплате этого визита. Бэкенд сам посчитает сумму к оплате деньгами и начислит кэшбэк. Если не передать — считается 0.
+- `completedMoneyPaid` — сумма оплаты деньгами (₸), с учётом предоплаты. Если не передать — `стоимость визита − bonusesUsed`.
+- `bonusesUsed` — списание кэшбека (бонусов). По умолчанию 0.
+- `paymentMethod` — `CASH` | `BANK_TRANSFER` | `KASPI_PAY` (наличные / перевод / Kaspi Pay).
+
+См. также `LOVABLE_ADMIN_BRANCH_RESTRICTIONS.md`.
 
 **Ответ:**
 ```json

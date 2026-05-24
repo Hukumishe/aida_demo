@@ -23,7 +23,12 @@ export class CreateBusySlotDto {
   @IsNotEmpty()
   endAt: string;
 
-  @ApiProperty({ example: 'Personal appointment', required: false })
+  @ApiProperty({
+    example: 'Личные дела',
+    required: false,
+    description:
+      'Причина брони / комментарий. Для роли MASTER при личном времени — обязательно.',
+  })
   @IsString()
   @IsOptional()
   comment?: string;

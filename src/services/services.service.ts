@@ -15,6 +15,7 @@ import {
   getDisabledCategoryIdsForStudio,
   isServiceOfferedInStudio,
 } from '../common/service-studio-offering';
+import { getStaffServiceIdsForStudio } from '../common/staff-service-offering';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -111,6 +112,7 @@ export class ServicesService {
     userOrganizationId?: string,
     organizationIdQuery?: string,
     studioIdForOffering?: string,
+    staffUserId?: string,
   ) {
     try {
       const organizationId = await this.resolveOrganizationId(
@@ -119,17 +121,48 @@ export class ServicesService {
         organizationIdQuery,
       );
 
+      const staffFilterStudioId = studioIdForOffering?.trim() || userStudioId?.trim();
+      let staffServiceIds: string[] | null = null;
+      if (staffUserId?.trim()) {
+        if (!staffFilterStudioId) {
+          throw new BadRequestException(
+            'Для фильтра услуг по мастеру укажите studioId в query',
+          );
+        }
+        const sid = staffFilterStudioId;
+        await assertUserOrganizationMatchesStudio(
+          this.prisma,
+          sid,
+          userOrganizationId,
+          userRole,
+        );
+        staffServiceIds = await getStaffServiceIdsForStudio(
+          this.prisma,
+          sid,
+          staffUserId.trim(),
+        );
+        if (staffServiceIds.length === 0) {
+          return [];
+        }
+      }
+
       const services = await this.prisma.service.findMany({
-        where: { organizationId },
+        where: {
+          organizationId,
+          ...(staffServiceIds ? { id: { in: staffServiceIds } } : {}),
+        },
         include: { category: true, subcategory: true },
         orderBy: [{ name: 'asc' }],
       });
 
-      if (!studioIdForOffering?.trim()) {
+      const offeringStudioId =
+        studioIdForOffering?.trim() ||
+        (staffUserId?.trim() ? staffFilterStudioId : undefined);
+      if (!offeringStudioId) {
         return services;
       }
 
-      const sid = studioIdForOffering.trim();
+      const sid = offeringStudioId;
       await assertUserOrganizationMatchesStudio(
         this.prisma,
         sid,
@@ -141,14 +174,12 @@ export class ServicesService {
         getDisabledServiceIdsForStudio(this.prisma, sid),
         getDisabledCategoryIdsForStudio(this.prisma, sid),
       ]);
-      return services.map((s) => ({
+      const offered = services.filter((s) =>
+        isServiceOfferedInStudio(s, s.category, disabledIds, disabledCategoryIds),
+      );
+      return offered.map((s) => ({
         ...s,
-        isOfferedInStudio: isServiceOfferedInStudio(
-          s,
-          s.category,
-          disabledIds,
-          disabledCategoryIds,
-        ),
+        isOfferedInStudio: true,
       }));
     } catch (error) {
       if (error instanceof ForbiddenException || error instanceof NotFoundException) {

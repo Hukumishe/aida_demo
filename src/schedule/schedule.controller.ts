@@ -48,6 +48,7 @@ export class ScheduleController {
       user?.role,
       user?.studioId,
       user?.organizationId,
+      user?.userId,
     );
   }
 

@@ -7,6 +7,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { assertServiceBookableAtStudio } from '../common/service-studio-offering';
+import { assertAdminCannotEditMaster } from '../common/admin-access';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { CreateOrganizationOwnerDto } from './dto/create-organization-owner.dto';
@@ -135,6 +136,7 @@ export class UsersService {
     userOrganizationId?: string,
     includeNetwork = false,
     includeDismissed = false,
+    userStaffId?: string,
   ) {
     // Check access:
     // - owner-level: any studio
@@ -231,6 +233,10 @@ export class UsersService {
       for (const u of users) dedup.set(u.id, u);
       for (const u of networkUsers) dedup.set(u.id, u as (typeof users)[number]);
       mergedUsers = Array.from(dedup.values());
+    }
+
+    if (userRole === UserRole.MASTER && userStaffId) {
+      mergedUsers = mergedUsers.filter((u) => u.id === userStaffId);
     }
 
     // Remove password from response if user is not OWNER or DEPUTY_OWNER
@@ -486,6 +492,7 @@ export class UsersService {
     }
 
     await this.assertActorCanAccessStaff(user, userRole, userStudioId);
+    assertAdminCannotEditMaster(userRole, user.role);
 
     // Cannot change to OWNER role (only OWNER can do this, and only via special endpoint)
     if (updateStaffDto.role === UserRole.OWNER && !canManageOwners(userRole)) {
@@ -623,6 +630,7 @@ export class UsersService {
     }
 
     await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
+    assertAdminCannotEditMaster(userRole, staff.role);
 
     const staffBranch = staff.studioId
       ? await this.prisma.studio.findUnique({
@@ -686,6 +694,7 @@ export class UsersService {
     }
 
     await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
+    assertAdminCannotEditMaster(userRole, staff.role);
 
     // Find and delete staff service
     const staffService = await this.prisma.staffService.findUnique({
@@ -855,6 +864,7 @@ export class UsersService {
     }
 
     await this.assertActorCanAccessStaff(user, userRole, userStudioId);
+    assertAdminCannotEditMaster(userRole, user.role);
 
     // Ensure staff profile exists
     if (!user.staffProfile) {
@@ -929,6 +939,7 @@ export class UsersService {
     }
 
     await this.assertActorCanAccessStaff(user, userRole, userStudioId);
+    assertAdminCannotEditMaster(userRole, user.role);
 
     // Cannot dismiss OWNER (only OWNER can do this, and only via special endpoint)
     if (user.role === UserRole.OWNER && !canManageOwners(userRole)) {
@@ -975,6 +986,7 @@ export class UsersService {
     }
 
     await this.assertActorCanAccessStaff(user, userRole, userStudioId);
+    assertAdminCannotEditMaster(userRole, user.role);
 
     if (user.role === UserRole.OWNER && !canManageOwners(userRole)) {
       throw new BadRequestException('Cannot restore OWNER role');
@@ -1053,6 +1065,7 @@ export class UsersService {
     }
 
     await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
+    assertAdminCannotEditMaster(userRole, staff.role);
 
     // Verify service exists and belongs to same studio
     const service = await this.prisma.service.findUnique({
@@ -1145,6 +1158,7 @@ export class UsersService {
     }
 
     await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
+    assertAdminCannotEditMaster(userRole, staff.role);
 
     // Find existing override
     const existing = await this.prisma.staffServiceOverride.findUnique({
@@ -1292,6 +1306,7 @@ export class UsersService {
     }
 
     await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
+    assertAdminCannotEditMaster(userRole, staff.role);
 
     // Find override
     const override = await this.prisma.staffServiceOverride.findUnique({

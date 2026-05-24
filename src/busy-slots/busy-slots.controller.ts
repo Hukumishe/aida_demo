@@ -70,7 +70,13 @@ export class BusySlotsController {
     @Body() updateBusySlotDto: UpdateBusySlotDto,
     @CurrentUser() user?: any,
   ) {
-    return this.busySlotsService.update(id, updateBusySlotDto, user?.role, user?.studioId);
+    return this.busySlotsService.update(
+      id,
+      updateBusySlotDto,
+      user?.role,
+      user?.studioId,
+      user?.userId,
+    );
   }
 
   @Delete('busy-slots/:id')
@@ -83,7 +89,7 @@ export class BusySlotsController {
     @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
-    return this.busySlotsService.remove(id, user?.role, user?.studioId);
+    return this.busySlotsService.remove(id, user?.role, user?.studioId, user?.userId);
   }
 }
 

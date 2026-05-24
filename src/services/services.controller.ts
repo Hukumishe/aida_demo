@@ -333,7 +333,14 @@ export class ServicesController {
   @ApiQuery({
     name: 'studioId',
     required: false,
-    description: 'Филиал для флага isOfferedInStudio (переключение доступа — отдельный PATCH studio-offering)',
+    description:
+      'Филиал: isOfferedInStudio и фильтр по мастеру. Обязателен вместе с staffUserId.',
+  })
+  @ApiQuery({
+    name: 'staffUserId',
+    required: false,
+    description:
+      'Только услуги, привязанные к мастеру в филиале (staff_services). Для формы записи после выбора мастера.',
   })
   @ApiQuery({
     name: 'organizationId',
@@ -345,6 +352,7 @@ export class ServicesController {
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async findAll(
     @Query('studioId') studioId: string | undefined,
+    @Query('staffUserId') staffUserId: string | undefined,
     @Query('organizationId') organizationId: string | undefined,
     @CurrentUser() user?: any,
   ) {
@@ -355,6 +363,7 @@ export class ServicesController {
         user?.organizationId,
         organizationId,
         studioId,
+        staffUserId,
       );
     } catch (error) {
       console.error('Error in ServicesController.findAll:', {

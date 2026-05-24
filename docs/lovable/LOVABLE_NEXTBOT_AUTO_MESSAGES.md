@@ -2,16 +2,20 @@
 
 > Промпт для вёрстки в Lovable: **`LOVABLE_NEXTBOT_AUTO_MESSAGES_PROMPT.md`**
 
+## Навигация UI (Lovable)
+
+> Единый промпт: **`LOVABLE_NEXTBOT_TABS_RESTRUCTURE_PROMPT.md`** — вкладки «Интеграции» (только DEVELOPER), «Шаблоны» (оценка визита + ДР + CRUD шаблонов), «Журнал».
+
 ## Настройки интеграции
 
 `GET/PATCH /studios/:studioId/settings` — дополнительные поля:
 
 | Поле | Уровень | Описание |
 |------|---------|----------|
-| `nextbotOutboundWebhookUrl` | организация | URL webhook исходящих сообщений (задаётся с frontend) |
-| `nextbotOutboundWebhookApiKey` | организация | Bearer для webhook, опционально |
-| `feedbackLowRatingTaskTitle` | организация | Заголовок задачи при оценке ≤3 |
-| `feedbackTwoGisUrl` | **филиал** | Ссылка 2GIS после оценки 4–5 |
+| `nextbotOutboundWebhookUrl` | организация | URL webhook — **только роль DEVELOPER** (GET/PATCH) |
+| `nextbotOutboundWebhookApiKey` | организация | Bearer для webhook — **только DEVELOPER** |
+| `feedbackLowRatingTaskTitle` | организация | Заголовок задачи при оценке ≤3 — вкладка «Шаблоны» |
+| `feedbackTwoGisUrl` | **филиал** | Ссылка 2GIS после оценки 4–5 — вкладка «Шаблоны» |
 
 Тело webhook Nextbot (POST, snake_case):
 
@@ -91,6 +95,11 @@
 
 `GET .../custom-schedule-schema` — схема формы для UI.  
 Промпт Lovable: **`LOVABLE_NEXTBOT_CUSTOM_AUTO_MESSAGES.md`**.
+
+### День рождения
+
+Отдельные настройки: `GET/PUT /studios/:studioId/nextbot-birthday/settings`, журнал `.../logs`.  
+Промпт Lovable: **`LOVABLE_NEXTBOT_BIRTHDAY.md`**.
 
 ## Оценка после визита
 

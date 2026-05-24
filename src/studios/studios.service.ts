@@ -129,7 +129,7 @@ export class StudiosService {
       throw new ForbiddenException('Access denied to this studio');
     }
     const org = studio.organization;
-    return {
+    const base = {
       loyaltyMode: org.loyaltyMode,
       globalBonusPaymentLimitPercent: org.globalBonusPaymentLimitPercent ?? 30,
       referFriendEnabled: org.referFriendEnabled,
@@ -148,10 +148,16 @@ export class StudiosService {
       nightReceiptTaskDeadlineHours: org.nightReceiptTaskDeadlineHours,
       highPriorityGapMinutes: org.highPriorityGapMinutes,
       normalPriorityToleranceMinutes: org.normalPriorityToleranceMinutes,
-      nextbotOutboundWebhookUrl: org.nextbotOutboundWebhookUrl,
-      nextbotOutboundWebhookApiKey: org.nextbotOutboundWebhookApiKey,
       feedbackLowRatingTaskTitle: org.feedbackLowRatingTaskTitle,
       feedbackTwoGisUrl: studio.feedbackTwoGisUrl,
+    };
+    if (!isDeveloperRole(userRole)) {
+      return base;
+    }
+    return {
+      ...base,
+      nextbotOutboundWebhookUrl: org.nextbotOutboundWebhookUrl,
+      nextbotOutboundWebhookApiKey: org.nextbotOutboundWebhookApiKey,
     };
   }
 
@@ -184,6 +190,14 @@ export class StudiosService {
   ) {
     if (!isOwnerLevelRole(userRole)) {
       throw new ForbiddenException('Only owner level role can change studio settings');
+    }
+    const touchesNextbotIntegration =
+      Object.prototype.hasOwnProperty.call(dto, 'nextbotOutboundWebhookUrl') ||
+      Object.prototype.hasOwnProperty.call(dto, 'nextbotOutboundWebhookApiKey');
+    if (touchesNextbotIntegration && !isDeveloperRole(userRole)) {
+      throw new ForbiddenException(
+        'Настройки интеграции Nextbot (webhook) может менять только разработчик',
+      );
     }
     const studio = await this.prisma.studio.findUnique({
       where: { id: studioId },

@@ -50,6 +50,7 @@ export const IdPrefix = {
   NextbotAutoMessageTemplate: 'nat',
   NextbotAutoMessageLog: 'nml',
   AppointmentFeedback: 'afb',
+  NextbotBirthdayMessageLog: 'nbl',
 } as const;
 
 export type IdPrefixType = (typeof IdPrefix)[keyof typeof IdPrefix];

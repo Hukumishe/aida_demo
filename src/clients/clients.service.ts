@@ -10,6 +10,7 @@ import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { UserRole, isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { assertAdminCannotBrowseClientList } from '../common/admin-access';
 import {
   getCashbackPercent,
   getLevelProgress,
@@ -151,6 +152,7 @@ export class ClientsService {
     organizationIdQuery?: string,
     list?: ClientListQueryParams,
   ) {
+    assertAdminCannotBrowseClientList(userRole);
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       if (userRole === UserRole.MASTER) {
         throw new ForbiddenException('Masters cannot access client list');
@@ -380,6 +382,7 @@ export class ClientsService {
     userOrganizationId?: string,
     organizationIdQuery?: string,
   ) {
+    assertAdminCannotBrowseClientList(userRole);
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       if (userRole === UserRole.MASTER) {
         throw new ForbiddenException('Masters cannot access referred clients list');
@@ -1106,6 +1109,7 @@ export class ClientsService {
     userOrganizationId?: string,
     organizationIdQuery?: string,
   ) {
+    assertAdminCannotBrowseClientList(userRole);
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       if (userRole === UserRole.ADMIN && userStudioId !== studioId) {
         throw new ForbiddenException('Access denied to this studio');

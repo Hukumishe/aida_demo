@@ -10,6 +10,7 @@ import { CreateScheduleDayDto } from './dto/create-schedule-day.dto';
 import { UpdateScheduleDayDto } from './dto/update-schedule-day.dto';
 import { GenerateScheduleDto, SchedulePattern } from './dto/generate-schedule.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { assertMasterCannotEditWorkSchedule } from '../common/master-access';
 import { assertStaffWorksAtStudio } from '../common/staff-studio-membership';
 
 @Injectable()
@@ -62,6 +63,7 @@ export class ScheduleService {
     userRole?: string,
     userStudioId?: string,
     userOrganizationId?: string,
+    userStaffId?: string,
   ) {
     // Check access:
     // - owner-level: any studio
@@ -82,6 +84,10 @@ export class ScheduleService {
     }
 
     const where: any = { studioId };
+
+    if (userRole === UserRole.MASTER && userStaffId) {
+      where.staffUserId = userStaffId;
+    }
 
     if (date) {
       // Normalize date: use UTC midnight to ensure date matching works correctly
@@ -112,6 +118,8 @@ export class ScheduleService {
     userRole?: string,
     userStudioId?: string,
   ) {
+    assertMasterCannotEditWorkSchedule(userRole);
+
     // Check access
     if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
@@ -184,6 +192,8 @@ export class ScheduleService {
     userRole?: string,
     userStudioId?: string,
   ) {
+    assertMasterCannotEditWorkSchedule(userRole);
+
     // Check access
     if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
@@ -301,6 +311,8 @@ export class ScheduleService {
       throw new NotFoundException(`Schedule day with ID ${id} not found`);
     }
 
+    assertMasterCannotEditWorkSchedule(userRole);
+
     // Check access
     if (!isOwnerLevelRole(userRole) && userStudioId !== scheduleDay.studioId) {
       throw new ForbiddenException('Access denied to this schedule');
@@ -337,6 +349,8 @@ export class ScheduleService {
     if (!scheduleDay) {
       throw new NotFoundException(`Schedule day with ID ${id} not found`);
     }
+
+    assertMasterCannotEditWorkSchedule(userRole);
 
     // Check access
     if (!isOwnerLevelRole(userRole) && userStudioId !== scheduleDay.studioId) {

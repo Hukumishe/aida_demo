@@ -43,6 +43,7 @@ import {
 } from '../common/organization-scope';
 import { assertStaffWorksAtStudio } from '../common/staff-studio-membership';
 import { assertServiceBookableAtStudio } from '../common/service-studio-offering';
+import { assertStaffOffersService } from '../common/staff-service-offering';
 import { NextbotAutoMessageOrchestratorService } from '../nextbot-auto-messages/nextbot-auto-message-orchestrator.service';
 
 @Injectable()
@@ -115,6 +116,7 @@ export class AppointmentsService {
         serviceId,
         organizationId,
       );
+      await assertStaffOffersService(this.prisma, studioId, staffUserId, serviceId);
       const staffOverride = await this.prisma.staffServiceOverride.findUnique({
         where: {
           studioId_staffUserId_serviceId: {
@@ -1212,7 +1214,10 @@ export class AppointmentsService {
 
     const limitPercent = org.globalBonusPaymentLimitPercent ?? 30;
     const maxBonusesAllowed = Math.floor((total * limitPercent) / 100);
-    const requestedBonus = Math.max(0, dto?.bonusesUsed ?? 0);
+    const requestedBonus = Math.max(
+      0,
+      dto?.bonusesUsed ?? dto?.completedBonusesUsed ?? 0,
+    );
     const bonusesUsed = loyaltyEnabled
       ? Math.min(
           requestedBonus,
@@ -1222,7 +1227,17 @@ export class AppointmentsService {
       : 0;
 
     // Общая сумма, которую клиент оплачивает деньгами за визит (включая предоплату)
-    const totalMoneyPaid = total - bonusesUsed;
+    let totalMoneyPaid: number;
+    if (dto?.completedMoneyPaid != null) {
+      totalMoneyPaid = dto.completedMoneyPaid;
+      if (totalMoneyPaid + bonusesUsed > total) {
+        throw new BadRequestException(
+          'Сумма оплаты и списанные бонусы не могут превышать стоимость визита',
+        );
+      }
+    } else {
+      totalMoneyPaid = total - bonusesUsed;
+    }
     // Сколько клиент доплачивает при расчёте (на кассе сейчас)
     const moneyPaidNow = Math.max(0, totalMoneyPaid - prepayment);
 
@@ -1423,6 +1438,7 @@ export class AppointmentsService {
           status: AppointmentStatus.DONE,
           completedBonusesUsed: bonusesUsed,
           completedMoneyPaid: totalMoneyPaid,
+          completedPaymentMethod: dto?.paymentMethod ?? null,
         },
       });
 

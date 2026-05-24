@@ -37,6 +37,10 @@ export class BusySlotsService {
 
     const where: any = { studioId };
 
+    if (userRole === UserRole.MASTER && userStaffId) {
+      where.staffUserId = userStaffId;
+    }
+
     if (date) {
       const dateObj = new Date(date);
       const nextDay = new Date(dateObj);
@@ -80,8 +84,16 @@ export class BusySlotsService {
     }
 
     // MASTER can only create busy slots for themselves
-    if (userRole === UserRole.MASTER && userStaffId && createBusySlotDto.staffUserId !== userStaffId) {
-      throw new ForbiddenException('Masters can only create busy slots for themselves');
+    if (userRole === UserRole.MASTER && userStaffId) {
+      if (createBusySlotDto.staffUserId !== userStaffId) {
+        throw new ForbiddenException('Мастер может бронировать время только для себя');
+      }
+      const reason = createBusySlotDto.comment?.trim();
+      if (!reason) {
+        throw new BadRequestException(
+          'Укажите причину брони (поле comment) — обязательно для личного времени мастера',
+        );
+      }
     }
 
     // Verify studio exists
@@ -106,10 +118,9 @@ export class BusySlotsService {
     }
 
     // Check if busy slot is allowed (must be within work schedule)
-    // For MASTER, allow booking gray time (outside work hours) if comment is provided
-    if (userRole === UserRole.MASTER && createBusySlotDto.comment) {
-      // MASTER can book gray time with explanation - skip strict validation
-      // Only verify that staff belongs to studio
+    // For MASTER with причиной брони — можно вне рабочих часов (личные дела)
+    if (userRole === UserRole.MASTER && createBusySlotDto.comment?.trim()) {
+      // skip strict work-hours validation
     } else {
       // For other roles, enforce strict work schedule validation
       await this.availabilityService.checkBusySlotAllowed(
@@ -127,7 +138,7 @@ export class BusySlotsService {
         staffUserId: createBusySlotDto.staffUserId,
         startAt,
         endAt,
-        comment: createBusySlotDto.comment,
+        comment: createBusySlotDto.comment?.trim() || null,
         forfeitedPrepaymentAmount: createBusySlotDto.forfeitedPrepaymentAmount,
       },
     });
@@ -138,6 +149,7 @@ export class BusySlotsService {
     updateBusySlotDto: UpdateBusySlotDto,
     userRole?: string,
     userStudioId?: string,
+    userStaffId?: string,
   ) {
     const busySlot = await this.prisma.busySlot.findUnique({
       where: { id },
@@ -152,6 +164,16 @@ export class BusySlotsService {
       throw new ForbiddenException('Access denied to this busy slot');
     }
 
+    if (userRole === UserRole.MASTER && userStaffId && busySlot.staffUserId !== userStaffId) {
+      throw new ForbiddenException('Мастер может изменять только свои блоки времени');
+    }
+
+    if (userRole === UserRole.MASTER && updateBusySlotDto.comment !== undefined) {
+      if (!updateBusySlotDto.comment?.trim()) {
+        throw new BadRequestException('Причина брони не может быть пустой');
+      }
+    }
+
     const startAt = updateBusySlotDto.startAt
       ? new Date(updateBusySlotDto.startAt)
       : busySlot.startAt;
@@ -163,8 +185,11 @@ export class BusySlotsService {
       throw new BadRequestException('endAt must be greater than startAt');
     }
 
-    // Check if busy slot is allowed (must be within work schedule)
-    if (updateBusySlotDto.startAt || updateBusySlotDto.endAt) {
+    const masterPersonal =
+      userRole === UserRole.MASTER &&
+      (busySlot.comment?.trim() || updateBusySlotDto.comment?.trim());
+
+    if ((updateBusySlotDto.startAt || updateBusySlotDto.endAt) && !masterPersonal) {
       await this.availabilityService.checkBusySlotAllowed(
         busySlot.studioId,
         busySlot.staffUserId,
@@ -178,13 +203,16 @@ export class BusySlotsService {
       data: {
         startAt: updateBusySlotDto.startAt ? startAt : undefined,
         endAt: updateBusySlotDto.endAt ? endAt : undefined,
-        comment: updateBusySlotDto.comment,
+        comment:
+          updateBusySlotDto.comment !== undefined
+            ? updateBusySlotDto.comment.trim() || null
+            : undefined,
         forfeitedPrepaymentAmount: updateBusySlotDto.forfeitedPrepaymentAmount,
       },
     });
   }
 
-  async remove(id: string, userRole?: string, userStudioId?: string) {
+  async remove(id: string, userRole?: string, userStudioId?: string, userStaffId?: string) {
     const busySlot = await this.prisma.busySlot.findUnique({
       where: { id },
     });
@@ -196,6 +224,10 @@ export class BusySlotsService {
     // Check access
     if (!isOwnerLevelRole(userRole) && userStudioId !== busySlot.studioId) {
       throw new ForbiddenException('Access denied to this busy slot');
+    }
+
+    if (userRole === UserRole.MASTER && userStaffId && busySlot.staffUserId !== userStaffId) {
+      throw new ForbiddenException('Мастер может удалять только свои блоки времени');
     }
 
     return this.prisma.busySlot.delete({

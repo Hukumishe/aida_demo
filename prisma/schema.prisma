@@ -188,6 +188,19 @@ enum NextbotAutoMessageLogStatus {
   CANCELLED
 }
 
+/// Тип бонуса в сценарии «День рождения».
+enum BirthdayBonusType {
+  BONUS_POINTS
+  DISCOUNT_PERCENT
+}
+
+/// Способ оплаты при завершении визита (касса).
+enum VisitPaymentMethod {
+  CASH
+  BANK_TRANSFER
+  KASPI_PAY
+}
+
 /// Тенант: сеть салонов в одной БД. Каталог услуг, CRM, маркетинг, склад, задачи и т.д. — на уровне организации.
 model Organization {
   id                             String                         @id
@@ -297,6 +310,7 @@ model Studio {
   waitlistEntries              WaitlistEntry[]
   userMemberships              UserStudioMembership[]
   nextbotAutoMessageTemplates  NextbotAutoMessageTemplate[]
+  birthdayMessageSettings    StudioBirthdayMessageSettings?
 
   @@index([organizationId])
   @@map("studios")
@@ -531,6 +545,8 @@ model Client {
   bonuses                         Int         @default(0) // Бонусные баллы (1 балл = 1 ₸)
   loyaltyEnabled                  Boolean     @default(true) // Персональный переключатель лояльности клиента (false = бонусы/кэшбэк/реферальные начисления отключены)
   discount                        Int         @default(0) // Скидка в процентах (0-100)
+  /// До какой даты действует персональная скидка (например после ДР).
+  discountExpiresAt               DateTime?
   balance                         Int         @default(0) // Баланс в тенге (историческое поле)
   isBlacklisted                   Boolean     @default(false) // Флаг черного списка
   blacklistReason                 String? // Причина добавления в черный список
@@ -559,6 +575,7 @@ model Client {
   waitlistEntries    WaitlistEntry[]
   nextbotAutoMessageLogs NextbotAutoMessageLog[]
   appointmentFeedbacks   AppointmentFeedback[]
+  birthdayMessageLogs    NextbotBirthdayMessageLog[]
 
   @@unique([organizationId, phone])
   @@unique([organizationId, referralCode])
@@ -704,6 +721,54 @@ model NextbotAutoMessageLog {
   @@index([status, scheduledAt])
   @@index([clientId])
   @@map("nextbot_auto_message_logs")
+}
+
+/// Настройки автопоздравления с днём рождения (один блок на филиал).
+model StudioBirthdayMessageSettings {
+  studioId           String            @id
+  isActive           Boolean           @default(false)
+  /// Минимальный ранг лояльности клиента (включительно).
+  minClientLevel     ClientLevel       @default(BRONZE)
+  /// За сколько календарных дней до дня рождения отправить (0 — в день ДР).
+  daysBeforeBirthday Int               @default(3)
+  bonusType          BirthdayBonusType
+  /// Баллы (BONUS_POINTS) или процент скидки (DISCOUNT_PERCENT).
+  bonusValue         Int
+  /// Срок действия скидки в сутках (только для DISCOUNT_PERCENT).
+  discountValidDays  Int?
+  messageText        String
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+
+  @@map("studio_birthday_message_settings")
+}
+
+/// Журнал поздравлений с ДР (не более одного на клиента и календарный год в организации).
+model NextbotBirthdayMessageLog {
+  id                 String                      @id
+  organizationId     String
+  studioId           String
+  clientId           String
+  /// Календарный год дня рождения, к которому относится поздравление.
+  congratulationYear Int
+  scheduledAt        DateTime
+  sentAt             DateTime?
+  status             NextbotAutoMessageLogStatus @default(PENDING)
+  renderedText       String?
+  skipReason         String?
+  error              String?
+  bonusApplied       Boolean                     @default(false)
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, clientId, congratulationYear])
+  @@index([status, scheduledAt])
+  @@index([studioId])
+  @@map("nextbot_birthday_message_logs")
 }
 
 /// Оценка визита из чата Nextbot (один раз на запись).
@@ -946,6 +1011,7 @@ model Appointment {
   forfeitedPrepaymentAmount Int? // Предоплата, сгоревшая при поздней отмене
   completedBonusesUsed      Int? // Сколько бонусов списано при завершении (DONE)
   completedMoneyPaid        Int? // Сумма, оплаченная деньгами при DONE (для уровня и кэшбэка)
+  completedPaymentMethod    VisitPaymentMethod?
   /// Дедлайн авто-отмены для статуса TENTATIVE (Nextbot, ночной путь оплаты).
   /// При переходе записи в PENDING_CONFIRMATION / BOOKED / DONE очищается.
   holdExpiresAt             DateTime?

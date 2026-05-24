@@ -78,6 +78,24 @@ export const NEXTBOT_AUTO_MESSAGE_VARIABLES = [
     description: 'Сумма предоплаты в тенге (если указана)',
     example: '4000',
   },
+  {
+    key: 'bonusDescription',
+    label: 'Описание бонуса',
+    description: 'Текст бонуса ДР (баллы или скидка), подставляется автоматически',
+    example: '500 бонусных баллов',
+  },
+  {
+    key: 'bonusValue',
+    label: 'Значение бонуса',
+    description: 'Число баллов или процент скидки',
+    example: '500',
+  },
+  {
+    key: 'discountValidDays',
+    label: 'Срок скидки (дней)',
+    description: 'Срок действия скидки в днях (сценарий ДР)',
+    example: '7',
+  },
 ] as const;
 
 export type NextbotAutoMessageVariableKey =
