@@ -524,8 +524,6 @@ export class NextbotService {
         level: c['level'] ?? null,
         bonuses: c['bonuses'] ?? null,
         cashbackPercent: c['cashbackPercent'] ?? null,
-        nextbotDialogId: c['nextbotDialogId'] ?? null,
-        dialogId: c['nextbotDialogId'] ?? null,
       },
       undefined,
       VERIFY_CLIENT_STATUS_PROMPT_KEYS[status],
