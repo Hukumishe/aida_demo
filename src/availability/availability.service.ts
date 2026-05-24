@@ -428,7 +428,7 @@ export class AvailabilityService {
         !eligibleStaffUserIds.includes(options.staffUserId)
       ) {
         throw new BadRequestException(
-          'Selected staff does not provide all selected services in this studio.',
+          'Выбранный мастер не оказывает все указанные услуги в этом филиале.',
         );
       }
     } else if (

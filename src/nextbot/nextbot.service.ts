@@ -201,14 +201,12 @@ export class NextbotService {
    * Приоритет: промпт организации → глобальный (organizationId null) → fallback.
    * @param promptLookupKey — если задан, искать промпт по этому ключу в БД, а в JSON положить в `responseFieldKey`.
    */
-  private async withNextbotPrompt<T extends Record<string, unknown>>(
+  /** Текст промпта из панели (prompts.key) → fallback. */
+  private async resolveNextbotPrompt(
     organizationId: string | undefined,
-    responseFieldKey: string,
-    data: T,
+    lookupKey: string,
     fallback?: string,
-    promptLookupKey?: string,
-  ): Promise<T & Record<string, string>> {
-    const lookupKey = promptLookupKey ?? responseFieldKey;
+  ): Promise<string> {
     let text = fallback ?? '';
     if (organizationId?.trim()) {
       const custom = await this.promptsService.getDescriptionForOrganization(
@@ -223,6 +221,22 @@ export class NextbotService {
     } else if (fallback !== undefined) {
       text = fallback;
     }
+    return text;
+  }
+
+  private async withNextbotPrompt<T extends Record<string, unknown>>(
+    organizationId: string | undefined,
+    responseFieldKey: string,
+    data: T,
+    fallback?: string,
+    promptLookupKey?: string,
+  ): Promise<T & Record<string, string>> {
+    const lookupKey = promptLookupKey ?? responseFieldKey;
+    const text = await this.resolveNextbotPrompt(
+      organizationId,
+      lookupKey,
+      fallback,
+    );
     return { ...data, [responseFieldKey]: text } as T & Record<string, string>;
   }
 
@@ -834,18 +848,39 @@ export class NextbotService {
     const effectiveStaffId =
       user.role === UserRole.MASTER ? user.userId : staffUserId;
 
-    const slots = await this.availabilityService.computeNextbotFreeSlots(studioId, date, {
-      staffUserId: effectiveStaffId ?? undefined,
-      serviceIds: options?.serviceIds,
-      durationMinutes: options?.durationMinutes,
-      slotStepMinutes: options?.slotStepMinutes,
-    });
-    return this.withNextbotPrompt(
+    const promptText = await this.resolveNextbotPrompt(
       user.organizationId,
       'check_availability',
-      slots as unknown as Record<string, unknown>,
       NEXTBOT_CHECK_AVAILABILITY_PROMPT,
     );
+
+    try {
+      const slots = await this.availabilityService.computeNextbotFreeSlots(studioId, date, {
+        staffUserId: effectiveStaffId ?? undefined,
+        serviceIds: options?.serviceIds,
+        durationMinutes: options?.durationMinutes,
+        slotStepMinutes: options?.slotStepMinutes,
+      });
+      return {
+        ...(slots as unknown as Record<string, unknown>),
+        check_availability: promptText,
+      };
+    } catch (err) {
+      if (err instanceof BadRequestException) {
+        const resp = err.getResponse();
+        const message =
+          typeof resp === 'string'
+            ? resp
+            : Array.isArray((resp as { message?: unknown }).message)
+              ? ((resp as { message: string[] }).message).join('; ')
+              : String((resp as { message?: string }).message ?? err.message);
+        throw new BadRequestException({
+          message,
+          check_availability: promptText,
+        });
+      }
+      throw err;
+    }
   }
 
   /**
@@ -1148,7 +1183,6 @@ export class NextbotService {
       `Клиент с именем ${clientName}.`,
       `забронировал услугу/и: ${servicesName}`,
       `необходимо выставить счет на предоплату на номер: ${kaspiDetails}`,
-      'Привязку к записи и к клиенту',
     ]
       .filter(Boolean)
       .join('\n');

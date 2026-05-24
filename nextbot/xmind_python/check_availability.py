@@ -104,15 +104,13 @@ def fail_result(error_code, status_code=0, prompt=""):
   }
 
 
-DEFAULT_PROMPT = (
-  "СИСТЕМНОЕ СООБЩЕНИЕ: exact — щель под длительность услуги (±5 мин); "
-  "high — слот целиком внутри «плотного» окна между двумя подряд записями одного мастера "
-  "(длина окна ≤ highPriorityGapMinutes из настроек организации; если настройка null — high не выдаётся); "
-  "normal — слот прилегает к записи мастера с допуском normalPriorityToleranceMinutes "
-  "(слот сверху: appt.start − slot.end ≤ допуск; слот снизу: slot.start − appt.end ≤ допуск; "
-  "по умолчанию 0 — впритык), но НЕ внутри плотного окна; low — всё остальное. "
-  "Предлагай exact и high в первую очередь, затем normal. Не выдумывай слоты вне freeSlots."
-)
+def prompt_from_response(body):
+  """Инструкция только с бэкенда (промпт портала check_availability), без локального fallback."""
+  if not isinstance(body, dict):
+    return ""
+  text = body.get("check_availability") or body.get("prompt") or ""
+  return str(text).strip() if text else ""
+
 
 base = str_first(AP, "base_url", "baseUrl").rstrip("/")
 org_id = str_first(AP, "organization_id", "organizationId")
@@ -158,11 +156,7 @@ else:
     if not isinstance(full, dict):
       full = {}
 
-    prompt_text = full.get("check_availability", "")
-    if not prompt_text:
-      prompt_text = DEFAULT_PROMPT
-    if not isinstance(prompt_text, str):
-      prompt_text = str(prompt_text)
+    prompt_text = prompt_from_response(full)
 
     slots = full.get("freeSlots")
     if not isinstance(slots, list):
@@ -200,7 +194,7 @@ else:
       "ok": False,
       "status": 0,
       "data": None,
-      "prompt": DEFAULT_PROMPT,
+      "prompt": "",
       "error": "request_failed",
       "error_message": str(e),
     }
