@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 
+/** Внутренний вызов AIDA → маппинг в формат входящего JSON Nextbot. */
 export type NextbotOutboundPayload = {
   dialogId: number;
   text: string;
@@ -9,11 +10,42 @@ export type NextbotOutboundPayload = {
   templateId?: string;
 };
 
+/** Тело webhook Nextbot (snake_case). */
+export type NextbotOutboundWebhookBody = {
+  dialog_id: number;
+  content_type: 'text';
+  text: string;
+  message_type: 'forwarded_output';
+  message_id?: string;
+};
+
 @Injectable()
 export class NextbotOutboundService {
   private readonly logger = new Logger(NextbotOutboundService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Преобразование во формат API Nextbot. */
+  toWebhookBody(payload: NextbotOutboundPayload): NextbotOutboundWebhookBody {
+    const dialogId = Number(payload.dialogId);
+    if (!Number.isFinite(dialogId) || dialogId < 1) {
+      throw new Error('dialogId must be a positive number');
+    }
+    const text = String(payload.text ?? '').trim();
+    if (!text) {
+      throw new Error('text is required for outbound message');
+    }
+    const body: NextbotOutboundWebhookBody = {
+      dialog_id: Math.trunc(dialogId),
+      content_type: 'text',
+      text,
+      message_type: 'forwarded_output',
+    };
+    if (payload.appointmentId?.trim()) {
+      body.message_id = payload.appointmentId.trim();
+    }
+    return body;
+  }
 
   async send(organizationId: string, payload: NextbotOutboundPayload): Promise<void> {
     const org = await this.prisma.organization.findUnique({
@@ -35,10 +67,11 @@ export class NextbotOutboundService {
     if (apiKey) {
       headers.Authorization = `Bearer ${apiKey}`;
     }
+    const webhookBody = this.toWebhookBody(payload);
     const res = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify(payload),
+      body: JSON.stringify(webhookBody),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');

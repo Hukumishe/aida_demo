@@ -148,6 +148,8 @@
 
 Тест **не** создаёт строку в журнале автосообщений — это только проверка webhook.
 
+На стороне AIDA в Nextbot уходит JSON: `dialog_id`, `content_type: "text"`, `text`, `message_type: "forwarded_output"` (не camelCase `dialogId`).
+
 Подсказка под формой: «Укажите свой `dialog_id` из Nextbot. Для проверки шаблона выберите запись в CRM или введите переменные вручную.»
 
 ---

@@ -13,7 +13,19 @@
 | `feedbackLowRatingTaskTitle` | организация | Заголовок задачи при оценке ≤3 |
 | `feedbackTwoGisUrl` | **филиал** | Ссылка 2GIS после оценки 4–5 |
 
-Тело webhook (POST): `{ dialogId, text, appointmentId?, clientId?, templateId? }`.
+Тело webhook Nextbot (POST, snake_case):
+
+```json
+{
+  "dialog_id": 12345,
+  "content_type": "text",
+  "text": "Текст сообщения",
+  "message_type": "forwarded_output",
+  "message_id": "apt_..."
+}
+```
+
+`message_type: forwarded_output` — сообщение уходит клиенту в мессенджер. `message_id` опционально (AIDA подставляет `appointmentId` для трассировки).
 
 ## Шаблоны
 
