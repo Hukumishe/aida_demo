@@ -10,7 +10,14 @@
 
 ## Модель ответа (фрагменты)
 
-Статус задачи: **`OPEN`** | **`DONE`** | **`CANCELLED`**.
+Статус задачи: **`OPEN`** | **`IN_PROGRESS`** | **`DONE`** | **`CANCELLED`**.
+
+В ответах дополнительно:
+
+- **`statusLabel`** — подпись для UI, например `В работе (Иван Иванов)` или `Выполнена (Мария Петрова)`.
+- **`inProgressBy`**, **`completedBy`** — краткие объекты пользователя (как `assignee`), кто взял в работу / кто завершил.
+
+Справочник статусов: **`GET /task-statuses`**.
 
 Вложенные пользователи в ответах:
 
@@ -224,6 +231,18 @@ Authorization: Bearer eyJ…
 
 ---
 
+## `POST /studios/:studioId/tasks/:taskId/take-in-progress`
+
+Перевод **`OPEN` → `IN_PROGRESS`**. В ответе **`statusLabel`** вида «В работе (Имя Фамилия)», поле **`inProgressBy`** — кто нажал кнопку.
+
+Доступ: мастер (только своя задача), менеджер/админ филиала (свои + пул), уровень владельца / developer.
+
+**Пример ответа `200`:** объект задачи с `status: "IN_PROGRESS"`, `statusLabel`, `inProgressBy`.
+
+Мастеру для «в работу» используйте **только этот POST**, не `PATCH` со `IN_PROGRESS`.
+
+---
+
 ## `PATCH /studios/:studioId/tasks/:taskId`
 
 Обновление задачи.
@@ -236,7 +255,7 @@ Authorization: Bearer eyJ…
 | `assigneeUserId` | Новый исполнитель (тот же филиал) |
 | `controllerUserIds` | **Полная замена** списка контролёров |
 | `deadlineAt` | ISO 8601 (при смене сбрасывается напоминание о дедлайне на бэкенде) |
-| `status` | `OPEN` \| `DONE` \| `CANCELLED` |
+| `status` | `OPEN` \| `IN_PROGRESS` \| `DONE` \| `CANCELLED` (для `IN_PROGRESS` у мастера — см. POST выше) |
 | `rejectionComment` | Текст отказа |
 | `clientId` | string или **`null`** — сменить/снять привязку к клиенту |
 | `appointmentId` | string или **`null`** — сменить/снять привязку к записи |
@@ -248,6 +267,8 @@ Authorization: Bearer eyJ…
 ```json
 { "status": "DONE" }
 ```
+
+В ответе: `status: "DONE"`, `completedBy` и `statusLabel` «Выполнена (…)».
 
 **Пример — мастер отказался:**
 

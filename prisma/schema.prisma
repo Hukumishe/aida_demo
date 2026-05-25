@@ -88,6 +88,7 @@ enum NotificationType {
 
 enum TaskStatus {
   OPEN
+  IN_PROGRESS
   DONE
   CANCELLED
 }
@@ -474,6 +475,8 @@ model User {
   landingMasters        LandingMaster[]
   tasksCreated          StudioTask[]           @relation("StudioTaskCreatedBy")
   tasksAssigned         StudioTask[]           @relation("StudioTaskAssignee")
+  tasksTakenInProgress  StudioTask[]           @relation("StudioTaskInProgressBy")
+  tasksCompleted        StudioTask[]           @relation("StudioTaskCompletedBy")
   studioTaskControllers StudioTaskController[]
 
   devTicketsCreated     DevTicket[]            @relation("DevTicketCreator")
@@ -1270,6 +1273,10 @@ model StudioTask {
   deadlineAt             DateTime
   status                 TaskStatus @default(OPEN)
   deadlineReminderSentAt DateTime?
+  /// Кто нажал «Взять в работу» (статус IN_PROGRESS).
+  inProgressByUserId     String?
+  /// Кто перевёл задачу в DONE.
+  completedByUserId      String?
   /// Опциональная привязка к клиенту организации
   clientId               String?
   /// Опциональная привязка к записи (тот же филиал, что и в URL создания задачи)
@@ -1279,8 +1286,10 @@ model StudioTask {
   updatedAt DateTime @updatedAt
 
   organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  assignee     User                   @relation("StudioTaskAssignee", fields: [assigneeUserId], references: [id], onDelete: Cascade)
-  createdBy    User                   @relation("StudioTaskCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  assignee       User                   @relation("StudioTaskAssignee", fields: [assigneeUserId], references: [id], onDelete: Cascade)
+  createdBy      User                   @relation("StudioTaskCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  inProgressBy   User?                  @relation("StudioTaskInProgressBy", fields: [inProgressByUserId], references: [id], onDelete: SetNull)
+  completedBy    User?                  @relation("StudioTaskCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
   client       Client?                @relation(fields: [clientId], references: [id], onDelete: SetNull)
   appointment  Appointment?           @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   controllers  StudioTaskController[]

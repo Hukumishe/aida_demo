@@ -29,6 +29,12 @@ import { Roles, UserRole } from '../common/decorators/roles.decorator';
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
+  @Get('task-statuses')
+  @ApiOperation({ summary: 'Справочник статусов задач (value + базовая подпись)' })
+  listTaskStatuses() {
+    return this.tasksService.listStatusOptions();
+  }
+
   @Get('studios/:studioId/tasks')
   @ApiOperation({ summary: 'Список задач филиала (мастер видит только назначенные ему)' })
   async findAll(
@@ -62,6 +68,25 @@ export class TasksController {
     @CurrentUser() user: { userId: string; role: string; studioId?: string },
   ) {
     return this.tasksService.create(studioId, dto, user.userId, user.role, user.studioId);
+  }
+
+  @Post('studios/:studioId/tasks/:taskId/take-in-progress')
+  @ApiOperation({
+    summary:
+      'Взять задачу в работу (OPEN → IN_PROGRESS, в ответе statusLabel «В работе (Имя Фамилия)»)',
+  })
+  async takeInProgress(
+    @Param('studioId') studioId: string,
+    @Param('taskId') taskId: string,
+    @CurrentUser() user: { userId: string; role: string; studioId?: string },
+  ) {
+    return this.tasksService.takeInProgress(
+      studioId,
+      taskId,
+      user.role,
+      user.userId,
+      user.studioId,
+    );
   }
 
   @Patch('studios/:studioId/tasks/:taskId')

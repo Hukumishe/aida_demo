@@ -13,6 +13,8 @@ import { isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateStudioTaskDto, StudioTaskAudience } from './dto/create-task.dto';
 import { UpdateStudioTaskDto } from './dto/update-task.dto';
+import { enrichStudioTask, enrichStudioTasks } from './task-response.util';
+import { listTaskStatusOptions } from './task-status.constants';
 
 /** Кто может быть «контролёром» задачи: мастера филиала + уровень владельца + DEVELOPER */
 const CONTROLLER_ROLES: UserRole[] = [
@@ -120,22 +122,20 @@ export class TasksService {
     return { clientId, appointmentId };
   }
 
+  private taskUserBriefSelect() {
+    return {
+      id: true,
+      role: true,
+      staffProfile: { select: { firstName: true, lastName: true } },
+    } as const;
+  }
+
   private taskInclude() {
     return {
-      assignee: {
-        select: {
-          id: true,
-          role: true,
-          staffProfile: { select: { firstName: true, lastName: true } },
-        },
-      },
-      createdBy: {
-        select: {
-          id: true,
-          role: true,
-          staffProfile: { select: { firstName: true, lastName: true } },
-        },
-      },
+      assignee: { select: this.taskUserBriefSelect() },
+      createdBy: { select: this.taskUserBriefSelect() },
+      inProgressBy: { select: this.taskUserBriefSelect() },
+      completedBy: { select: this.taskUserBriefSelect() },
       client: {
         select: {
           id: true,
@@ -203,6 +203,86 @@ export class TasksService {
     return !!rel;
   }
 
+  private async assertCanWorkOnTask(
+    task: { id: string; assigneeUserId: string; status: TaskStatus },
+    userRole: string,
+    userId: string,
+  ) {
+    if (task.status !== TaskStatus.OPEN) {
+      throw new BadRequestException('В работу можно взять только открытую задачу');
+    }
+    if (userRole === UserRole.MASTER) {
+      if (task.assigneeUserId !== userId) {
+        throw new ForbiddenException('Можно взять в работу только свою задачу');
+      }
+      return;
+    }
+    if (userRole === UserRole.MANAGER || userRole === UserRole.ADMIN) {
+      const ok = await this.assertManagerCanAccessTask(userRole, userId, task.id);
+      if (!ok) {
+        throw new ForbiddenException('Нет доступа к этой задаче');
+      }
+      return;
+    }
+    if (OWNER_LEVEL_OR_DEV.includes(userRole as UserRole)) {
+      return;
+    }
+    throw new ForbiddenException('Недостаточно прав для смены статуса задачи');
+  }
+
+  private buildStatusTransitionData(
+    current: {
+      status: TaskStatus;
+      inProgressByUserId: string | null;
+      completedByUserId: string | null;
+    },
+    nextStatus: TaskStatus,
+    actorUserId: string,
+  ): {
+    status: TaskStatus;
+    inProgressByUserId?: string | null;
+    completedByUserId?: string | null;
+  } {
+    if (nextStatus === current.status) {
+      return { status: nextStatus };
+    }
+    if (nextStatus === TaskStatus.IN_PROGRESS) {
+      if (current.status !== TaskStatus.OPEN) {
+        throw new BadRequestException('В работу можно взять только открытую задачу');
+      }
+      return {
+        status: TaskStatus.IN_PROGRESS,
+        inProgressByUserId: actorUserId,
+        completedByUserId: null,
+      };
+    }
+    if (nextStatus === TaskStatus.DONE) {
+      return {
+        status: TaskStatus.DONE,
+        completedByUserId: actorUserId,
+      };
+    }
+    if (nextStatus === TaskStatus.OPEN) {
+      return {
+        status: TaskStatus.OPEN,
+        inProgressByUserId: null,
+        completedByUserId: null,
+      };
+    }
+    if (nextStatus === TaskStatus.CANCELLED) {
+      return {
+        status: TaskStatus.CANCELLED,
+        inProgressByUserId: null,
+        completedByUserId: null,
+      };
+    }
+    return { status: nextStatus };
+  }
+
+  listStatusOptions() {
+    return listTaskStatusOptions();
+  }
+
   async findAll(studioId: string, userRole: string, userId: string, userStudioId?: string) {
     this.assertStudioScope(studioId, userRole, userStudioId);
 
@@ -215,11 +295,12 @@ export class TasksService {
       where.OR = [{ assigneeUserId: userId }, { controllers: { some: { userId } } }];
     }
 
-    return this.prisma.studioTask.findMany({
+    const rows = await this.prisma.studioTask.findMany({
       where,
       orderBy: [{ deadlineAt: 'asc' }, { createdAt: 'desc' }],
       include: this.taskInclude(),
     });
+    return enrichStudioTasks(rows);
   }
 
   private assertStudioScope(studioId: string, userRole: string, userStudioId?: string) {
@@ -332,7 +413,7 @@ export class TasksService {
       this.logger.warn(`createNewTaskNotification failed: ${e}`);
     }
 
-    return task;
+    return enrichStudioTask(task);
   }
 
   async findOne(
@@ -353,7 +434,7 @@ export class TasksService {
     if (!task) throw new NotFoundException('Задача не найдена');
 
     if (OWNER_LEVEL_OR_DEV.includes(userRole as UserRole)) {
-      return task;
+      return enrichStudioTask(task);
     }
     if (userRole === UserRole.MASTER) {
       if (task.assigneeUserId !== userId) {
@@ -366,7 +447,36 @@ export class TasksService {
       }
     }
 
-    return task;
+    return enrichStudioTask(task);
+  }
+
+  async takeInProgress(
+    studioId: string,
+    taskId: string,
+    userRole: string,
+    userId: string,
+    userStudioId?: string,
+  ) {
+    this.assertStudioScope(studioId, userRole, userStudioId);
+
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
+    const task = await this.prisma.studioTask.findFirst({
+      where: { id: taskId, organizationId },
+    });
+    if (!task) throw new NotFoundException('Задача не найдена');
+
+    await this.assertCanWorkOnTask(task, userRole, userId);
+
+    const transition = this.buildStatusTransitionData(task, TaskStatus.IN_PROGRESS, userId);
+
+    const updated = await this.prisma.studioTask.update({
+      where: { id: taskId },
+      data: transition,
+      include: this.taskInclude(),
+    });
+
+    return enrichStudioTask(updated);
   }
 
   async update(
@@ -409,6 +519,11 @@ export class TasksService {
           'Мастер может менять только статус и комментарий отказа по своей задаче',
         );
       }
+      if (dto.status != null && dto.status === TaskStatus.IN_PROGRESS) {
+        throw new BadRequestException(
+          'Чтобы взять задачу в работу, используйте POST …/tasks/:taskId/take-in-progress',
+        );
+      }
       if (
         dto.status != null &&
         dto.status !== TaskStatus.DONE &&
@@ -447,7 +562,32 @@ export class TasksService {
       data.deadlineAt = d;
       data.deadlineReminderSentAt = null;
     }
-    if (dto.status !== undefined) data.status = dto.status;
+    if (dto.status !== undefined) {
+      if (dto.status === TaskStatus.IN_PROGRESS && !isMaster) {
+        await this.assertCanWorkOnTask(
+          { id: task.id, assigneeUserId: task.assigneeUserId, status: task.status },
+          userRole,
+          userId,
+        );
+      }
+      if (dto.status === TaskStatus.IN_PROGRESS && isMaster) {
+        throw new BadRequestException(
+          'Чтобы взять задачу в работу, используйте POST …/tasks/:taskId/take-in-progress',
+        );
+      }
+      Object.assign(
+        data,
+        this.buildStatusTransitionData(
+          {
+            status: task.status,
+            inProgressByUserId: task.inProgressByUserId,
+            completedByUserId: task.completedByUserId,
+          },
+          dto.status,
+          userId,
+        ),
+      );
+    }
     if (dto.rejectionComment !== undefined) data.rejectionComment = dto.rejectionComment.trim();
     if (dto.status !== undefined && dto.status !== TaskStatus.CANCELLED) {
       data.rejectionComment = null;
@@ -520,7 +660,7 @@ export class TasksService {
       }
     }
 
-    return updatedTask;
+    return enrichStudioTask(updatedTask);
   }
 
   async remove(
