@@ -6,7 +6,11 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { assertServiceBookableAtStudio } from '../common/service-studio-offering';
+import {
+  assignStaffServiceAcrossStudios,
+  getStaffServiceIdsUnion,
+  removeStaffServiceAcrossStudios,
+} from '../common/staff-service-offering';
 import { assertAdminCannotEditMaster } from '../common/admin-access';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateStaffDto } from './dto/create-staff.dto';
@@ -632,50 +636,40 @@ export class UsersService {
     await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
     assertAdminCannotEditMaster(userRole, staff.role);
 
-    const staffBranch = staff.studioId
-      ? await this.prisma.studio.findUnique({
-          where: { id: staff.studioId },
-          select: { organizationId: true },
-        })
-      : null;
+    if (!staff.studioId) {
+      throw new BadRequestException('Staff has no branch');
+    }
+
+    const staffBranch = await this.prisma.studio.findUnique({
+      where: { id: staff.studioId },
+      select: { organizationId: true },
+    });
     if (!staffBranch) {
       throw new BadRequestException('Staff has no branch');
     }
 
-    const service = await assertServiceBookableAtStudio(
-      this.prisma,
-      staff.studioId!,
-      serviceId,
-      staffBranch.organizationId,
-    );
-
-    // Check if already exists
-    const existing = await this.prisma.staffService.findUnique({
-      where: {
-        studioId_staffUserId_serviceId: {
-          studioId: staff.studioId!,
-          staffUserId,
-          serviceId,
-        },
-      },
-    });
-
-    if (existing) {
+    const unionIds = await getStaffServiceIdsUnion(this.prisma, staffUserId);
+    if (unionIds.includes(serviceId)) {
       throw new BadRequestException('Service is already assigned to this staff member');
     }
 
-    // Create staff service
-    return this.prisma.staffService.create({
-      data: {
-        id: generateId(IdPrefix.StaffService),
-        studioId: staff.studioId!,
-        staffUserId,
-        serviceId,
-      },
-      include: {
-        service: true,
-      },
+    const createdCount = await assignStaffServiceAcrossStudios(
+      this.prisma,
+      staffUserId,
+      serviceId,
+      staffBranch.organizationId,
+    );
+    if (createdCount === 0) {
+      throw new BadRequestException(
+        'Услуга недоступна ни в одном филиале, где работает этот сотрудник',
+      );
+    }
+
+    const row = await this.prisma.staffService.findFirst({
+      where: { staffUserId, serviceId },
+      include: { service: true },
     });
+    return row!;
   }
 
   async removeService(
@@ -696,24 +690,16 @@ export class UsersService {
     await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
     assertAdminCannotEditMaster(userRole, staff.role);
 
-    // Find and delete staff service
-    const staffService = await this.prisma.staffService.findUnique({
-      where: {
-        studioId_staffUserId_serviceId: {
-          studioId: staff.studioId!,
-          staffUserId,
-          serviceId,
-        },
-      },
-    });
-
-    if (!staffService) {
+    const removed = await removeStaffServiceAcrossStudios(
+      this.prisma,
+      staffUserId,
+      serviceId,
+    );
+    if (removed === 0) {
       throw new NotFoundException('Service is not assigned to this staff member');
     }
 
-    return this.prisma.staffService.delete({
-      where: { id: staffService.id },
-    });
+    return { removedCount: removed };
   }
 
   async getStaffServices(
@@ -758,11 +744,19 @@ export class UsersService {
       overrides.map((o) => [o.serviceId, o]),
     );
 
-    // Combine services with their overrides
-    return staffServices.map((ss) => ({
-      ...ss,
-      override: overrideMap.get(ss.serviceId) || null,
-    }));
+    const seen = new Set<string>();
+    return staffServices
+      .filter((ss) => {
+        if (seen.has(ss.serviceId)) {
+          return false;
+        }
+        seen.add(ss.serviceId);
+        return true;
+      })
+      .map((ss) => ({
+        ...ss,
+        override: overrideMap.get(ss.serviceId) || null,
+      }));
   }
 
   async getStaffProfile(
@@ -806,11 +800,19 @@ export class UsersService {
       overrides.map((o) => [o.serviceId, o]),
     );
 
-    // Combine services with their overrides
-    const servicesWithOverrides = user.staffServices.map((ss) => ({
-      ...ss.service,
-      override: overrideMap.get(ss.serviceId) || null,
-    }));
+    // Одна запись на услугу (привязка синхронизирована по филиалам)
+    const servicesWithOverrides: Array<Record<string, unknown>> = [];
+    const seenServiceIds = new Set<string>();
+    for (const ss of user.staffServices) {
+      if (seenServiceIds.has(ss.serviceId)) {
+        continue;
+      }
+      seenServiceIds.add(ss.serviceId);
+      servicesWithOverrides.push({
+        ...ss.service,
+        override: overrideMap.get(ss.serviceId) || null,
+      });
+    }
 
     const workStudios: { id: string; name: string }[] = [];
     const seenStudio = new Set<string>();

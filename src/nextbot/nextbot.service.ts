@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AppointmentCreatedSource,
   AppointmentStatus,
   RemotePaymentMethod,
   ServiceAudience,
@@ -1082,10 +1083,15 @@ export class NextbotService {
   ) {
     const created = await this.appointmentsService.create(
       studioId,
-      { ...dto, tentative: true },
+      {
+        ...dto,
+        tentative: true,
+        createdSource: AppointmentCreatedSource.NEXTBOT,
+      },
       user.role,
       user.studioId,
       user.organizationId,
+      user.userId,
     );
     return this.withNextbotPrompt(
       user.organizationId,

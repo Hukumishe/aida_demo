@@ -45,6 +45,11 @@ import { assertStaffWorksAtStudio } from '../common/staff-studio-membership';
 import { assertServiceBookableAtStudio } from '../common/service-studio-offering';
 import { assertStaffOffersService } from '../common/staff-service-offering';
 import { NextbotAutoMessageOrchestratorService } from '../nextbot-auto-messages/nextbot-auto-message-orchestrator.service';
+import {
+  appointmentCreatedByInclude,
+  enrichAppointmentWithAuthor,
+  resolveAppointmentCreatedBy,
+} from './appointment-author.util';
 
 @Injectable()
 export class AppointmentsService {
@@ -155,6 +160,7 @@ export class AppointmentsService {
     userRole?: string,
     userStudioId?: string,
     userStaffId?: string,
+    createdByUserIdFilter?: string,
   ) {
     // Check access
     // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
@@ -166,6 +172,10 @@ export class AppointmentsService {
     }
 
     const where: any = { studioId };
+
+    if (createdByUserIdFilter?.trim()) {
+      where.createdByUserId = createdByUserIdFilter.trim();
+    }
 
     // MASTER can only see their own appointments
     if (userRole === UserRole.MASTER && userStaffId) {
@@ -209,15 +219,20 @@ export class AppointmentsService {
             phone: true,
           },
         },
+        ...appointmentCreatedByInclude,
       },
       orderBy: {
         startAt: 'asc',
       },
     });
 
+    const withAuthor = appointments.map((appointment) =>
+      enrichAppointmentWithAuthor(appointment),
+    );
+
     // Hide client phone for MASTER role
     if (userRole === UserRole.MASTER) {
-      return appointments.map((appointment) => ({
+      return withAuthor.map((appointment) => ({
         ...appointment,
         client: {
           ...appointment.client,
@@ -226,7 +241,7 @@ export class AppointmentsService {
       }));
     }
 
-    return appointments;
+    return withAuthor;
   }
 
   async create(
@@ -235,6 +250,7 @@ export class AppointmentsService {
     userRole?: string,
     userStudioId?: string,
     userOrganizationId?: string,
+    actingUserId?: string,
   ) {
     // Check access
     // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
@@ -381,6 +397,12 @@ export class AppointmentsService {
         ? AppointmentStatus.TENTATIVE
         : AppointmentStatus.BOOKED;
 
+      const { createdByUserId, createdSource } = resolveAppointmentCreatedBy(
+        actingUserId,
+        createAppointmentDto.createdSource,
+        createAppointmentDto.waitlistSource,
+      );
+
       const appointment = await tx.appointment.create({
         data: {
           id: generateId(IdPrefix.Appointment),
@@ -393,6 +415,8 @@ export class AppointmentsService {
           prepaymentAmount: createAppointmentDto.prepaymentAmount,
           comment: this.normalizeAppointmentComment(createAppointmentDto.comment),
           status: initialStatus,
+          createdSource,
+          createdByUserId,
           ...(initialStatus === AppointmentStatus.BOOKED
             ? { bookedAt: new Date() }
             : {}),
@@ -411,6 +435,7 @@ export class AppointmentsService {
             },
             orderBy: { sortOrder: 'asc' },
           },
+          ...appointmentCreatedByInclude,
         },
       });
 
@@ -427,24 +452,27 @@ export class AppointmentsService {
         });
       }
 
-      const appointmentWithItems = await tx.appointment.findUniqueOrThrow({
-        where: { id: appointment.id },
-        include: {
-          staff: {
-            include: {
-              staffProfile: true,
+      const appointmentWithItems = enrichAppointmentWithAuthor(
+        await tx.appointment.findUniqueOrThrow({
+          where: { id: appointment.id },
+          include: {
+            staff: {
+              include: {
+                staffProfile: true,
+              },
             },
-          },
-          client: true,
-          service: true,
-          serviceItems: {
-            include: {
-              service: true,
+            client: true,
+            service: true,
+            serviceItems: {
+              include: {
+                service: true,
+              },
+              orderBy: { sortOrder: 'asc' },
             },
-            orderBy: { sortOrder: 'asc' },
+            ...appointmentCreatedByInclude,
           },
-        },
-      });
+        }),
+      );
 
       // Создать уведомление для мастера о новой записи
       try {
@@ -626,6 +654,7 @@ export class AppointmentsService {
     userRole?: string,
     userStudioId?: string,
     userOrganizationId?: string,
+    actingUserId?: string,
   ) {
     const entry = await this.prisma.waitlistEntry.findFirst({
       where: { id: entryId, studioId },
@@ -643,6 +672,7 @@ export class AppointmentsService {
       serviceId: entry.serviceId,
       startAt: entry.requestedStartAt.toISOString(),
       preferWaitlist: false,
+      waitlistSource: entry.source,
     };
 
     try {
@@ -652,6 +682,7 @@ export class AppointmentsService {
         userRole,
         userStudioId,
         userOrganizationId,
+        actingUserId,
       );
 
       if (created && typeof created === 'object' && 'outcome' in created) {

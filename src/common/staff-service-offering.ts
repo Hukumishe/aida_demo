@@ -1,32 +1,153 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from './prisma/prisma.service';
+import { generateId, IdPrefix } from './id-generator';
+import { getStudioIdsWhereStaffWorks } from './staff-studio-membership';
+import {
+  assertServiceBookableAtStudio,
+  getDisabledCategoryIdsForStudio,
+  getDisabledServiceIdsForStudio,
+  isServiceOfferedInStudio,
+} from './service-studio-offering';
 
-/** Услуга должна быть привязана к мастеру в филиале (staff_services). */
+/** Уникальные услуги мастера по всем филиалам, где он работает. */
+export async function getStaffServiceIdsUnion(
+  prisma: PrismaService,
+  staffUserId: string,
+): Promise<string[]> {
+  const rows = await prisma.staffService.findMany({
+    where: { staffUserId },
+    select: { serviceId: true },
+    distinct: ['serviceId'],
+  });
+  return rows.map((r) => r.serviceId);
+}
+
+/**
+ * Услуги мастера для записи в филиале studioId:
+ * объединение привязок по всем его филиалам, с фильтром «доступна в этом филиале».
+ */
+export async function getStaffServiceIdsForStudio(
+  prisma: PrismaService,
+  studioId: string,
+  staffUserId: string,
+): Promise<string[]> {
+  const unionIds = await getStaffServiceIdsUnion(prisma, staffUserId);
+  if (unionIds.length === 0) {
+    return [];
+  }
+
+  const studio = await prisma.studio.findUnique({
+    where: { id: studioId },
+    select: { organizationId: true },
+  });
+  if (!studio) {
+    return [];
+  }
+
+  const [disabledServiceIds, disabledCategoryIds] = await Promise.all([
+    getDisabledServiceIdsForStudio(prisma, studioId),
+    getDisabledCategoryIdsForStudio(prisma, studioId),
+  ]);
+
+  const services = await prisma.service.findMany({
+    where: {
+      id: { in: unionIds },
+      organizationId: studio.organizationId,
+      isActive: true,
+      category: { isActive: true },
+    },
+    include: { category: true },
+  });
+
+  return services
+    .filter((s) =>
+      isServiceOfferedInStudio(s, s.category, disabledServiceIds, disabledCategoryIds),
+    )
+    .map((s) => s.id);
+}
+
+/** Услуга в объединённом списке мастера и доступна для записи в выбранном филиале. */
 export async function assertStaffOffersService(
   prisma: PrismaService,
   studioId: string,
   staffUserId: string,
   serviceId: string,
 ): Promise<void> {
-  const link = await prisma.staffService.findUnique({
-    where: {
-      studioId_staffUserId_serviceId: { studioId, staffUserId, serviceId },
-    },
-    select: { id: true },
-  });
-  if (!link) {
+  const unionIds = await getStaffServiceIdsUnion(prisma, staffUserId);
+  if (!unionIds.includes(serviceId)) {
     throw new BadRequestException('Услуга недоступна для выбранного мастера');
   }
+  await assertServiceBookableAtStudio(prisma, studioId, serviceId, (
+    await prisma.studio.findUniqueOrThrow({
+      where: { id: studioId },
+      select: { organizationId: true },
+    })
+  ).organizationId);
 }
 
-export async function getStaffServiceIdsForStudio(
+/**
+ * Привязать услугу мастеру во всех филиалах, где он работает и где услуга не отключена.
+ * @returns число новых строк staff_services
+ */
+export async function assignStaffServiceAcrossStudios(
   prisma: PrismaService,
-  studioId: string,
   staffUserId: string,
-): Promise<string[]> {
-  const rows = await prisma.staffService.findMany({
-    where: { studioId, staffUserId },
-    select: { serviceId: true },
+  serviceId: string,
+  organizationId: string,
+): Promise<number> {
+  const studioIds = await getStudioIdsWhereStaffWorks(prisma, staffUserId);
+  if (studioIds.length === 0) {
+    throw new BadRequestException('У сотрудника не указан филиал');
+  }
+
+  let created = 0;
+  for (const studioId of studioIds) {
+    try {
+      await assertServiceBookableAtStudio(
+        prisma,
+        studioId,
+        serviceId,
+        organizationId,
+      );
+    } catch (e) {
+      if (e instanceof NotFoundException) {
+        continue;
+      }
+      throw e;
+    }
+
+    const existing = await prisma.staffService.findUnique({
+      where: {
+        studioId_staffUserId_serviceId: { studioId, staffUserId, serviceId },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      continue;
+    }
+
+    await prisma.staffService.create({
+      data: {
+        id: generateId(IdPrefix.StaffService),
+        studioId,
+        staffUserId,
+        serviceId,
+      },
+    });
+    created += 1;
+  }
+
+  return created;
+}
+
+/** Снять услугу с мастера во всех филиалах. */
+export async function removeStaffServiceAcrossStudios(
+  prisma: PrismaService,
+  staffUserId: string,
+  serviceId: string,
+): Promise<number> {
+  const result = await prisma.staffService.deleteMany({
+    where: { staffUserId, serviceId },
   });
-  return rows.map((r) => r.serviceId);
+  return result.count;
 }

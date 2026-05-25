@@ -36,3 +36,29 @@ export async function assertStaffWorksAtStudio(
 
   throw new NotFoundException('Staff member not found or does not belong to this studio');
 }
+
+/** Основной филиал + user_studio_memberships (без дублей). */
+export async function getStudioIdsWhereStaffWorks(
+  prisma: PrismaService,
+  staffUserId: string,
+): Promise<string[]> {
+  const staff = await prisma.user.findUnique({
+    where: { id: staffUserId },
+    select: { studioId: true },
+  });
+  if (!staff) {
+    return [];
+  }
+  const ids = new Set<string>();
+  if (staff.studioId) {
+    ids.add(staff.studioId);
+  }
+  const memberships = await prisma.userStudioMembership.findMany({
+    where: { userId: staffUserId },
+    select: { studioId: true },
+  });
+  for (const m of memberships) {
+    ids.add(m.studioId);
+  }
+  return [...ids];
+}

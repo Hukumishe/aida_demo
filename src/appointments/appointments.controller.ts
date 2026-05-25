@@ -35,19 +35,38 @@ export class AppointmentsController {
   @Get('studios/:studioId/appointments')
   @ApiOperation({ summary: 'Get all appointments for a studio' })
   @ApiQuery({ name: 'date', required: false, description: 'Filter by date (YYYY-MM-DD)' })
+  @ApiQuery({
+    name: 'createdByUserId',
+    required: false,
+    description: 'Только записи, созданные указанным пользователем (автор)',
+  })
+  @ApiQuery({
+    name: 'onlyMine',
+    required: false,
+    description: 'true — только записи, созданные текущим пользователем',
+  })
   @ApiResponse({ status: 200, description: 'List of appointments' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAll(
     @Param('studioId') studioId: string,
     @Query('date') date?: string,
+    @Query('createdByUserId') createdByUserId?: string,
+    @Query('onlyMine') onlyMine?: string,
     @CurrentUser() user?: any,
   ) {
+    let authorFilter = createdByUserId?.trim() || undefined;
+    if (onlyMine === 'true' || onlyMine === '1') {
+      if (user?.userId && user.userId !== 'api-key') {
+        authorFilter = user.userId;
+      }
+    }
     return this.appointmentsService.findAll(
       studioId,
       date,
       user?.role,
       user?.studioId,
       user?.userId,
+      authorFilter,
     );
   }
 
@@ -123,6 +142,7 @@ export class AppointmentsController {
       user?.role,
       user?.studioId,
       user?.organizationId,
+      user?.userId,
     );
   }
 
@@ -142,6 +162,7 @@ export class AppointmentsController {
       user?.role,
       user?.studioId,
       user?.organizationId,
+      user?.userId,
     );
   }
 

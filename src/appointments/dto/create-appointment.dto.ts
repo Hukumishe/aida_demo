@@ -11,7 +11,7 @@ import {
   ArrayMinSize,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { WaitlistEntrySource } from '@prisma/client';
+import { AppointmentCreatedSource, WaitlistEntrySource } from '@prisma/client';
 
 export class CreateAppointmentDto {
   @ApiProperty({ example: 'user-uuid' })
@@ -102,6 +102,15 @@ export class CreateAppointmentDto {
   @IsOptional()
   @IsEnum(WaitlistEntrySource)
   waitlistSource?: WaitlistEntrySource;
+
+  @ApiPropertyOptional({
+    enum: AppointmentCreatedSource,
+    description:
+      'Источник создания (обычно выставляет сервер). Nextbot передаёт NEXTBOT; для CRM не обязательно.',
+  })
+  @IsOptional()
+  @IsEnum(AppointmentCreatedSource)
+  createdSource?: AppointmentCreatedSource;
 
   @ApiPropertyOptional({
     description:
