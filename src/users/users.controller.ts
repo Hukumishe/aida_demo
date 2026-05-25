@@ -112,7 +112,13 @@ export class UsersController {
     @Body() updateStaffDto: UpdateStaffDto,
     @CurrentUser() user: any,
   ) {
-    return this.usersService.update(userId, updateStaffDto, user.role, user.studioId);
+    return this.usersService.update(
+      userId,
+      updateStaffDto,
+      user.role,
+      user.studioId,
+      user.userId,
+    );
   }
 
   @Get('staff/:staffUserId/services')
@@ -124,7 +130,12 @@ export class UsersController {
     @Param('staffUserId') staffUserId: string,
     @CurrentUser() user: any,
   ) {
-    return this.usersService.getStaffServices(staffUserId, user.role, user.studioId);
+    return this.usersService.getStaffServices(
+      staffUserId,
+      user.role,
+      user.studioId,
+      user.userId,
+    );
   }
 
   @Post('staff/:staffUserId/services')
@@ -143,6 +154,7 @@ export class UsersController {
       addStaffServiceDto.serviceId,
       user.role,
       user.studioId,
+      user.userId,
     );
   }
 
@@ -156,7 +168,13 @@ export class UsersController {
     @Param('serviceId') serviceId: string,
     @CurrentUser() user: any,
   ) {
-    return this.usersService.removeService(staffUserId, serviceId, user.role, user.studioId);
+    return this.usersService.removeService(
+      staffUserId,
+      serviceId,
+      user.role,
+      user.studioId,
+      user.userId,
+    );
   }
 
   @Get('staff/:userId/profile')
@@ -168,7 +186,7 @@ export class UsersController {
     @Param('userId') userId: string,
     @CurrentUser() user: any,
   ) {
-    return this.usersService.getStaffProfile(userId, user.role, user.studioId);
+    return this.usersService.getStaffProfile(userId, user.role, user.studioId, user.userId);
   }
 
   @Patch('staff/:userId/profile')
@@ -181,7 +199,13 @@ export class UsersController {
     @Body() updateProfileDto: UpdateStaffProfileDto,
     @CurrentUser() user: any,
   ) {
-    return this.usersService.updateStaffProfile(userId, updateProfileDto, user.role, user.studioId);
+    return this.usersService.updateStaffProfile(
+      userId,
+      updateProfileDto,
+      user.role,
+      user.studioId,
+      user.userId,
+    );
   }
 
   @Delete('staff/:userId')
@@ -194,7 +218,7 @@ export class UsersController {
     @Param('userId') userId: string,
     @CurrentUser() user: any,
   ) {
-    return this.usersService.remove(userId, user.role, user.studioId);
+    return this.usersService.remove(userId, user.role, user.studioId, user.userId);
   }
 
   @Post('staff/:userId/restore')
@@ -211,7 +235,7 @@ export class UsersController {
     @Param('userId') userId: string,
     @CurrentUser() user: any,
   ) {
-    return this.usersService.restore(userId, user.role, user.studioId);
+    return this.usersService.restore(userId, user.role, user.studioId, user.userId);
   }
 
   @Delete('staff/:userId/hard')

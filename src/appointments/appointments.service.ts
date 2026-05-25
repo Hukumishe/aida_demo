@@ -50,6 +50,7 @@ import {
   enrichAppointmentWithAuthor,
   resolveAppointmentCreatedBy,
 } from './appointment-author.util';
+import { BusySlotsService } from '../busy-slots/busy-slots.service';
 
 @Injectable()
 export class AppointmentsService {
@@ -58,6 +59,7 @@ export class AppointmentsService {
     private availabilityService: AvailabilityService,
     private notificationsService: NotificationsService,
     private autoMessages: NextbotAutoMessageOrchestratorService,
+    private busySlotsService: BusySlotsService,
   ) {}
 
   private scheduleAutoMessages(appointmentId: string, visitDoneAt?: Date): void {
@@ -242,6 +244,34 @@ export class AppointmentsService {
     }
 
     return withAuthor;
+  }
+
+  /**
+   * Журнал записей на день: клиентские записи + личное время (busy slots) для сетки и списка.
+   */
+  async getAppointmentLogDay(
+    studioId: string,
+    date: string,
+    userRole?: string,
+    userStudioId?: string,
+    userId?: string,
+  ) {
+    const dateStr = date?.trim();
+    if (!dateStr) {
+      throw new BadRequestException('Query date is required (YYYY-MM-DD)');
+    }
+
+    const [appointments, personalTimeSlots] = await Promise.all([
+      this.findAll(studioId, dateStr, userRole, userStudioId, userId),
+      this.busySlotsService.findAll(studioId, dateStr, userRole, userStudioId, userId),
+    ]);
+
+    return {
+      date: dateStr,
+      supportedViewModes: ['grid', 'list'],
+      appointments,
+      personalTimeSlots,
+    };
   }
 
   async create(

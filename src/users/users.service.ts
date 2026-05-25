@@ -12,6 +12,12 @@ import {
   removeStaffServiceAcrossStudios,
 } from '../common/staff-service-offering';
 import { assertAdminCannotEditMaster } from '../common/admin-access';
+import {
+  assertMasterCanOnlyViewSelf,
+  assertMasterCannotEditStaff,
+  buildStaffProfilePermissions,
+} from '../common/master-access';
+import { mapStaffServiceRow } from '../common/staff-service-timing.util';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { CreateOrganizationOwnerDto } from './dto/create-organization-owner.dto';
@@ -45,7 +51,9 @@ export class UsersService {
     staff: { id: string; studioId: string | null },
     actorRole: string,
     actorStudioId: string | undefined,
+    actorUserId?: string,
   ): Promise<void> {
+    assertMasterCanOnlyViewSelf(actorRole, staff.id, actorUserId);
     if (isOwnerLevelRole(actorRole)) return;
     const sid = (actorStudioId ?? '').trim();
     if (sid && staff.studioId === sid) return;
@@ -486,7 +494,9 @@ export class UsersService {
     updateStaffDto: UpdateStaffDto,
     userRole: string,
     userStudioId?: string,
+    actorUserId?: string,
   ) {
+    assertMasterCannotEditStaff(userRole);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -495,7 +505,7 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    await this.assertActorCanAccessStaff(user, userRole, userStudioId);
+    await this.assertActorCanAccessStaff(user, userRole, userStudioId, actorUserId);
     assertAdminCannotEditMaster(userRole, user.role);
 
     // Cannot change to OWNER role (only OWNER can do this, and only via special endpoint)
@@ -622,7 +632,9 @@ export class UsersService {
     serviceId: string,
     userRole: string,
     userStudioId?: string,
+    actorUserId?: string,
   ) {
+    assertMasterCannotEditStaff(userRole);
     // Get staff user
     const staff = await this.prisma.user.findUnique({
       where: { id: staffUserId },
@@ -633,7 +645,7 @@ export class UsersService {
       throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
     }
 
-    await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
+    await this.assertActorCanAccessStaff(staff, userRole, userStudioId, actorUserId);
     assertAdminCannotEditMaster(userRole, staff.role);
 
     if (!staff.studioId) {
@@ -677,7 +689,9 @@ export class UsersService {
     serviceId: string,
     userRole: string,
     userStudioId?: string,
+    actorUserId?: string,
   ) {
+    assertMasterCannotEditStaff(userRole);
     // Get staff user
     const staff = await this.prisma.user.findUnique({
       where: { id: staffUserId },
@@ -687,7 +701,7 @@ export class UsersService {
       throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
     }
 
-    await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
+    await this.assertActorCanAccessStaff(staff, userRole, userStudioId, actorUserId);
     assertAdminCannotEditMaster(userRole, staff.role);
 
     const removed = await removeStaffServiceAcrossStudios(
@@ -706,6 +720,7 @@ export class UsersService {
     staffUserId: string,
     userRole: string,
     userStudioId?: string,
+    actorUserId?: string,
   ) {
     // Get staff user
     const staff = await this.prisma.user.findUnique({
@@ -716,7 +731,7 @@ export class UsersService {
       throw new NotFoundException(`Staff member with ID ${staffUserId} not found`);
     }
 
-    await this.assertActorCanAccessStaff(staff, userRole, userStudioId);
+    await this.assertActorCanAccessStaff(staff, userRole, userStudioId, actorUserId);
 
     const staffServices = await this.prisma.staffService.findMany({
       where: {
@@ -753,16 +768,19 @@ export class UsersService {
         seen.add(ss.serviceId);
         return true;
       })
-      .map((ss) => ({
-        ...ss,
-        override: overrideMap.get(ss.serviceId) || null,
-      }));
+      .map((ss) =>
+        mapStaffServiceRow({
+          ...ss,
+          override: overrideMap.get(ss.serviceId) || null,
+        }),
+      );
   }
 
   async getStaffProfile(
     userId: string,
     userRole: string,
     userStudioId?: string,
+    actorUserId?: string,
   ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -786,7 +804,7 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    await this.assertActorCanAccessStaff(user, userRole, userStudioId);
+    await this.assertActorCanAccessStaff(user, userRole, userStudioId, actorUserId);
 
     // Get all overrides for this staff member
     const overrides = await this.prisma.staffServiceOverride.findMany({
@@ -808,9 +826,17 @@ export class UsersService {
         continue;
       }
       seenServiceIds.add(ss.serviceId);
+      const override = overrideMap.get(ss.serviceId) || null;
+      const timing = mapStaffServiceRow({
+        serviceId: ss.serviceId,
+        service: ss.service,
+        override,
+      });
       servicesWithOverrides.push({
         ...ss.service,
-        override: overrideMap.get(ss.serviceId) || null,
+        override,
+        durationMin: timing.durationMin,
+        price: timing.price,
       });
     }
 
@@ -838,6 +864,7 @@ export class UsersService {
       studioMemberships: user.studioMemberships,
       workStudios,
       services: servicesWithOverrides,
+      permissions: buildStaffProfilePermissions(userRole, user.role),
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -855,7 +882,9 @@ export class UsersService {
     updateProfileDto: UpdateStaffProfileDto,
     userRole: string,
     userStudioId?: string,
+    actorUserId?: string,
   ) {
+    assertMasterCannotEditStaff(userRole);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { staffProfile: true },
@@ -865,7 +894,7 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    await this.assertActorCanAccessStaff(user, userRole, userStudioId);
+    await this.assertActorCanAccessStaff(user, userRole, userStudioId, actorUserId);
     assertAdminCannotEditMaster(userRole, user.role);
 
     // Ensure staff profile exists
@@ -926,7 +955,9 @@ export class UsersService {
     userId: string,
     userRole: string,
     userStudioId?: string,
+    actorUserId?: string,
   ) {
+    assertMasterCannotEditStaff(userRole);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { staffProfile: true },
@@ -940,7 +971,7 @@ export class UsersService {
       throw new BadRequestException('User is already dismissed');
     }
 
-    await this.assertActorCanAccessStaff(user, userRole, userStudioId);
+    await this.assertActorCanAccessStaff(user, userRole, userStudioId, actorUserId);
     assertAdminCannotEditMaster(userRole, user.role);
 
     // Cannot dismiss OWNER (only OWNER can do this, and only via special endpoint)
@@ -973,7 +1004,9 @@ export class UsersService {
     userId: string,
     userRole: string,
     userStudioId?: string,
+    actorUserId?: string,
   ) {
+    assertMasterCannotEditStaff(userRole);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { staffProfile: true },
@@ -987,7 +1020,7 @@ export class UsersService {
       throw new BadRequestException('User is already active');
     }
 
-    await this.assertActorCanAccessStaff(user, userRole, userStudioId);
+    await this.assertActorCanAccessStaff(user, userRole, userStudioId, actorUserId);
     assertAdminCannotEditMaster(userRole, user.role);
 
     if (user.role === UserRole.OWNER && !canManageOwners(userRole)) {
@@ -1056,6 +1089,7 @@ export class UsersService {
     userRole: string,
     userStudioId?: string,
   ) {
+    assertMasterCannotEditStaff(userRole);
     // Get staff user
     const staff = await this.prisma.user.findUnique({
       where: { id: staffUserId },
@@ -1150,6 +1184,7 @@ export class UsersService {
     userRole: string,
     userStudioId?: string,
   ) {
+    assertMasterCannotEditStaff(userRole);
     // Get staff user
     const staff = await this.prisma.user.findUnique({
       where: { id: staffUserId },
@@ -1298,6 +1333,7 @@ export class UsersService {
     userRole: string,
     userStudioId?: string,
   ) {
+    assertMasterCannotEditStaff(userRole);
     // Get staff user
     const staff = await this.prisma.user.findUnique({
       where: { id: staffUserId },

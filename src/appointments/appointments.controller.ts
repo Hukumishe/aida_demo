@@ -39,6 +39,25 @@ export class AppointmentsController {
     return listAppointmentStatusOptions();
   }
 
+  @Get('studios/:studioId/appointment-log')
+  @ApiOperation({
+    summary: 'Журнал на день: записи клиентов + личное время (для сетки и списка)',
+  })
+  @ApiQuery({ name: 'date', required: true, description: 'YYYY-MM-DD' })
+  async getAppointmentLogDay(
+    @Param('studioId') studioId: string,
+    @Query('date') date: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.appointmentsService.getAppointmentLogDay(
+      studioId,
+      date,
+      user?.role,
+      user?.studioId,
+      user?.userId,
+    );
+  }
+
   @Get('studios/:studioId/appointments')
   @ApiOperation({ summary: 'Get all appointments for a studio' })
   @ApiQuery({ name: 'date', required: false, description: 'Filter by date (YYYY-MM-DD)' })

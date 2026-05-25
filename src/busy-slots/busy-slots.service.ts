@@ -11,6 +11,7 @@ import { UpdateBusySlotDto } from './dto/update-busy-slot.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { AvailabilityService } from '../availability/availability.service';
 import { assertStaffWorksAtStudio } from '../common/staff-studio-membership';
+import { enrichBusySlotsForSchedule } from './busy-slot-response.util';
 
 @Injectable()
 export class BusySlotsService {
@@ -52,7 +53,7 @@ export class BusySlotsService {
       };
     }
 
-    return this.prisma.busySlot.findMany({
+    const rows = await this.prisma.busySlot.findMany({
       where,
       include: {
         staff: {
@@ -65,6 +66,7 @@ export class BusySlotsService {
         startAt: 'asc',
       },
     });
+    return enrichBusySlotsForSchedule(rows);
   }
 
   async create(

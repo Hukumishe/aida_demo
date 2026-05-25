@@ -72,7 +72,9 @@
 - **Причина брони** * (обязательно);
 - «Забронировать» → POST busy-slots.
 
-В сетке журнала/графика личные блоки отображать отдельным цветом с подписью причины (`comment`).
+В сетке журнала/графика личные блоки — **серый фон** (`uiColorHint: "gray"` в API), подпись `displayLabel` или `comment`.
+
+Рекомендуемый запрос журнала на день: `GET /studios/:studioId/appointment-log?date=YYYY-MM-DD` → поле `personalTimeSlots`.
 
 ---
 
