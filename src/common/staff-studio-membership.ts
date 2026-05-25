@@ -62,3 +62,40 @@ export async function getStudioIdsWhereStaffWorks(
   }
   return [...ids];
 }
+
+/** Филиалы, где работает сотрудник (для переключателя MASTER / ADMIN). */
+export async function getWorkStudiosForUser(
+  prisma: PrismaService,
+  userId: string,
+): Promise<{ id: string; name: string }[]> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      studioId: true,
+      studio: { select: { id: true, name: true } },
+      studioMemberships: {
+        include: { studio: { select: { id: true, name: true } } },
+      },
+    },
+  });
+  if (!user) {
+    return [];
+  }
+
+  const out: { id: string; name: string }[] = [];
+  const seen = new Set<string>();
+
+  if (user.studioId && user.studio) {
+    out.push({ id: user.studio.id, name: user.studio.name });
+    seen.add(user.studio.id);
+  }
+
+  for (const m of user.studioMemberships) {
+    if (!seen.has(m.studio.id)) {
+      seen.add(m.studio.id);
+      out.push({ id: m.studio.id, name: m.studio.name });
+    }
+  }
+
+  return out;
+}

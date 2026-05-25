@@ -51,6 +51,11 @@ import {
   resolveAppointmentCreatedBy,
 } from './appointment-author.util';
 import { BusySlotsService } from '../busy-slots/busy-slots.service';
+import {
+  maskAppointmentClientForRole,
+  maskAppointmentsClientForRole,
+  maskClientPhoneForRole,
+} from '../common/client-phone-privacy.util';
 
 @Injectable()
 export class AppointmentsService {
@@ -232,18 +237,7 @@ export class AppointmentsService {
       enrichAppointmentWithAuthor(appointment),
     );
 
-    // Hide client phone for MASTER role
-    if (userRole === UserRole.MASTER) {
-      return withAuthor.map((appointment) => ({
-        ...appointment,
-        client: {
-          ...appointment.client,
-          phone: undefined, // Hide phone number
-        },
-      }));
-    }
-
-    return withAuthor;
+    return maskAppointmentsClientForRole(withAuthor, userRole);
   }
 
   /**
@@ -635,7 +629,7 @@ export class AppointmentsService {
     if (userRole === UserRole.MASTER) {
       return rows.map((r) => ({
         ...r,
-        client: { ...r.client, phone: undefined },
+        client: maskClientPhoneForRole(r.client, userRole),
       }));
     }
     return rows;
@@ -943,16 +937,7 @@ export class AppointmentsService {
           id,
           updated.status === AppointmentStatus.DONE ? new Date() : undefined,
         );
-        if (userRole === UserRole.MASTER) {
-          return {
-            ...updated,
-            client: {
-              ...updated.client,
-              phone: undefined,
-            },
-          };
-        }
-        return updated;
+        return maskAppointmentClientForRole(updated, userRole);
       });
   }
 
@@ -1192,18 +1177,7 @@ export class AppointmentsService {
       },
     });
 
-    // Hide client phone for MASTER role
-    if (userRole === UserRole.MASTER) {
-      return {
-        ...appointment,
-        client: {
-          ...appointment.client,
-          phone: undefined,
-        },
-      };
-    }
-
-    return appointment;
+    return maskAppointmentClientForRole(appointment, userRole);
   }
 
   async markDone(
@@ -1675,18 +1649,8 @@ export class AppointmentsService {
       });
     });
 
-    if (userRole === UserRole.MASTER) {
-      return {
-        ...appointment,
-        client: {
-          ...appointment.client,
-          phone: undefined,
-        },
-      };
-    }
-
     this.scheduleAutoMessages(id, new Date());
-    return appointment;
+    return maskAppointmentClientForRole(appointment, userRole);
   }
 }
 

@@ -10,6 +10,8 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { JwtRefreshPayload } from './strategies/jwt-refresh.strategy';
+import { UserRole } from '../common/decorators/roles.decorator';
+import { getWorkStudiosForUser } from '../common/staff-studio-membership';
 
 @Injectable()
 export class AuthService {
@@ -161,6 +163,16 @@ export class AuthService {
 
     if (!user) {
       throw new UnauthorizedException('User not found');
+    }
+
+    const branchRoles: string[] = [UserRole.MASTER, UserRole.ADMIN];
+    if (branchRoles.includes(user.role)) {
+      const workStudios = await getWorkStudiosForUser(this.prisma, userId);
+      return {
+        ...user,
+        workStudios,
+        canSwitchStudio: workStudios.length > 1,
+      };
     }
 
     return user;

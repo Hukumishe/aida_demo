@@ -11,6 +11,7 @@ import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { UserRole, isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { assertAdminCannotBrowseClientList } from '../common/admin-access';
+import { maskClientPhoneForRole } from '../common/client-phone-privacy.util';
 import {
   getCashbackPercent,
   getLevelProgress,
@@ -663,14 +664,12 @@ export class ClientsService {
       });
     }
 
-    // Hide phone for MASTER (though they shouldn't access this endpoint)
     const referredCount = (client as any)._count?.referredClients ?? 0;
     if (userRole === UserRole.MASTER) {
       const { _count, ...rest } = client as any;
       return {
-        ...rest,
+        ...maskClientPhoneForRole(rest, userRole),
         referredCount,
-        phone: undefined,
       };
     }
 
