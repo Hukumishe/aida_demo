@@ -24,6 +24,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { listAppointmentStatusOptions } from './appointment-status.constants';
 
 @ApiTags('appointments')
 @Controller()
@@ -31,6 +32,12 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 @ApiBearerAuth()
 export class AppointmentsController {
   constructor(private readonly appointmentsService: AppointmentsService) {}
+
+  @Get('appointment-statuses')
+  @ApiOperation({ summary: 'Статусы записи (value + label) для журнала и фильтров' })
+  listAppointmentStatuses() {
+    return listAppointmentStatusOptions();
+  }
 
   @Get('studios/:studioId/appointments')
   @ApiOperation({ summary: 'Get all appointments for a studio' })

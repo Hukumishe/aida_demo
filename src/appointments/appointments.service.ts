@@ -498,13 +498,16 @@ export class AppointmentsService {
         return { outcome: 'booked' as const, appointment: appointmentWithItems };
       }
       return appointmentWithItems;
-    }).then((result) => {
+    }).then(async (result) => {
       const appt =
         result && typeof result === 'object' && 'appointment' in result
           ? result.appointment
           : result;
-      if (appt && typeof appt === 'object' && 'id' in appt) {
-        this.scheduleAutoMessages(String(appt.id));
+      if (appt && typeof appt === 'object' && 'id' in appt && 'status' in appt) {
+        const id = String(appt.id);
+        const status = appt.status as AppointmentStatus;
+        await this.autoMessages.handleAppointmentStatusChanged(id, null, status);
+        this.scheduleAutoMessages(id);
       }
       return result;
     });
@@ -801,6 +804,8 @@ export class AppointmentsService {
       );
     }
 
+    const previousStatus = appointment.status;
+
     // Use transaction for update
     return this.prisma.$transaction(async (tx) => {
       if (updateAppointmentDto.startAt) {
@@ -848,6 +853,7 @@ export class AppointmentsService {
        */
       const clearHoldStatuses: AppointmentStatus[] = [
         AppointmentStatus.PENDING_CONFIRMATION,
+        AppointmentStatus.AWAITING_PREPAYMENT,
         AppointmentStatus.BOOKED,
         AppointmentStatus.DONE,
         AppointmentStatus.ARRIVED,
@@ -890,24 +896,32 @@ export class AppointmentsService {
         },
       });
 
-      // Hide client phone for MASTER role
-      if (userRole === UserRole.MASTER) {
-        return {
-          ...updated,
-          client: {
-            ...updated.client,
-            phone: undefined,
-          },
-        };
-      }
-
-      return updated;
+      return { updated, previousStatus };
     })
-      .then((updated) => {
+      .then(async ({ updated, previousStatus }) => {
+        if (
+          updateAppointmentDto.status !== undefined &&
+          updated.status !== previousStatus
+        ) {
+          await this.autoMessages.handleAppointmentStatusChanged(
+            id,
+            previousStatus,
+            updated.status,
+          );
+        }
         this.scheduleAutoMessages(
           id,
           updated.status === AppointmentStatus.DONE ? new Date() : undefined,
         );
+        if (userRole === UserRole.MASTER) {
+          return {
+            ...updated,
+            client: {
+              ...updated.client,
+              phone: undefined,
+            },
+          };
+        }
         return updated;
       });
   }

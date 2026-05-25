@@ -46,6 +46,21 @@ export class NextbotAutoMessagesController {
     return this.service.getCustomScheduleFormSchema();
   }
 
+  @Get('status-change-schema')
+  @ApiOperation({
+    summary: 'Схема шаблона «смена статуса»',
+    description: 'Поле triggerOnStatus — список всех статусов записи.',
+  })
+  getStatusChangeSchema() {
+    return this.service.getStatusChangedFormSchema();
+  }
+
+  @Get('appointment-statuses')
+  @ApiOperation({ summary: 'Список статусов записи (value + label) для CRM и шаблонов' })
+  listAppointmentStatuses() {
+    return this.service.listAppointmentStatuses();
+  }
+
   @Get('logs')
   @ApiOperation({ summary: 'Журнал исходящих автосообщений филиала' })
   findLogs(

@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  AppointmentStatus,
   NextbotAutoMessageAnchor,
   NextbotAutoMessageDirection,
   NextbotAutoMessageOffsetUnit,
@@ -57,6 +58,14 @@ export class UpdateNextbotAutoMessageTemplateDto {
   @Min(1)
   @Max(365)
   minLeadDays?: number | null;
+
+  @ApiPropertyOptional({
+    enum: AppointmentStatus,
+    description: 'Для STATUS_CHANGED: целевой статус записи.',
+  })
+  @IsOptional()
+  @IsEnum(AppointmentStatus)
+  triggerOnStatus?: AppointmentStatus | null;
 
   @ApiPropertyOptional()
   @IsOptional()

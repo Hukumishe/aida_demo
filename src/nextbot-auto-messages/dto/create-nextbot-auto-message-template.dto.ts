@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  AppointmentStatus,
   NextbotAutoMessageAnchor,
   NextbotAutoMessageDirection,
   NextbotAutoMessageOffsetUnit,
@@ -22,13 +23,15 @@ export class CreateNextbotAutoMessageTemplateDto {
   @IsEnum(NextbotAutoMessageTriggerType)
   triggerType: NextbotAutoMessageTriggerType;
 
-  @ApiProperty({ enum: NextbotAutoMessageAnchor })
+  @ApiPropertyOptional({ enum: NextbotAutoMessageAnchor })
+  @ValidateIf((o) => o.triggerType !== NextbotAutoMessageTriggerType.STATUS_CHANGED)
   @IsEnum(NextbotAutoMessageAnchor)
-  anchor: NextbotAutoMessageAnchor;
+  anchor?: NextbotAutoMessageAnchor;
 
-  @ApiProperty({ enum: NextbotAutoMessageDirection })
+  @ApiPropertyOptional({ enum: NextbotAutoMessageDirection })
+  @ValidateIf((o) => o.triggerType !== NextbotAutoMessageTriggerType.STATUS_CHANGED)
   @IsEnum(NextbotAutoMessageDirection)
-  direction: NextbotAutoMessageDirection;
+  direction?: NextbotAutoMessageDirection;
 
   @ApiPropertyOptional({
     description:
@@ -38,15 +41,29 @@ export class CreateNextbotAutoMessageTemplateDto {
   @IsString()
   serviceCategoryId?: string;
 
-  @ApiProperty({ example: 2 })
+  @ApiPropertyOptional({
+    enum: AppointmentStatus,
+    description:
+      'Для STATUS_CHANGED: статус записи, при переходе в который отправить сообщение.',
+  })
+  @ValidateIf((o) => o.triggerType === NextbotAutoMessageTriggerType.STATUS_CHANGED)
+  @IsEnum(AppointmentStatus)
+  triggerOnStatus?: AppointmentStatus;
+
+  @ApiPropertyOptional({
+    example: 2,
+    description: 'Не используется для STATUS_CHANGED (можно 1).',
+  })
+  @ValidateIf((o) => o.triggerType !== NextbotAutoMessageTriggerType.STATUS_CHANGED)
   @IsInt()
   @Min(1)
   @Max(365)
-  offsetValue: number;
+  offsetValue?: number;
 
-  @ApiProperty({ enum: NextbotAutoMessageOffsetUnit })
+  @ApiPropertyOptional({ enum: NextbotAutoMessageOffsetUnit })
+  @ValidateIf((o) => o.triggerType !== NextbotAutoMessageTriggerType.STATUS_CHANGED)
   @IsEnum(NextbotAutoMessageOffsetUnit)
-  offsetUnit: NextbotAutoMessageOffsetUnit;
+  offsetUnit?: NextbotAutoMessageOffsetUnit;
 
   @ApiPropertyOptional({
     example: 2,

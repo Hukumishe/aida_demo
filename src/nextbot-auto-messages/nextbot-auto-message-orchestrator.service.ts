@@ -194,6 +194,15 @@ export class NextbotAutoMessageOrchestratorService {
       return false;
     }
 
+    if (
+      row.template.triggerType === NextbotAutoMessageTriggerType.STATUS_CHANGED &&
+      row.template.triggerOnStatus &&
+      appointment.status !== row.template.triggerOnStatus
+    ) {
+      await this.markLog(row.id, NextbotAutoMessageLogStatus.SKIPPED, null, 'status_no_longer_matches');
+      return false;
+    }
+
     const text = renderNextbotAutoMessageTemplate(
       row.template.messageText,
       this.buildVariableMap(appointment),
@@ -223,6 +232,7 @@ export class NextbotAutoMessageOrchestratorService {
       serviceCategoryId: string | null;
       anchor: NextbotAutoMessageAnchor;
       direction: NextbotAutoMessageDirection;
+      triggerOnStatus?: AppointmentStatus | null;
     },
     appointment: AppointmentCtx,
     categoryIds: Set<string>,
@@ -267,8 +277,62 @@ export class NextbotAutoMessageOrchestratorService {
           return appointment.status === AppointmentStatus.DONE;
         }
         return false;
+      case NextbotAutoMessageTriggerType.STATUS_CHANGED:
+        return false;
       default:
         return false;
+    }
+  }
+
+  /**
+   * Отправка шаблонов STATUS_CHANGED при переходе записи в новый статус.
+   * Вызывается из appointments.update (не из syncAppointment).
+   */
+  async handleAppointmentStatusChanged(
+    appointmentId: string,
+    previousStatus: AppointmentStatus | null,
+    newStatus: AppointmentStatus,
+  ): Promise<void> {
+    if (previousStatus === newStatus) {
+      return;
+    }
+
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: appointmentInclude,
+    });
+    if (!appointment || appointment.status === AppointmentStatus.CANCELLED) {
+      return;
+    }
+
+    const templates = await this.prisma.nextbotAutoMessageTemplate.findMany({
+      where: {
+        studioId: appointment.studioId,
+        triggerType: NextbotAutoMessageTriggerType.STATUS_CHANGED,
+        triggerOnStatus: newStatus,
+        isActive: true,
+      },
+    });
+    if (templates.length === 0) {
+      return;
+    }
+
+    const disabledCategories = await getDisabledCategoryIdsForStudio(
+      this.prisma,
+      appointment.studioId,
+    );
+    const categoryIds = this.getAppointmentCategoryIds(appointment);
+    const now = new Date();
+
+    for (const template of templates) {
+      if (
+        template.serviceCategoryId &&
+        (disabledCategories.has(template.serviceCategoryId) ||
+          !categoryIds.has(template.serviceCategoryId))
+      ) {
+        continue;
+      }
+      await this.upsertPendingLog(appointment, template.id, now);
     }
   }
 
@@ -283,7 +347,10 @@ export class NextbotAutoMessageOrchestratorService {
     appointment: AppointmentCtx,
     visitDoneAt: Date | null,
   ): Date | null {
-    if (template.triggerType === NextbotAutoMessageTriggerType.BOOKING_CONFIRMED) {
+    if (
+      template.triggerType === NextbotAutoMessageTriggerType.BOOKING_CONFIRMED ||
+      template.triggerType === NextbotAutoMessageTriggerType.STATUS_CHANGED
+    ) {
       return new Date();
     }
     return computeScheduledAt({

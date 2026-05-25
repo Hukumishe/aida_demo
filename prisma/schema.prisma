@@ -28,6 +28,8 @@ enum AppointmentStatus {
   DONE
   TENTATIVE // Предварительная бронь (Nextbot до выставления счёта/оплаты)
   PENDING_CONFIRMATION // Ожидает подтверждения (после присланного чека ночью — до ручной проверки менеджером)
+  /// Ожидаем предоплату (менеджер/бот перевели запись в этот статус).
+  AWAITING_PREPAYMENT
 }
 
 /// Лист ожидания: желаемое время занято — заявка не в журнале записей, пока не освободится слот или не отменят.
@@ -171,6 +173,8 @@ enum NextbotAutoMessageTriggerType {
   FEEDBACK_REQUEST
   /// Свой сценарий: до/после процедуры по категории с настраиваемым смещением.
   CUSTOM_SCHEDULED
+  /// Сообщение при переходе записи в triggerOnStatus (сразу после смены статуса).
+  STATUS_CHANGED
 }
 
 /// Точка отсчёта смещения.
@@ -699,6 +703,8 @@ model NextbotAutoMessageTemplate {
   offsetUnit        NextbotAutoMessageOffsetUnit
   /// Мин. число суток между bookedAt и startAt, чтобы планировать (например 2 для напоминания за сутки).
   minLeadDays       Int?
+  /// Для STATUS_CHANGED: отправить, когда запись перешла в этот статус.
+  triggerOnStatus   AppointmentStatus?
   messageText       String
   isActive          Boolean                       @default(true)
   sortOrder         Int                           @default(0)

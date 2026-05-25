@@ -31,9 +31,20 @@ import { NextbotAutoMessageOrchestratorService } from './nextbot-auto-message-or
 import {
   assertValidTemplateSchedule,
   getCustomScheduleFormSchema,
+  getStatusChangedFormSchema,
+  isStatusChangedTrigger,
   NEXTBOT_TRIGGER_TYPE_LABELS,
   requiresServiceCategory,
 } from './nextbot-auto-message-template-config';
+import {
+  APPOINTMENT_STATUS_LABELS,
+  listAppointmentStatusOptions,
+} from '../appointments/appointment-status.constants';
+import {
+  AppointmentStatus,
+  NextbotAutoMessageAnchor,
+  NextbotAutoMessageDirection,
+} from '@prisma/client';
 
 const MAX_OFFSET_MINUTES = 365 * 24 * 60;
 
@@ -89,6 +100,7 @@ export class NextbotAutoMessagesService {
     anchor: import('@prisma/client').NextbotAutoMessageAnchor;
     direction: import('@prisma/client').NextbotAutoMessageDirection;
     serviceCategoryId?: string | null;
+    triggerOnStatus?: AppointmentStatus | null;
   }) {
     try {
       assertValidTemplateSchedule(params);
@@ -133,6 +145,32 @@ export class NextbotAutoMessagesService {
   /** Схема формы «своё сообщение» (до/после процедуры по категории). */
   getCustomScheduleFormSchema() {
     return getCustomScheduleFormSchema();
+  }
+
+  getStatusChangedFormSchema() {
+    return getStatusChangedFormSchema();
+  }
+
+  listAppointmentStatuses() {
+    return listAppointmentStatusOptions();
+  }
+
+  private normalizeStatusChangedSchedule(
+    dto: Pick<
+      CreateNextbotAutoMessageTemplateDto,
+      'triggerType' | 'anchor' | 'direction' | 'offsetValue' | 'offsetUnit' | 'triggerOnStatus'
+    >,
+  ) {
+    if (!isStatusChangedTrigger(dto.triggerType)) {
+      return dto;
+    }
+    return {
+      ...dto,
+      anchor: NextbotAutoMessageAnchor.NONE,
+      direction: NextbotAutoMessageDirection.AFTER,
+      offsetValue: dto.offsetValue ?? 1,
+      offsetUnit: dto.offsetUnit ?? NextbotAutoMessageOffsetUnit.MINUTES,
+    };
   }
 
   /** Пресеты для админки (типовые сценарии из ТЗ). */
@@ -192,6 +230,16 @@ export class NextbotAutoMessagesService {
         minLeadDays: null,
         hint: 'Через N мин после DONE — запрос оценки (категория обязательна)',
       },
+      {
+        triggerType: NextbotAutoMessageTriggerType.STATUS_CHANGED,
+        anchor: 'NONE',
+        direction: 'AFTER',
+        offsetValue: 1,
+        offsetUnit: 'MINUTES',
+        triggerOnStatus: AppointmentStatus.AWAITING_PREPAYMENT,
+        minLeadDays: null,
+        hint: 'Сразу при переходе записи в «Ожидаем предоплату»',
+      },
     ];
   }
 
@@ -200,6 +248,7 @@ export class NextbotAutoMessagesService {
     studioId: string;
     serviceCategoryId: string | null;
     triggerType: string;
+    triggerOnStatus: AppointmentStatus | null;
     anchor: string;
     direction: string;
     offsetValue: number;
@@ -222,6 +271,11 @@ export class NextbotAutoMessagesService {
         NEXTBOT_TRIGGER_TYPE_LABELS[
           row.triggerType as keyof typeof NEXTBOT_TRIGGER_TYPE_LABELS
         ] ?? row.triggerType,
+      triggerOnStatus: row.triggerOnStatus ?? null,
+      triggerOnStatusLabel:
+        row.triggerOnStatus != null
+          ? APPOINTMENT_STATUS_LABELS[row.triggerOnStatus]
+          : null,
       anchor: row.anchor,
       direction: row.direction,
       offsetValue: row.offsetValue,
@@ -407,12 +461,16 @@ export class NextbotAutoMessagesService {
       userOrganizationId,
       userRole,
     );
-    this.validateOffset(dto.offsetValue, dto.offsetUnit);
+    const normalized = this.normalizeStatusChangedSchedule(dto);
+    if (!isStatusChangedTrigger(normalized.triggerType)) {
+      this.validateOffset(normalized.offsetValue!, normalized.offsetUnit!);
+    }
     this.validateTemplateScheduleOrThrow({
-      triggerType: dto.triggerType,
-      anchor: dto.anchor,
-      direction: dto.direction,
+      triggerType: normalized.triggerType,
+      anchor: normalized.anchor!,
+      direction: normalized.direction!,
       serviceCategoryId: dto.serviceCategoryId,
+      triggerOnStatus: normalized.triggerOnStatus ?? null,
     });
     if (dto.serviceCategoryId?.trim()) {
       await this.assertCategoryOfferedInStudio(studioId, dto.serviceCategoryId);
@@ -423,12 +481,13 @@ export class NextbotAutoMessagesService {
         id: generateId(IdPrefix.NextbotAutoMessageTemplate),
         studioId,
         serviceCategoryId: dto.serviceCategoryId?.trim() || null,
-        triggerType: dto.triggerType,
-        anchor: dto.anchor,
-        direction: dto.direction,
-        offsetValue: dto.offsetValue,
-        offsetUnit: dto.offsetUnit,
+        triggerType: normalized.triggerType,
+        anchor: normalized.anchor!,
+        direction: normalized.direction!,
+        offsetValue: normalized.offsetValue ?? 1,
+        offsetUnit: normalized.offsetUnit ?? NextbotAutoMessageOffsetUnit.MINUTES,
         minLeadDays: dto.minLeadDays ?? null,
+        triggerOnStatus: normalized.triggerOnStatus ?? null,
         messageText: dto.messageText.trim(),
         isActive: dto.isActive ?? true,
         sortOrder: dto.sortOrder ?? 0,
@@ -460,13 +519,23 @@ export class NextbotAutoMessagesService {
       throw new NotFoundException('Шаблон автосообщения не найден');
     }
 
-    const nextOffsetValue = dto.offsetValue ?? existing.offsetValue;
-    const nextOffsetUnit = dto.offsetUnit ?? existing.offsetUnit;
-    this.validateOffset(nextOffsetValue, nextOffsetUnit);
-
     const nextTrigger = dto.triggerType ?? existing.triggerType;
-    const nextAnchor = dto.anchor ?? existing.anchor;
-    const nextDirection = dto.direction ?? existing.direction;
+    let nextAnchor = dto.anchor ?? existing.anchor;
+    let nextDirection = dto.direction ?? existing.direction;
+    let nextOffsetValue = dto.offsetValue ?? existing.offsetValue;
+    let nextOffsetUnit = dto.offsetUnit ?? existing.offsetUnit;
+    const nextTriggerOnStatus =
+      dto.triggerOnStatus !== undefined ? dto.triggerOnStatus : existing.triggerOnStatus;
+
+    if (isStatusChangedTrigger(nextTrigger)) {
+      nextAnchor = NextbotAutoMessageAnchor.NONE;
+      nextDirection = NextbotAutoMessageDirection.AFTER;
+      nextOffsetValue = dto.offsetValue ?? 1;
+      nextOffsetUnit = dto.offsetUnit ?? NextbotAutoMessageOffsetUnit.MINUTES;
+    } else {
+      this.validateOffset(nextOffsetValue, nextOffsetUnit);
+    }
+
     const nextCategoryId =
       dto.serviceCategoryId !== undefined
         ? dto.serviceCategoryId
@@ -481,19 +550,33 @@ export class NextbotAutoMessagesService {
       anchor: nextAnchor,
       direction: nextDirection,
       serviceCategoryId: nextCategoryId,
+      triggerOnStatus: nextTriggerOnStatus,
     });
 
     const data: Prisma.NextbotAutoMessageTemplateUpdateInput = {};
     if (dto.triggerType !== undefined) data.triggerType = dto.triggerType;
-    if (dto.anchor !== undefined) data.anchor = dto.anchor;
-    if (dto.direction !== undefined) data.direction = dto.direction;
+    if (dto.anchor !== undefined || isStatusChangedTrigger(nextTrigger)) {
+      data.anchor = nextAnchor;
+    }
+    if (dto.direction !== undefined || isStatusChangedTrigger(nextTrigger)) {
+      data.direction = nextDirection;
+    }
+    if (dto.offsetValue !== undefined || isStatusChangedTrigger(nextTrigger)) {
+      data.offsetValue = nextOffsetValue;
+    }
+    if (dto.offsetUnit !== undefined || isStatusChangedTrigger(nextTrigger)) {
+      data.offsetUnit = nextOffsetUnit;
+    }
+    if (dto.triggerOnStatus !== undefined || isStatusChangedTrigger(nextTrigger)) {
+      data.triggerOnStatus = isStatusChangedTrigger(nextTrigger)
+        ? nextTriggerOnStatus
+        : null;
+    }
     if (dto.serviceCategoryId !== undefined) {
       data.category = dto.serviceCategoryId
         ? { connect: { id: dto.serviceCategoryId } }
         : { disconnect: true };
     }
-    if (dto.offsetValue !== undefined) data.offsetValue = dto.offsetValue;
-    if (dto.offsetUnit !== undefined) data.offsetUnit = dto.offsetUnit;
     if (dto.minLeadDays !== undefined) data.minLeadDays = dto.minLeadDays;
     if (dto.messageText !== undefined) data.messageText = dto.messageText.trim();
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
