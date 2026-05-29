@@ -1,6 +1,4 @@
 import { Injectable, LoggerService as NestLoggerService } from '@nestjs/common';
-import { PrismaService } from '../common/prisma/prisma.service';
-import { generateId, IdPrefix } from '../common/id-generator';
 import * as winston from 'winston';
 import { ConfigService } from '@nestjs/config';
 
@@ -38,15 +36,8 @@ interface LogContext {
 @Injectable()
 export class LoggerService implements NestLoggerService {
   private winstonLogger: winston.Logger;
-  private readonly enableDbLogging: boolean;
 
-  constructor(
-    private prisma: PrismaService,
-    private configService: ConfigService,
-  ) {
-    this.enableDbLogging = this.configService.get<string>('ENABLE_DB_LOGGING', 'true') === 'true';
-    
-    // Configure Winston logger
+  constructor(private configService: ConfigService) {
     this.winstonLogger = winston.createLogger({
       level: this.configService.get<string>('LOG_LEVEL', 'info'),
       format: winston.format.combine(
@@ -56,7 +47,6 @@ export class LoggerService implements NestLoggerService {
       ),
       defaultMeta: { service: 'aida-backend' },
       transports: [
-        // Write all logs to console
         new winston.transports.Console({
           format: winston.format.combine(
             winston.format.colorize(),
@@ -65,73 +55,15 @@ export class LoggerService implements NestLoggerService {
             }),
           ),
         }),
-        // Write all logs to file
-        new winston.transports.File({
-          filename: 'logs/error.log',
-          level: 'error',
-          maxsize: 5242880, // 5MB
-          maxFiles: 5,
-        }),
-        new winston.transports.File({
-          filename: 'logs/combined.log',
-          maxsize: 5242880, // 5MB
-          maxFiles: 5,
-        }),
       ],
     });
   }
 
-  async logMessage(
-    level: LogLevel,
-    type: LogType,
-    message: string,
-    context?: LogContext,
-  ) {
-    // Log to Winston (file and console)
+  logMessage(level: LogLevel, type: LogType, message: string, context?: LogContext) {
     const winstonLevel = level.toLowerCase() as 'error' | 'warn' | 'info' | 'debug' | 'verbose';
-    this.winstonLogger.log(winstonLevel, message, context);
-
-    // Log to database (async, don't wait)
-    if (this.enableDbLogging) {
-      this.logToDatabase(level, type, message, context).catch((err) => {
-        // If DB logging fails, log to Winston only
-        this.winstonLogger.error('Failed to log to database', err);
-      });
-    }
+    this.winstonLogger.log(winstonLevel, message, { type, ...context });
   }
 
-  private async logToDatabase(
-    level: LogLevel,
-    type: LogType,
-    message: string,
-    context?: LogContext,
-  ) {
-    try {
-      await this.prisma.log.create({
-        data: {
-          id: generateId(IdPrefix.Log),
-          level,
-          type,
-          message,
-          context: context ? JSON.stringify(context) : null,
-          userId: context?.userId,
-          studioId: context?.studioId,
-          ip: context?.ip,
-          userAgent: context?.userAgent,
-          method: context?.method,
-          url: context?.url,
-          statusCode: context?.statusCode,
-          error: context?.error,
-          duration: context?.duration,
-        },
-      });
-    } catch (error) {
-      // Silently fail - don't break the application if logging fails
-      this.winstonLogger.error('Database logging error', error);
-    }
-  }
-
-  // NestJS LoggerService interface methods
   log(message: string, context?: string) {
     this.logMessage(LogLevel.INFO, LogType.SYSTEM, message, { context });
   }
@@ -155,7 +87,6 @@ export class LoggerService implements NestLoggerService {
     this.logMessage(LogLevel.VERBOSE, LogType.SYSTEM, message, { context });
   }
 
-  // Custom methods for specific log types
   logHttpRequest(
     method: string,
     url: string,
@@ -183,7 +114,8 @@ export class LoggerService implements NestLoggerService {
     userId?: string,
     studioId?: string,
   ) {
-    const level = statusCode >= 500 ? LogLevel.ERROR : statusCode >= 400 ? LogLevel.WARN : LogLevel.INFO;
+    const level =
+      statusCode >= 500 ? LogLevel.ERROR : statusCode >= 400 ? LogLevel.WARN : LogLevel.INFO;
     this.logMessage(level, LogType.HTTP_RESPONSE, `${method} ${url} - ${statusCode}`, {
       method,
       url,
@@ -195,11 +127,7 @@ export class LoggerService implements NestLoggerService {
     });
   }
 
-  logError(
-    message: string,
-    error: Error | string,
-    context?: LogContext,
-  ) {
+  logError(message: string, error: Error | string, context?: LogContext) {
     const errorString = error instanceof Error ? error.stack || error.message : error;
     this.logMessage(LogLevel.ERROR, LogType.ERROR, message, {
       ...context,
@@ -207,12 +135,7 @@ export class LoggerService implements NestLoggerService {
     });
   }
 
-  logAuth(
-    message: string,
-    userId?: string,
-    ip?: string,
-    context?: LogContext,
-  ) {
+  logAuth(message: string, userId?: string, ip?: string, context?: LogContext) {
     this.logMessage(LogLevel.INFO, LogType.AUTH, message, {
       userId,
       ip,
@@ -220,10 +143,7 @@ export class LoggerService implements NestLoggerService {
     });
   }
 
-  logDatabase(
-    message: string,
-    context?: LogContext,
-  ) {
+  logDatabase(message: string, context?: LogContext) {
     this.logMessage(LogLevel.DEBUG, LogType.DATABASE, message, context);
   }
 
@@ -240,4 +160,3 @@ export class LoggerService implements NestLoggerService {
     });
   }
 }
-

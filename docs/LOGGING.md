@@ -2,10 +2,9 @@
 
 ## Обзор
 
-В проекте реализована полная система логирования, которая записывает логи:
-- **В файлы** (через Winston) - `logs/error.log` и `logs/combined.log`
-- **В базу данных** (таблица `logs`) - для долгосрочного хранения и анализа
-- **В консоль** - для разработки
+В проекте логирование идёт **только в консоль** (Winston → stdout). На Railway смотрите вкладку **Logs** деплоя.
+
+Запись в таблицу `logs` в PostgreSQL **отключена** — чтобы не занимать пул соединений Prisma и не тормозить API.
 
 ## Что логируется
 
@@ -36,18 +35,21 @@
 - Медленные запросы
 - Ошибки подключения
 
-## Структура логов в БД
+## Таблица `logs` в БД (устарело)
 
-### Модель Log
+Модель `Log` в Prisma может оставаться в схеме, но **приложение в неё не пишет**. Для аудита используйте логи платформы (Railway) или внешний APM.
+
+<details>
+<summary>Бывшая структура Log (справочно)</summary>
 
 ```prisma
 model Log {
   id          String   @id @default(uuid())
-  level       LogLevel  // ERROR, WARN, INFO, DEBUG, VERBOSE
-  type        LogType   // HTTP_REQUEST, HTTP_RESPONSE, ERROR, AUTH, DATABASE, BUSINESS_LOGIC, SYSTEM
+  level       LogLevel
+  type        LogType
   message     String
-  context     String?   // JSON с дополнительным контекстом
-  userId      String?   // ID пользователя
+  context     String?
+  userId      String?
   studioId    String?   // ID студии
   ip          String?   // IP адрес
   userAgent   String?   // User agent
@@ -59,6 +61,8 @@ model Log {
   createdAt   DateTime  @default(now())
 }
 ```
+
+</details>
 
 ### Уровни логирования (LogLevel)
 
@@ -163,19 +167,11 @@ this.logger.logError(
 ```env
 # Уровень логирования (error, warn, info, debug, verbose)
 LOG_LEVEL=info
-
-# Включить/выключить логирование в БД (true/false)
-ENABLE_DB_LOGGING=true
 ```
 
-### Файлы логов
+Переменная `ENABLE_DB_LOGGING` больше не используется.
 
-- `logs/error.log` - только ошибки (ERROR уровень)
-- `logs/combined.log` - все логи
-- Максимальный размер файла: 5MB
-- Максимальное количество файлов: 5 (ротация)
-
-## Запросы к логам в БД
+## Запросы к логам в БД (устарело)
 
 ### Получить все ошибки за последний час
 
