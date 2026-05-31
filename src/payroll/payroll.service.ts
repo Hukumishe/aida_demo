@@ -14,7 +14,10 @@ import {
 import { PrismaService } from '../common/prisma/prisma.service';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { assertUserOrganizationMatchesOrganizationId } from '../common/organization-scope';
-import { UserRole as RoleEnum } from '../common/decorators/roles.decorator';
+import {
+  isDeveloperRole,
+  UserRole as RoleEnum,
+} from '../common/decorators/roles.decorator';
 import { UpsertPayrollSettingsDto } from './dto/upsert-payroll-settings.dto';
 import {
   buildPayrollAccrualRows,
@@ -61,16 +64,50 @@ export type AccruePayrollVisitInput = {
 export class PayrollService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private assertOwnerCanManage(userRole?: string) {
-    if (userRole !== RoleEnum.OWNER) {
-      throw new ForbiddenException('Только владелец может управлять настройками зарплаты');
+  private assertCanManageSettings(userRole?: string) {
+    if (userRole === RoleEnum.OWNER || isDeveloperRole(userRole)) {
+      return;
     }
+    throw new ForbiddenException(
+      'Настройки зарплаты может изменять только владелец или разработчик',
+    );
   }
 
-  private assertOwnerCanViewReport(userRole?: string) {
-    if (userRole !== RoleEnum.OWNER) {
-      throw new ForbiddenException('Только владелец может просматривать отчёт по зарплате');
+  private assertCanViewSettings(
+    staffUserId: string,
+    userRole?: string,
+    userId?: string,
+  ) {
+    if (userRole === RoleEnum.OWNER || isDeveloperRole(userRole)) {
+      return;
     }
+    if (userRole === RoleEnum.MASTER && userId === staffUserId) {
+      return;
+    }
+    throw new ForbiddenException('Нет доступа к настройкам зарплаты этого сотрудника');
+  }
+
+  private resolveReportStaffUserId(
+    userRole?: string,
+    userId?: string,
+    requestedStaffUserId?: string,
+  ): string | undefined {
+    if (userRole === RoleEnum.MASTER) {
+      if (!userId) {
+        throw new ForbiddenException('Нет доступа к отчёту по зарплате');
+      }
+      if (requestedStaffUserId && requestedStaffUserId !== userId) {
+        throw new ForbiddenException('Мастер может просматривать только свою зарплату');
+      }
+      return userId;
+    }
+    if (
+      userRole === RoleEnum.OWNER ||
+      isDeveloperRole(userRole)
+    ) {
+      return requestedStaffUserId;
+    }
+    throw new ForbiddenException('Нет доступа к отчёту по зарплате');
   }
 
   async getSettings(
@@ -78,8 +115,9 @@ export class PayrollService {
     staffUserId: string,
     userRole?: string,
     userOrganizationId?: string,
+    userId?: string,
   ) {
-    this.assertOwnerCanManage(userRole);
+    this.assertCanViewSettings(staffUserId, userRole, userId);
     assertUserOrganizationMatchesOrganizationId(
       organizationId,
       userOrganizationId,
@@ -133,8 +171,9 @@ export class PayrollService {
     dto: UpsertPayrollSettingsDto,
     userRole?: string,
     userOrganizationId?: string,
+    userId?: string,
   ) {
-    this.assertOwnerCanManage(userRole);
+    this.assertCanManageSettings(userRole);
     assertUserOrganizationMatchesOrganizationId(
       organizationId,
       userOrganizationId,
@@ -213,7 +252,13 @@ export class PayrollService {
       }
     });
 
-    return this.getSettings(organizationId, staffUserId, userRole, userOrganizationId);
+    return this.getSettings(
+      organizationId,
+      staffUserId,
+      userRole,
+      userOrganizationId,
+      userId,
+    );
   }
 
   async getReport(
@@ -221,12 +266,18 @@ export class PayrollService {
     query: { from: string; to: string; staffUserId?: string; studioId?: string },
     userRole?: string,
     userOrganizationId?: string,
+    userId?: string,
   ) {
-    this.assertOwnerCanViewReport(userRole);
     assertUserOrganizationMatchesOrganizationId(
       organizationId,
       userOrganizationId,
       userRole,
+    );
+
+    const staffUserId = this.resolveReportStaffUserId(
+      userRole,
+      userId,
+      query.staffUserId,
     );
 
     const from = new Date(query.from);
@@ -241,7 +292,7 @@ export class PayrollService {
     const where: Prisma.StaffPayrollAccrualWhereInput = {
       organizationId,
       createdAt: { gte: from, lte: to },
-      ...(query.staffUserId ? { staffUserId: query.staffUserId } : {}),
+      ...(staffUserId ? { staffUserId } : {}),
       ...(query.studioId ? { studioId: query.studioId } : {}),
     };
 
@@ -293,10 +344,15 @@ export class PayrollService {
       byStaff.set(row.staffUserId, bucket);
     }
 
+    const viewScope =
+      userRole === RoleEnum.MASTER ? ('self' as const) : ('organization' as const);
+
     return {
       organizationId,
       from: from.toISOString(),
       to: to.toISOString(),
+      viewScope,
+      staffUserId: staffUserId ?? null,
       totalCommission,
       staff: Array.from(byStaff.values()).map((s) => ({
         staffUserId: s.staffUserId,

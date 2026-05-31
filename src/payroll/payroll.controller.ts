@@ -21,31 +21,39 @@ export class PayrollController {
   constructor(private readonly payrollService: PayrollService) {}
 
   @Get('staff/:staffUserId/payroll-settings')
-  @Roles(UserRole.OWNER)
-  @ApiOperation({ summary: 'Настройки комиссии сотрудника (только OWNER)' })
+  @Roles(UserRole.OWNER, UserRole.DEVELOPER, UserRole.MASTER)
+  @ApiOperation({
+    summary: 'Настройки комиссии сотрудника',
+    description:
+      'OWNER и DEVELOPER — любой сотрудник; MASTER — только свои настройки (просмотр).',
+  })
   @ApiResponse({ status: 200 })
   getSettings(
     @Param('organizationId') organizationId: string,
     @Param('staffUserId') staffUserId: string,
-    @CurrentUser() user?: { role: string; organizationId?: string },
+    @CurrentUser() user?: { role: string; organizationId?: string; userId?: string },
   ) {
     return this.payrollService.getSettings(
       organizationId,
       staffUserId,
       user?.role,
       user?.organizationId,
+      user?.userId,
     );
   }
 
   @Put('staff/:staffUserId/payroll-settings')
-  @Roles(UserRole.OWNER)
-  @ApiOperation({ summary: 'Сохранить настройки комиссии (только OWNER)' })
+  @Roles(UserRole.OWNER, UserRole.DEVELOPER)
+  @ApiOperation({
+    summary: 'Сохранить настройки комиссии',
+    description: 'OWNER и DEVELOPER.',
+  })
   @ApiResponse({ status: 200 })
   upsertSettings(
     @Param('organizationId') organizationId: string,
     @Param('staffUserId') staffUserId: string,
     @Body() dto: UpsertPayrollSettingsDto,
-    @CurrentUser() user?: { role: string; organizationId?: string },
+    @CurrentUser() user?: { role: string; organizationId?: string; userId?: string },
   ) {
     return this.payrollService.upsertSettings(
       organizationId,
@@ -53,23 +61,29 @@ export class PayrollController {
       dto,
       user?.role,
       user?.organizationId,
+      user?.userId,
     );
   }
 
   @Get('payroll-report')
-  @Roles(UserRole.OWNER)
-  @ApiOperation({ summary: 'Отчёт по начислениям зарплаты за период (только OWNER)' })
+  @Roles(UserRole.OWNER, UserRole.DEVELOPER, UserRole.MASTER)
+  @ApiOperation({
+    summary: 'Отчёт по начислениям зарплаты за период',
+    description:
+      'OWNER и DEVELOPER — вся организация (фильтр staffUserId опционален); MASTER — только свои начисления.',
+  })
   @ApiResponse({ status: 200 })
   getReport(
     @Param('organizationId') organizationId: string,
     @Query() query: PayrollReportQueryDto,
-    @CurrentUser() user?: { role: string; organizationId?: string },
+    @CurrentUser() user?: { role: string; organizationId?: string; userId?: string },
   ) {
     return this.payrollService.getReport(
       organizationId,
       query,
       user?.role,
       user?.organizationId,
+      user?.userId,
     );
   }
 }

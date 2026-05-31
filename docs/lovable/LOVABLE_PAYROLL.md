@@ -2,8 +2,15 @@
 
 ## Доступ
 
-- **Настройки и отчёт** — только роль **OWNER** (JWT).
-- Настройки на уровне **организации** (одна схема на мастера во всех филиалах сети).
+| Действие | OWNER | DEVELOPER | MASTER |
+|----------|-------|-----------|--------|
+| Просмотр настроек % | любой сотрудник | любой сотрудник / любая org | **только свои** |
+| Сохранение настроек % | да | да | нет |
+| Отчёт за период | вся организация | вся организация | **только свои** начисления |
+
+Настройки на уровне **организации** (одна схема на мастера во всех филиалах сети).
+
+DEVELOPER не ограничен `organizationId` из JWT — в URL указывается нужная организация.
 
 ## Настройки сотрудника
 
@@ -52,7 +59,9 @@ Query:
 - `staffUserId` — опционально
 - `studioId` — опционально
 
-Ответ: `totalCommission`, `staff[]` с `items[]` (строки начислений), плоский `items[]`.
+Ответ: `totalCommission`, `viewScope` (`organization` | `self`), `staffUserId` (для мастера — его id), `staff[]` с `items[]`, плоский `items[]`.
+
+**Мастер:** тот же endpoint; `staffUserId` в query игнорируется / должен совпадать с текущим пользователем. Удобно вызывать без `staffUserId` — вернутся только его строки.
 
 Поля строки: `staffName`, `appointmentStartAt`, `studioName`, `clientName`, `serviceName`, `grossLineAmount`, `baseAmount`, `percent`, `commissionAmount`, `baseModeLabel`, `lineTypeLabel`.
 
@@ -62,13 +71,15 @@ Query:
 
 ## UI
 
-1. **Карточка сотрудника** → вкладка «Зарплата»: режим %, переключатель базы, таблицы ставок, «Сохранить».
-2. **Раздел «Зарплата»** (OWNER): период, фильтр сотрудник/филиал, таблица + итого.
+1. **Карточка сотрудника** (OWNER / DEVELOPER) → вкладка «Зарплата»: режим %, переключатель базы, таблицы ставок, «Сохранить».
+2. **Раздел «Зарплата»** (OWNER / DEVELOPER): период, фильтр сотрудник/филиал, таблица + итого.
+3. **Кабинет мастера** → «Моя зарплата»: `GET payroll-report` без фильтра по staff; опционально `GET .../staff/{myUserId}/payroll-settings` (только просмотр своих %).
 
 ## Промпт
 
 ```
-Страница «Зарплата» для OWNER: настройки комиссии у сотрудника (GET/PUT payroll-settings) и отчёт (GET payroll-report).
+Страница «Зарплата» для OWNER и DEVELOPER: настройки (GET/PUT payroll-settings) и отчёт (GET payroll-report).
+Для MASTER: экран «Моя зарплата» — только GET payroll-report (свои начисления) и GET payroll-settings для своего userId (read-only).
 Режимы: единый %, по категориям, по услугам. Переключатель baseMode WITH_DISCOUNTS / WITHOUT_DISCOUNTS.
 Отчёт: период, фильтры, таблица визитов с baseAmount, percent, commissionAmount, итого totalCommission.
 ```
