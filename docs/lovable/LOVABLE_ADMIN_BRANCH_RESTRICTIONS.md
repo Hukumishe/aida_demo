@@ -59,8 +59,19 @@
 
 При создании записи бэкенд отклонит услугу, не привязанную к мастеру: `400 Услуга недоступна для выбранного мастера`.
 
+## 5. Личное время (серые слоты) для мастеров
+
+**POST** `/studios/:studioId/busy-slots` — тело с `staffUserId` мастера, `startAt`, `endAt`, **`comment`** (обязательно).
+
+Без `comment` для мастера → **400**. С `comment` можно вне графика работы.
+
+**GET** `/studios/:studioId/busy-slots?date=YYYY-MM-DD` — все busy slots филиала.
+
+Подробнее: [LOVABLE_MASTER_SCHEDULE_AND_PERSONAL_TIME.md](./LOVABLE_MASTER_SCHEDULE_AND_PERSONAL_TIME.md).
+
 ## Чеклист Lovable
 
+- [ ] ADMIN: форма «Личное время» для выбранного мастера (`staffUserId` + `comment`)
 - [ ] Модалка done: сумма, бонусы, тип оплаты
 - [ ] ADMIN: нет редактирования мастеров
 - [ ] ADMIN: нет списка клиентов, карточка из записи

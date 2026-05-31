@@ -20,6 +20,39 @@ export class BusySlotsService {
     private availabilityService: AvailabilityService,
   ) {}
 
+  /** Личное / «серое» время: вне графика допустимо при указанной причине. */
+  private allowsPersonalTimeOutsideSchedule(
+    userRole: string | undefined,
+    comment: string | null | undefined,
+  ): boolean {
+    if (!comment?.trim()) {
+      return false;
+    }
+    return userRole === UserRole.MASTER || userRole === UserRole.ADMIN;
+  }
+
+  private async assertAdminPersonalTimeForMaster(
+    staffUserId: string,
+    comment: string | undefined,
+    organizationId: string,
+  ): Promise<void> {
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffUserId },
+      select: { role: true, organizationId: true, isActive: true },
+    });
+    if (!staff?.isActive || staff.organizationId !== organizationId) {
+      throw new BadRequestException('Мастер не найден в этой организации');
+    }
+    if (staff.role !== UserRole.MASTER) {
+      return;
+    }
+    if (!comment?.trim()) {
+      throw new BadRequestException(
+        'При брони личного времени мастера администратор должен указать причину (comment)',
+      );
+    }
+  }
+
   async findAll(
     studioId: string,
     date?: string,
@@ -106,6 +139,14 @@ export class BusySlotsService {
       throw new NotFoundException(`Studio with ID ${studioId} not found`);
     }
 
+    if (userRole === UserRole.ADMIN) {
+      await this.assertAdminPersonalTimeForMaster(
+        createBusySlotDto.staffUserId,
+        createBusySlotDto.comment,
+        studio.organizationId,
+      );
+    }
+
     await assertStaffWorksAtStudio(
       this.prisma,
       createBusySlotDto.staffUserId,
@@ -119,12 +160,9 @@ export class BusySlotsService {
       throw new BadRequestException('endAt must be greater than startAt');
     }
 
-    // Check if busy slot is allowed (must be within work schedule)
-    // For MASTER with причиной брони — можно вне рабочих часов (личные дела)
-    if (userRole === UserRole.MASTER && createBusySlotDto.comment?.trim()) {
-      // skip strict work-hours validation
-    } else {
-      // For other roles, enforce strict work schedule validation
+    if (
+      !this.allowsPersonalTimeOutsideSchedule(userRole, createBusySlotDto.comment)
+    ) {
       await this.availabilityService.checkBusySlotAllowed(
         studioId,
         createBusySlotDto.staffUserId,
@@ -133,7 +171,7 @@ export class BusySlotsService {
       );
     }
 
-    return this.prisma.busySlot.create({
+    const created = await this.prisma.busySlot.create({
       data: {
         id: generateId(IdPrefix.BusySlot),
         studioId,
@@ -143,7 +181,11 @@ export class BusySlotsService {
         comment: createBusySlotDto.comment?.trim() || null,
         forfeitedPrepaymentAmount: createBusySlotDto.forfeitedPrepaymentAmount,
       },
+      include: {
+        staff: { include: { staffProfile: true } },
+      },
     });
+    return enrichBusySlotsForSchedule([created])[0];
   }
 
   async update(
@@ -170,10 +212,30 @@ export class BusySlotsService {
       throw new ForbiddenException('Мастер может изменять только свои блоки времени');
     }
 
-    if (userRole === UserRole.MASTER && updateBusySlotDto.comment !== undefined) {
-      if (!updateBusySlotDto.comment?.trim()) {
-        throw new BadRequestException('Причина брони не может быть пустой');
+    if (userRole === UserRole.ADMIN) {
+      const studio = await this.prisma.studio.findUnique({
+        where: { id: busySlot.studioId },
+        select: { organizationId: true },
+      });
+      if (studio) {
+        const nextComment =
+          updateBusySlotDto.comment !== undefined
+            ? updateBusySlotDto.comment
+            : busySlot.comment ?? undefined;
+        await this.assertAdminPersonalTimeForMaster(
+          busySlot.staffUserId,
+          nextComment,
+          studio.organizationId,
+        );
       }
+    }
+
+    if (
+      (userRole === UserRole.MASTER || userRole === UserRole.ADMIN) &&
+      updateBusySlotDto.comment !== undefined &&
+      !updateBusySlotDto.comment?.trim()
+    ) {
+      throw new BadRequestException('Причина брони не может быть пустой');
     }
 
     const startAt = updateBusySlotDto.startAt
@@ -187,11 +249,16 @@ export class BusySlotsService {
       throw new BadRequestException('endAt must be greater than startAt');
     }
 
-    const masterPersonal =
-      userRole === UserRole.MASTER &&
-      (busySlot.comment?.trim() || updateBusySlotDto.comment?.trim());
+    const effectiveComment =
+      updateBusySlotDto.comment !== undefined
+        ? updateBusySlotDto.comment
+        : busySlot.comment;
+    const personalOutsideSchedule = this.allowsPersonalTimeOutsideSchedule(
+      userRole,
+      effectiveComment,
+    );
 
-    if ((updateBusySlotDto.startAt || updateBusySlotDto.endAt) && !masterPersonal) {
+    if ((updateBusySlotDto.startAt || updateBusySlotDto.endAt) && !personalOutsideSchedule) {
       await this.availabilityService.checkBusySlotAllowed(
         busySlot.studioId,
         busySlot.staffUserId,
@@ -200,7 +267,7 @@ export class BusySlotsService {
       );
     }
 
-    return this.prisma.busySlot.update({
+    const updated = await this.prisma.busySlot.update({
       where: { id },
       data: {
         startAt: updateBusySlotDto.startAt ? startAt : undefined,
@@ -211,7 +278,11 @@ export class BusySlotsService {
             : undefined,
         forfeitedPrepaymentAmount: updateBusySlotDto.forfeitedPrepaymentAmount,
       },
+      include: {
+        staff: { include: { staffProfile: true } },
+      },
     });
+    return enrichBusySlotsForSchedule([updated])[0];
   }
 
   async remove(id: string, userRole?: string, userStudioId?: string, userStaffId?: string) {

@@ -27,7 +27,7 @@ export class CreateBusySlotDto {
     example: 'Личные дела',
     required: false,
     description:
-      'Причина брони / комментарий. Для роли MASTER при личном времени — обязательно.',
+      'Причина брони / комментарий. Обязательно для личного времени MASTER; для ADMIN при брони мастера — тоже обязательно.',
   })
   @IsString()
   @IsOptional()
