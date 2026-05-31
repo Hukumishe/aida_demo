@@ -63,3 +63,16 @@ export function assertUserOrganizationMatchesClientOrganizationId(
     throw new ForbiddenException('Access denied to this client');
   }
 }
+
+export function assertUserOrganizationMatchesOrganizationId(
+  organizationId: string,
+  userOrganizationId: string | undefined,
+  userRole: string | undefined,
+): void {
+  if (!userOrganizationId || isDeveloperRole(userRole)) {
+    return;
+  }
+  if (organizationId !== userOrganizationId) {
+    throw new ForbiddenException('Access denied to this organization');
+  }
+}

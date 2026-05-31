@@ -28,6 +28,7 @@ import { DevTicketsModule } from './dev-tickets/dev-tickets.module';
 import { NextbotAutoMessagesModule } from './nextbot-auto-messages/nextbot-auto-messages.module';
 import { NextbotBirthdayModule } from './nextbot-birthday/nextbot-birthday.module';
 import { TargetPromoModule } from './target-promo/target-promo.module';
+import { PayrollModule } from './payroll/payroll.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -64,6 +65,7 @@ import { AppController } from './app.controller';
     NextbotAutoMessagesModule,
     NextbotBirthdayModule,
     TargetPromoModule,
+    PayrollModule,
   ],
   controllers: [AppController],
 })

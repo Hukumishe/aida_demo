@@ -59,6 +59,7 @@ import {
 } from '../common/client-phone-privacy.util';
 import { AppointmentHistoryService } from './appointment-history.service';
 import { formatDateTime, formatMoneyTenge } from './appointment-history.util';
+import { PayrollService } from '../payroll/payroll.service';
 
 @Injectable()
 export class AppointmentsService {
@@ -69,6 +70,7 @@ export class AppointmentsService {
     private autoMessages: NextbotAutoMessageOrchestratorService,
     private busySlotsService: BusySlotsService,
     private appointmentHistory: AppointmentHistoryService,
+    private payrollService: PayrollService,
   ) {}
 
   async getAppointmentHistory(
@@ -1266,13 +1268,13 @@ export class AppointmentsService {
       where: { id },
       include: {
         client: true,
-        service: true,
+        service: { include: { category: true } },
         serviceItems: {
-          include: { service: true },
+          include: { service: { include: { category: true } } },
           orderBy: { sortOrder: 'asc' },
         },
         studio: { include: { organization: true } },
-        upsells: true,
+        upsells: { include: { service: { include: { category: true } } } },
       },
     });
 
@@ -1698,6 +1700,51 @@ export class AppointmentsService {
           },
         });
       }
+
+      const payrollPrimaryLines =
+        serviceItems.length > 0
+          ? serviceItems.map((item) => ({
+              lineRef: `asi_${item.id}`,
+              serviceId: item.serviceId,
+              serviceName: item.service.name,
+              categoryId: item.service.categoryId,
+              categoryName: item.service.category.name,
+              grossAmount: item.price ?? 0,
+            }))
+          : [
+              {
+                lineRef: `apt_primary_${service.id}`,
+                serviceId: service.id,
+                serviceName: service.name,
+                categoryId: service.categoryId,
+                categoryName: service.category.name,
+                grossAmount: baseAmount,
+              },
+            ];
+
+      const payrollUpsellLines = upsells.map((u) => ({
+        upsellId: u.id,
+        serviceId: u.serviceId,
+        serviceName: u.service.name,
+        categoryId: u.service.categoryId,
+        categoryName: u.service.category.name,
+        grossAmount: u.totalAmount,
+      }));
+
+      await this.payrollService.accrueForCompletedVisit(
+        {
+          organizationId: org.id,
+          staffUserId: existingAppointment.staffUserId,
+          appointmentId: id,
+          studioId: existingAppointment.studioId,
+          appointmentStartAt: existingAppointment.startAt,
+          grossTotal,
+          discountedTotal: total,
+          primaryLines: payrollPrimaryLines,
+          upsellLines: payrollUpsellLines,
+        },
+        tx,
+      );
 
       return tx.appointment.findUniqueOrThrow({
         where: { id },

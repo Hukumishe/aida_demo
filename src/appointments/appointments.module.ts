@@ -9,6 +9,7 @@ import { AvailabilityModule } from '../availability/availability.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { NextbotAutoMessagesModule } from '../nextbot-auto-messages/nextbot-auto-messages.module';
 import { BusySlotsModule } from '../busy-slots/busy-slots.module';
+import { PayrollModule } from '../payroll/payroll.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { BusySlotsModule } from '../busy-slots/busy-slots.module';
     NotificationsModule,
     NextbotAutoMessagesModule,
     BusySlotsModule,
+    PayrollModule,
   ],
   controllers: [AppointmentsController, UpsellsController],
   providers: [
