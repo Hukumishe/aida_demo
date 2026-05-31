@@ -9,7 +9,6 @@ import {
   StaffPayrollBaseMode,
   StaffPayrollLineType,
   StaffPayrollRateMode,
-  UserRole,
 } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { generateId, IdPrefix } from '../common/id-generator';
@@ -43,7 +42,6 @@ export type AccruePayrollVisitInput = {
   discountedTotal: number;
   primaryLines: Array<{
     lineRef: string;
-    serviceItemId?: string;
     serviceId: string;
     serviceName: string;
     categoryId: string;
@@ -73,18 +71,15 @@ export class PayrollService {
     );
   }
 
-  private assertCanViewSettings(
-    staffUserId: string,
-    userRole?: string,
-    userId?: string,
-  ) {
-    if (userRole === RoleEnum.OWNER || isDeveloperRole(userRole)) {
+  private assertCanViewOrgSettings(userRole?: string) {
+    if (
+      userRole === RoleEnum.OWNER ||
+      isDeveloperRole(userRole) ||
+      userRole === RoleEnum.MASTER
+    ) {
       return;
     }
-    if (userRole === RoleEnum.MASTER && userId === staffUserId) {
-      return;
-    }
-    throw new ForbiddenException('Нет доступа к настройкам зарплаты этого сотрудника');
+    throw new ForbiddenException('Нет доступа к настройкам зарплаты организации');
   }
 
   private resolveReportStaffUserId(
@@ -101,47 +96,29 @@ export class PayrollService {
       }
       return userId;
     }
-    if (
-      userRole === RoleEnum.OWNER ||
-      isDeveloperRole(userRole)
-    ) {
+    if (userRole === RoleEnum.OWNER || isDeveloperRole(userRole)) {
       return requestedStaffUserId;
     }
     throw new ForbiddenException('Нет доступа к отчёту по зарплате');
   }
 
-  async getSettings(
-    organizationId: string,
-    staffUserId: string,
-    userRole?: string,
-    userOrganizationId?: string,
-    userId?: string,
-  ) {
-    this.assertCanViewSettings(staffUserId, userRole, userId);
-    assertUserOrganizationMatchesOrganizationId(
-      organizationId,
-      userOrganizationId,
-      userRole,
-    );
-    await this.assertStaffInOrganization(organizationId, staffUserId);
-
-    const settings = await this.prisma.staffPayrollSettings.findUnique({
-      where: { staffUserId },
+  private async fetchSettingsPayload(organizationId: string) {
+    const settings = await this.prisma.organizationPayrollSettings.findUnique({
+      where: { organizationId },
     });
-    const categoryRates = await this.prisma.staffPayrollCategoryRate.findMany({
-      where: { organizationId, staffUserId },
+    const categoryRates = await this.prisma.organizationPayrollCategoryRate.findMany({
+      where: { organizationId },
       include: { category: { select: { id: true, name: true } } },
       orderBy: { category: { name: 'asc' } },
     });
-    const serviceRates = await this.prisma.staffPayrollServiceRate.findMany({
-      where: { organizationId, staffUserId },
+    const serviceRates = await this.prisma.organizationPayrollServiceRate.findMany({
+      where: { organizationId },
       include: { service: { select: { id: true, name: true } } },
       orderBy: { service: { name: 'asc' } },
     });
 
     return {
       organizationId,
-      staffUserId,
       configured: !!settings,
       settings: settings
         ? {
@@ -165,13 +142,65 @@ export class PayrollService {
     };
   }
 
-  async upsertSettings(
+  async getSettings(
+    organizationId: string,
+    userRole?: string,
+    userOrganizationId?: string,
+  ) {
+    this.assertCanViewOrgSettings(userRole);
+    assertUserOrganizationMatchesOrganizationId(
+      organizationId,
+      userOrganizationId,
+      userRole,
+    );
+    return this.fetchSettingsPayload(organizationId);
+  }
+
+  /**
+   * Карточка мастера: общие ставки организации + отчёт по этому мастеру за период.
+   */
+  async getStaffPayrollView(
     organizationId: string,
     staffUserId: string,
-    dto: UpsertPayrollSettingsDto,
+    query: { from: string; to: string; studioId?: string },
     userRole?: string,
     userOrganizationId?: string,
     userId?: string,
+  ) {
+    assertUserOrganizationMatchesOrganizationId(
+      organizationId,
+      userOrganizationId,
+      userRole,
+    );
+    await this.assertStaffInOrganization(organizationId, staffUserId);
+
+    if (userRole === RoleEnum.MASTER && userId !== staffUserId) {
+      throw new ForbiddenException('Нет доступа к зарплате другого сотрудника');
+    }
+
+    const [organizationPayroll, report] = await Promise.all([
+      this.getSettings(organizationId, userRole, userOrganizationId),
+      this.getReport(
+        organizationId,
+        { ...query, staffUserId },
+        userRole,
+        userOrganizationId,
+        userId,
+      ),
+    ]);
+
+    return {
+      staffUserId,
+      organizationPayroll,
+      report,
+    };
+  }
+
+  async upsertSettings(
+    organizationId: string,
+    dto: UpsertPayrollSettingsDto,
+    userRole?: string,
+    userOrganizationId?: string,
   ) {
     this.assertCanManageSettings(userRole);
     assertUserOrganizationMatchesOrganizationId(
@@ -179,7 +208,6 @@ export class PayrollService {
       userOrganizationId,
       userRole,
     );
-    await this.assertStaffInOrganization(organizationId, staffUserId);
 
     if (dto.rateMode === StaffPayrollRateMode.UNIFIED) {
       if (dto.unifiedPercent == null) {
@@ -194,7 +222,7 @@ export class PayrollService {
       await this.validateCategoryRates(organizationId, categoryRates);
     }
     if (dto.rateMode === StaffPayrollRateMode.BY_SERVICE) {
-      await this.validateServiceRates(organizationId, staffUserId, serviceRates);
+      await this.validateServiceRates(organizationId, serviceRates);
     }
 
     const unifiedPercent =
@@ -203,36 +231,33 @@ export class PayrollService {
         : 0;
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.staffPayrollSettings.upsert({
-        where: { staffUserId },
+      await tx.organizationPayrollSettings.upsert({
+        where: { organizationId },
         create: {
-          staffUserId,
           organizationId,
           rateMode: dto.rateMode,
           baseMode: dto.baseMode,
           unifiedPercent,
         },
         update: {
-          organizationId,
           rateMode: dto.rateMode,
           baseMode: dto.baseMode,
           unifiedPercent,
         },
       });
 
-      await tx.staffPayrollCategoryRate.deleteMany({
-        where: { staffUserId },
+      await tx.organizationPayrollCategoryRate.deleteMany({
+        where: { organizationId },
       });
-      await tx.staffPayrollServiceRate.deleteMany({
-        where: { staffUserId },
+      await tx.organizationPayrollServiceRate.deleteMany({
+        where: { organizationId },
       });
 
       if (dto.rateMode === StaffPayrollRateMode.BY_CATEGORY && categoryRates.length > 0) {
-        await tx.staffPayrollCategoryRate.createMany({
+        await tx.organizationPayrollCategoryRate.createMany({
           data: categoryRates.map((r) => ({
             id: generateId(IdPrefix.StaffPayrollCategoryRate),
             organizationId,
-            staffUserId,
             categoryId: r.categoryId,
             percent: clampPercent(r.percent),
           })),
@@ -240,11 +265,10 @@ export class PayrollService {
       }
 
       if (dto.rateMode === StaffPayrollRateMode.BY_SERVICE && serviceRates.length > 0) {
-        await tx.staffPayrollServiceRate.createMany({
+        await tx.organizationPayrollServiceRate.createMany({
           data: serviceRates.map((r) => ({
             id: generateId(IdPrefix.StaffPayrollServiceRate),
             organizationId,
-            staffUserId,
             serviceId: r.serviceId,
             percent: clampPercent(r.percent),
           })),
@@ -252,13 +276,7 @@ export class PayrollService {
       }
     });
 
-    return this.getSettings(
-      organizationId,
-      staffUserId,
-      userRole,
-      userOrganizationId,
-      userId,
-    );
+    return this.getSettings(organizationId, userRole, userOrganizationId);
   }
 
   async getReport(
@@ -287,6 +305,10 @@ export class PayrollService {
     }
     if (to < from) {
       throw new BadRequestException('Дата «по» должна быть не раньше «с»');
+    }
+
+    if (staffUserId) {
+      await this.assertStaffInOrganization(organizationId, staffUserId);
     }
 
     const where: Prisma.StaffPayrollAccrualWhereInput = {
@@ -425,20 +447,20 @@ export class PayrollService {
   }
 
   async loadSettingsSnapshot(
-    staffUserId: string,
+    organizationId: string,
     tx?: Tx,
   ): Promise<PayrollSettingsSnapshot | null> {
     const db = tx ?? this.prisma;
-    const settings = await db.staffPayrollSettings.findUnique({
-      where: { staffUserId },
+    const settings = await db.organizationPayrollSettings.findUnique({
+      where: { organizationId },
     });
     if (!settings) {
       return null;
     }
 
     const [categoryRates, serviceRates] = await Promise.all([
-      db.staffPayrollCategoryRate.findMany({ where: { staffUserId } }),
-      db.staffPayrollServiceRate.findMany({ where: { staffUserId } }),
+      db.organizationPayrollCategoryRate.findMany({ where: { organizationId } }),
+      db.organizationPayrollServiceRate.findMany({ where: { organizationId } }),
     ]);
 
     return {
@@ -451,7 +473,7 @@ export class PayrollService {
   }
 
   async accrueForCompletedVisit(input: AccruePayrollVisitInput, tx: Tx): Promise<void> {
-    const settings = await this.loadSettingsSnapshot(input.staffUserId, tx);
+    const settings = await this.loadSettingsSnapshot(input.organizationId, tx);
     if (!settings) {
       return;
     }
@@ -521,20 +543,9 @@ export class PayrollService {
   private async assertStaffInOrganization(organizationId: string, staffUserId: string) {
     const user = await this.prisma.user.findFirst({
       where: { id: staffUserId, organizationId },
-      include: { staffProfile: true },
     });
     if (!user) {
       throw new NotFoundException('Сотрудник не найден в организации');
-    }
-    const payrollRoles: UserRole[] = [
-      UserRole.MASTER,
-      UserRole.ADMIN,
-      UserRole.MANAGER,
-    ];
-    if (!payrollRoles.includes(user.role) && user.role !== UserRole.OWNER) {
-      throw new BadRequestException(
-        'Настройки зарплаты доступны для мастеров и сотрудников филиала',
-      );
     }
   }
 
@@ -553,25 +564,14 @@ export class PayrollService {
 
   private async validateServiceRates(
     organizationId: string,
-    staffUserId: string,
     rates: { serviceId: string; percent: number }[],
   ) {
     const ids = [...new Set(rates.map((r) => r.serviceId))];
-    const services = await this.prisma.service.findMany({
+    const count = await this.prisma.service.count({
       where: { organizationId, id: { in: ids } },
-      select: { id: true },
     });
-    if (services.length !== ids.length) {
+    if (count !== ids.length) {
       throw new BadRequestException('Одна или несколько услуг не принадлежат организации');
-    }
-
-    const staffServiceCount = await this.prisma.staffService.count({
-      where: { staffUserId, serviceId: { in: ids } },
-    });
-    if (staffServiceCount !== ids.length) {
-      throw new BadRequestException(
-        'Процент по услуге можно задать только для услуг, которые оказывает сотрудник',
-      );
     }
   }
 }

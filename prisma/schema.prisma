@@ -322,9 +322,9 @@ model Organization {
   bonusHistory          BonusHistoryEntry[]
   landingPromotions     LandingPromotion[]
   targetPromos          TargetPromo[]
-  staffPayrollSettings  StaffPayrollSettings[]
-  staffPayrollCategoryRates StaffPayrollCategoryRate[]
-  staffPayrollServiceRates  StaffPayrollServiceRate[]
+  payrollSettings       OrganizationPayrollSettings?
+  payrollCategoryRates  OrganizationPayrollCategoryRate[]
+  payrollServiceRates   OrganizationPayrollServiceRate[]
   staffPayrollAccruals  StaffPayrollAccrual[]
   landingMasters        LandingMaster[]
   landingServiceCards   LandingServiceCard[]
@@ -526,9 +526,6 @@ model User {
   devTicketsCompleted   DevTicket[]            @relation("DevTicketCompletedBy")
   waitlistEntries       WaitlistEntry[]
   appointmentHistoryActions AppointmentHistoryEntry[] @relation("AppointmentHistoryActor")
-  payrollSettings           StaffPayrollSettings[]
-  payrollCategoryRates      StaffPayrollCategoryRate[]
-  payrollServiceRates       StaffPayrollServiceRate[]
   payrollAccruals           StaffPayrollAccrual[]
 
   @@index([organizationId])
@@ -596,10 +593,9 @@ model StaffProfile {
   @@map("staff_profiles")
 }
 
-/// Настройки комиссии сотрудника на уровне организации (только OWNER).
-model StaffPayrollSettings {
-  staffUserId    String               @id
-  organizationId String
+/// Глобальные настройки комиссии организации (единые для всех мастеров).
+model OrganizationPayrollSettings {
+  organizationId String               @id
   rateMode       StaffPayrollRateMode @default(UNIFIED)
   baseMode       StaffPayrollBaseMode @default(WITHOUT_DISCOUNTS)
   /// 0–100, для режима UNIFIED.
@@ -608,42 +604,36 @@ model StaffPayrollSettings {
   updatedAt      DateTime             @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  staff        User         @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
 
-  @@index([organizationId])
-  @@map("staff_payroll_settings")
+  @@map("organization_payroll_settings")
 }
 
-model StaffPayrollCategoryRate {
+model OrganizationPayrollCategoryRate {
   id             String @id
   organizationId String
-  staffUserId    String
   categoryId     String
   percent        Int
 
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  staff        User            @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
   category     ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
-  @@unique([staffUserId, categoryId])
-  @@index([organizationId, staffUserId])
-  @@map("staff_payroll_category_rates")
+  @@unique([organizationId, categoryId])
+  @@index([organizationId])
+  @@map("organization_payroll_category_rates")
 }
 
-model StaffPayrollServiceRate {
+model OrganizationPayrollServiceRate {
   id             String @id
   organizationId String
-  staffUserId    String
   serviceId      String
   percent        Int
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  staff        User         @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
   service      Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
-  @@unique([staffUserId, serviceId])
-  @@index([organizationId, staffUserId])
-  @@map("staff_payroll_service_rates")
+  @@unique([organizationId, serviceId])
+  @@index([organizationId])
+  @@map("organization_payroll_service_rates")
 }
 
 /// Начисление комиссии при переводе записи в DONE (неизменяемый снимок).
@@ -819,7 +809,7 @@ model ServiceCategory {
   subcategories            ServiceSubcategory[]
   studioDisabledCategories      StudioDisabledCategory[]
   nextbotAutoMessageTemplates   NextbotAutoMessageTemplate[]
-  payrollCategoryRates          StaffPayrollCategoryRate[]
+  payrollCategoryRates          OrganizationPayrollCategoryRate[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -993,7 +983,7 @@ model Service {
   landingServiceCards      LandingServiceCard[]
   studioDisabledServices   StudioDisabledService[]
   waitlistEntries          WaitlistEntry[]
-  payrollServiceRates      StaffPayrollServiceRate[]
+  payrollServiceRates      OrganizationPayrollServiceRate[]
   payrollAccruals          StaffPayrollAccrual[]
 
   @@index([organizationId])

@@ -1,85 +1,76 @@
-# Зарплата / комиссия мастеров (Lovable)
+# Зарплата / комиссия (Lovable)
+
+## Модель
+
+- **Ставки % — одни на всю организацию** (не у каждого мастера свои).
+- **Начисления** при `DONE` — по общим правилам; в отчёте — **по каждому мастеру** отдельно.
+- **Карточка мастера** — зарплата этого мастера + те же глобальные ставки (просмотр).
 
 ## Доступ
 
 | Действие | OWNER | DEVELOPER | MASTER |
 |----------|-------|-----------|--------|
-| Просмотр настроек % | любой сотрудник | любой сотрудник / любая org | **только свои** |
-| Сохранение настроек % | да | да | нет |
-| Отчёт за период | вся организация | вся организация | **только свои** начисления |
+| Просмотр глобальных настроек | да | да | да (read-only) |
+| Сохранение настроек | да | да | нет |
+| Отчёт по всей сети | да | да | нет |
+| Своя зарплата / карточка мастера | да | да | только себя |
 
-Настройки на уровне **организации** (одна схема на мастера во всех филиалах сети).
+## API
 
-DEVELOPER не ограничен `organizationId` из JWT — в URL указывается нужная организация.
+### Глобальные настройки (раздел настроек организации)
 
-## Настройки сотрудника
-
-**GET** `/organizations/:organizationId/staff/:staffUserId/payroll-settings`
-
-**PUT** `/organizations/:organizationId/staff/:staffUserId/payroll-settings`
+**GET** `/organizations/:organizationId/payroll-settings`  
+**PUT** `/organizations/:organizationId/payroll-settings`
 
 ```json
 {
   "rateMode": "UNIFIED",
   "baseMode": "WITHOUT_DISCOUNTS",
   "unifiedPercent": 40,
-  "categoryRates": [
-    { "categoryId": "sca_xxx", "percent": 35 }
-  ],
-  "serviceRates": [
-    { "serviceId": "srv_xxx", "percent": 50 }
-  ]
+  "categoryRates": [{ "categoryId": "sca_xxx", "percent": 35 }],
+  "serviceRates": [{ "serviceId": "srv_xxx", "percent": 50 }]
 }
 ```
 
-### rateMode
-
-| Значение | UI |
-|----------|-----|
-| `UNIFIED` | Единый % на все услуги (`unifiedPercent` обязателен) |
-| `BY_CATEGORY` | Таблица: категория → % |
-| `BY_SERVICE` | Таблица: услуга (только из `StaffService` мастера) → % |
-
-### baseMode
-
-| Значение | Смысл |
+| rateMode | Смысл |
 |----------|--------|
-| `WITHOUT_DISCOUNTS` | % от прайса на записи (до скидок/акций на чеке) |
-| `WITH_DISCOUNTS` | % от суммы после скидок (пропорционально по строкам) |
+| `UNIFIED` | Один % на все услуги (`unifiedPercent`) |
+| `BY_CATEGORY` | % по категориям каталога |
+| `BY_SERVICE` | % по услугам каталога организации |
 
-Переключатель в UI: **«Расчёт с учётом скидок/акций»** / **«Без учёта»**.
+| baseMode | Смысл |
+|----------|--------|
+| `WITHOUT_DISCOUNTS` | % от прайса на записи |
+| `WITH_DISCOUNTS` | % от суммы после скидок на чеке |
 
-## Отчёт
+### Отчёт
 
-**GET** `/organizations/:organizationId/payroll-report?from=2026-05-01&to=2026-05-31`
+**GET** `/organizations/:organizationId/payroll-report?from=&to=&staffUserId=&studioId=`
 
-Query:
+### Карточка мастера
 
-- `from`, `to` — ISO дата/время (обязательно)
-- `staffUserId` — опционально
-- `studioId` — опционально
+**GET** `/organizations/:organizationId/staff/:staffUserId/payroll?from=&to=`
 
-Ответ: `totalCommission`, `viewScope` (`organization` | `self`), `staffUserId` (для мастера — его id), `staff[]` с `items[]`, плоский `items[]`.
+Ответ:
 
-**Мастер:** тот же endpoint; `staffUserId` в query игнорируется / должен совпадать с текущим пользователем. Удобно вызывать без `staffUserId` — вернутся только его строки.
+```json
+{
+  "staffUserId": "usr_xxx",
+  "organizationPayroll": { "configured": true, "settings": { ... }, "categoryRates": [], "serviceRates": [] },
+  "report": { "totalCommission": 12000, "items": [ ... ] }
+}
+```
 
-Поля строки: `staffName`, `appointmentStartAt`, `studioName`, `clientName`, `serviceName`, `grossLineAmount`, `baseAmount`, `percent`, `commissionAmount`, `baseModeLabel`, `lineTypeLabel`.
+MASTER: только `staffUserId ===` свой `userId`.
 
-## Когда начисляется
+## Начисление
 
-Автоматически при **завершении визита** (`POST /appointments/:id/done`). Повторно не начисляется. Если настроек нет — строк не создаётся.
-
-## UI
-
-1. **Карточка сотрудника** (OWNER / DEVELOPER) → вкладка «Зарплата»: режим %, переключатель базы, таблицы ставок, «Сохранить».
-2. **Раздел «Зарплата»** (OWNER / DEVELOPER): период, фильтр сотрудник/филиал, таблица + итого.
-3. **Кабинет мастера** → «Моя зарплата»: `GET payroll-report` без фильтра по staff; опционально `GET .../staff/{myUserId}/payroll-settings` (только просмотр своих %).
+При `POST /appointments/:id/done` — автоматически, если есть `payroll-settings` у организации.
 
 ## Промпт
 
 ```
-Страница «Зарплата» для OWNER и DEVELOPER: настройки (GET/PUT payroll-settings) и отчёт (GET payroll-report).
-Для MASTER: экран «Моя зарплата» — только GET payroll-report (свои начисления) и GET payroll-settings для своего userId (read-only).
-Режимы: единый %, по категориям, по услугам. Переключатель baseMode WITH_DISCOUNTS / WITHOUT_DISCOUNTS.
-Отчёт: период, фильтры, таблица визитов с baseAmount, percent, commissionAmount, итого totalCommission.
+Настройки зарплаты — один экран в настройках организации: GET/PUT /organizations/{orgId}/payroll-settings.
+В карточке мастера вкладка «Зарплата»: GET /organizations/{orgId}/staff/{staffUserId}/payroll?from=&to=.
+Отчёт OWNER: GET /organizations/{orgId}/payroll-report.
 ```
