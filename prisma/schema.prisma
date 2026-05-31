@@ -32,6 +32,24 @@ enum AppointmentStatus {
   AWAITING_PREPAYMENT
 }
 
+/// Событие в истории записи (модалка «История» в CRM).
+enum AppointmentHistoryAction {
+  CREATED
+  UPDATED
+  STATUS_CHANGED
+  RESCHEDULED
+  PREPAYMENT_CHANGED
+  COMMENT_CHANGED
+  CLIENT_ARRIVED
+  VISIT_COMPLETED
+  NO_SHOW
+  LATE_PENALTY
+  CANCELLED
+  UPSELL_ADDED
+  UPSELL_UPDATED
+  UPSELL_REMOVED
+}
+
 /// Лист ожидания: желаемое время занято — заявка не в журнале записей, пока не освободится слот или не отменят.
 enum WaitlistEntryStatus {
   PENDING
@@ -483,6 +501,7 @@ model User {
   devTicketMessages     DevTicketMessage[]
   devTicketsCompleted   DevTicket[]            @relation("DevTicketCompletedBy")
   waitlistEntries       WaitlistEntry[]
+  appointmentHistoryActions AppointmentHistoryEntry[] @relation("AppointmentHistoryActor")
 
   @@index([organizationId])
   @@index([studioId])
@@ -1111,12 +1130,32 @@ model Appointment {
   fulfilledWaitlistEntry WaitlistEntry?
   nextbotAutoMessageLogs NextbotAutoMessageLog[]
   feedback               AppointmentFeedback?
+  historyEntries         AppointmentHistoryEntry[]
 
   @@index([studioId, staffUserId, startAt])
   @@index([studioId, startAt])
   @@index([clientId])
   @@index([createdByUserId])
   @@map("appointments")
+}
+
+model AppointmentHistoryEntry {
+  id            String                   @id
+  appointmentId String?
+  studioId      String
+  action        AppointmentHistoryAction
+  summary       String
+  payload       Json?
+  actorUserId   String?
+  actorLabel    String?
+  createdAt     DateTime                 @default(now())
+
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  actor       User?        @relation("AppointmentHistoryActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([appointmentId, createdAt])
+  @@index([studioId, createdAt])
+  @@map("appointment_history_entries")
 }
 
 /// Основные услуги в рамках одной записи (мультисервисная запись, не допродажи).

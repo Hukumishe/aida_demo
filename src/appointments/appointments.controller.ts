@@ -192,6 +192,24 @@ export class AppointmentsController {
     );
   }
 
+  @Get('appointments/:id/history')
+  @ApiOperation({ summary: 'История действий по записи (модалка «История»)' })
+  @ApiResponse({ status: 200, description: 'Хронология событий' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Appointment not found' })
+  async getAppointmentHistory(
+    @Param('id') id: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.appointmentsService.getAppointmentHistory(
+      id,
+      user?.role,
+      user?.studioId,
+      user?.userId,
+      user?.organizationId,
+    );
+  }
+
   @Patch('appointments/:id')
   @ApiOperation({ summary: 'Update appointment' })
   @ApiResponse({ status: 200, description: 'Appointment updated' })

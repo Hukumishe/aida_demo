@@ -27,6 +27,7 @@ import {
 } from '../common/iana-wall-time';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
+  AppointmentHistoryAction,
   AppointmentStatus,
   ClientLevel,
   WaitlistEntrySource,
@@ -56,6 +57,8 @@ import {
   maskAppointmentsClientForRole,
   maskClientPhoneForRole,
 } from '../common/client-phone-privacy.util';
+import { AppointmentHistoryService } from './appointment-history.service';
+import { formatDateTime, formatMoneyTenge } from './appointment-history.util';
 
 @Injectable()
 export class AppointmentsService {
@@ -65,7 +68,24 @@ export class AppointmentsService {
     private notificationsService: NotificationsService,
     private autoMessages: NextbotAutoMessageOrchestratorService,
     private busySlotsService: BusySlotsService,
+    private appointmentHistory: AppointmentHistoryService,
   ) {}
+
+  async getAppointmentHistory(
+    appointmentId: string,
+    userRole?: string,
+    userStudioId?: string,
+    userStaffId?: string,
+    userOrganizationId?: string,
+  ) {
+    return this.appointmentHistory.listForAppointment(
+      appointmentId,
+      userRole,
+      userStudioId,
+      userStaffId,
+      userOrganizationId,
+    );
+  }
 
   private scheduleAutoMessages(appointmentId: string, visitDoneAt?: Date): void {
     void this.autoMessages.syncAppointment(appointmentId, visitDoneAt).catch((err) => {
@@ -532,6 +552,7 @@ export class AppointmentsService {
         const status = appt.status as AppointmentStatus;
         await this.autoMessages.handleAppointmentStatusChanged(id, null, status);
         this.scheduleAutoMessages(id);
+        await this.appointmentHistory.recordCreated(appt, actingUserId);
       }
       return result;
     });
@@ -937,11 +958,23 @@ export class AppointmentsService {
           id,
           updated.status === AppointmentStatus.DONE ? new Date() : undefined,
         );
+        await this.appointmentHistory.recordFromUpdate(
+          appointment,
+          updated,
+          updateAppointmentDto,
+          userStaffId,
+          previousStatus,
+        );
         return maskAppointmentClientForRole(updated, userRole);
       });
   }
 
-  async markNoShow(id: string, userRole?: string, userStudioId?: string, userStaffId?: string) {
+  async markNoShow(
+    id: string,
+    userRole?: string,
+    userStudioId?: string,
+    userStaffId?: string,
+  ) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
       include: {
@@ -1016,6 +1049,24 @@ export class AppointmentsService {
         }
       }
 
+      await this.appointmentHistory.record(
+        {
+          appointmentId: id,
+          studioId: appointment.studioId,
+          action: AppointmentHistoryAction.NO_SHOW,
+          summary: isLateCancellation
+            ? 'Клиент не пришёл; предоплата учтена в доход'
+            : 'Клиент не пришёл; запись удалена',
+          payload: {
+            appointmentId: id,
+            lateCancellation: isLateCancellation,
+            startAt: appointment.startAt.toISOString(),
+          },
+          actorUserId: userStaffId,
+          tx,
+        },
+      );
+
       // Delete the appointment
       await tx.appointment.delete({
         where: { id },
@@ -1050,7 +1101,12 @@ export class AppointmentsService {
    * Available only 15+ minutes after start if "Пришёл" was not pressed.
    * If "Не пришёл" is pressed later, prepayment is not added again.
    */
-  async markLate(id: string, userRole?: string, userStudioId?: string, userStaffId?: string) {
+  async markLate(
+    id: string,
+    userRole?: string,
+    userStudioId?: string,
+    userStaffId?: string,
+  ) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
       include: { service: true, serviceItems: true, client: true, staff: { include: { staffProfile: true } } },
@@ -1114,6 +1170,16 @@ export class AppointmentsService {
         where: { id },
         data: { forfeitedPrepaymentAmount: amount },
       });
+
+      await this.appointmentHistory.record({
+        appointmentId: id,
+        studioId: appointment.studioId,
+        action: AppointmentHistoryAction.LATE_PENALTY,
+        summary: `Опоздание: предоплата ${formatMoneyTenge(amount)} учтена в доход`,
+        payload: { appointmentId: id, amount },
+        actorUserId: userStaffId,
+        tx,
+      });
     });
 
     return {
@@ -1175,6 +1241,15 @@ export class AppointmentsService {
           },
         },
       },
+    });
+
+    await this.appointmentHistory.record({
+      appointmentId: id,
+      studioId: appointment.studioId,
+      action: AppointmentHistoryAction.CLIENT_ARRIVED,
+      summary: `Клиент пришёл (${formatDateTime(appointment.arrivedAt ?? new Date())})`,
+      payload: { appointmentId: id },
+      actorUserId: userId,
     });
 
     return maskAppointmentClientForRole(appointment, userRole);
@@ -1647,6 +1722,20 @@ export class AppointmentsService {
           },
         },
       });
+    });
+
+    await this.appointmentHistory.record({
+      appointmentId: id,
+      studioId: existingAppointment.studioId,
+      action: AppointmentHistoryAction.VISIT_COMPLETED,
+      summary: `Визит завершён; оплачено ${formatMoneyTenge(totalMoneyPaid)}`,
+      payload: {
+        appointmentId: id,
+        totalMoneyPaid,
+        bonusesUsed,
+        paymentMethod: dto?.paymentMethod ?? null,
+      },
+      actorUserId: userId,
     });
 
     this.scheduleAutoMessages(id, new Date());

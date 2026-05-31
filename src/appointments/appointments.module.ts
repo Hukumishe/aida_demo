@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
+import { AppointmentHistoryService } from './appointment-history.service';
 import { AppointmentsController } from './appointments.controller';
 import { UpsellsService } from './upsells.service';
 import { UpsellsController } from './upsells.controller';
@@ -17,8 +18,13 @@ import { BusySlotsModule } from '../busy-slots/busy-slots.module';
     BusySlotsModule,
   ],
   controllers: [AppointmentsController, UpsellsController],
-  providers: [AppointmentsService, UpsellsService, AppointmentsHoldScheduler],
-  exports: [AppointmentsService],
+  providers: [
+    AppointmentsService,
+    AppointmentHistoryService,
+    UpsellsService,
+    AppointmentsHoldScheduler,
+  ],
+  exports: [AppointmentsService, AppointmentHistoryService],
 })
 export class AppointmentsModule {}
 

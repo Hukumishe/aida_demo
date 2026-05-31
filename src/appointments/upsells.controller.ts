@@ -45,6 +45,7 @@ export class UpsellsController {
       createUpsellDto,
       user?.role,
       user?.studioId,
+      user?.userId,
     );
   }
 
@@ -79,6 +80,7 @@ export class UpsellsController {
       updateUpsellDto,
       user?.role,
       user?.studioId,
+      user?.userId,
     );
   }
 
@@ -91,7 +93,7 @@ export class UpsellsController {
     @Param('id') id: string,
     @CurrentUser() user?: any,
   ) {
-    return this.upsellsService.remove(id, user?.role, user?.studioId);
+    return this.upsellsService.remove(id, user?.role, user?.studioId, user?.userId);
   }
 }
 
