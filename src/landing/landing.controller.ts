@@ -188,6 +188,17 @@ export class LandingController {
   }
 
   @Public()
+  @Get('landing/organizations/:organizationId/studios')
+  @ApiOperation({
+    summary: 'Филиалы сети для формы записи (публично)',
+    description:
+      'Список студий организации: id, name, address, timezone. organizationId — из env лендинга (VITE_ORGANIZATION_ID).',
+  })
+  getPublicStudios(@Param('organizationId') organizationId: string) {
+    return this.landingService.getPublicStudiosForOrganization(organizationId);
+  }
+
+  @Public()
   @Get('landing/studios/:studioId/availability')
   @ApiOperation({
     summary: 'Свободные слоты для формы записи (публично)',

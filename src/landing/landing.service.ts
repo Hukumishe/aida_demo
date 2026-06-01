@@ -711,6 +711,27 @@ export class LandingService {
     throw new BadRequestException('Could not generate unique promo code');
   }
 
+  /** Филиалы сети для выпадающего списка в форме записи на лендинге. */
+  async getPublicStudiosForOrganization(organizationId: string) {
+    const orgId = organizationId?.trim();
+    if (!orgId) {
+      throw new BadRequestException('organizationId is required');
+    }
+    const org = await this.prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { id: true },
+    });
+    if (!org) {
+      throw new NotFoundException('Organization not found');
+    }
+    const studios = await this.prisma.studio.findMany({
+      where: { organizationId: orgId },
+      select: { id: true, name: true, address: true, timezone: true },
+      orderBy: [{ name: 'asc' }, { createdAt: 'asc' }],
+    });
+    return { organizationId: orgId, studios };
+  }
+
   /** Публичные свободные слоты для формы записи на лендинге. */
   async getPublicAvailability(
     studioId: string,
