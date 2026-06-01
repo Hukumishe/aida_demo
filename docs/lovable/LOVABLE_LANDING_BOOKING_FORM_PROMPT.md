@@ -38,25 +38,51 @@
 | Данные | Метод |
 |--------|--------|
 | Мастера | `GET /studios/{studioId}/landing/masters` — только `isVisible === true`, сортировка `order`. **«Любой мастер»** = не передавать `staffUserId` в availability до выбора слота. |
-| Услуги | `GET /studios/{studioId}/landing/services` — value = `service.serviceId` (или `service.id` из вложенного `service`). |
-| Рефералка `?ref=` | `GET /studios/{studioId}/referral-links/resolve/{linkId}` — после выбора филиала; read-only «Источник», в submit `referralLinkId`. |
+| Услуги | `GET /studios/{studioId}/landing/services` — в select **value = `card.serviceId`** или **`card.service.id`**. **Не** использовать `card.id` (id карточки лендинга `lsc_…`). |
+| Рефералка `?ref=` | `GET /studios/{studioId}/referral-links/resolve/{linkId}` — **после** загрузки списка филиалов (любой `studioId` этой организации подойдёт); read-only «Источник», в submit `referralLinkId`. При смене филиала `referralLinkId` **не сбрасывать**. |
 | Промокод | `POST /landing/promotions/resolve-code` — `{ "code", "organizationId", "studioId" }` (актуальный выбранный филиал). |
 
 ### 5. Выбор даты и времени (ключевой UX)
 
 Когда выбраны **филиал + услуга** (и опционально мастер):
 
-1. Пользователь выбирает **дату** (date picker).
+1. Пользователь выбирает **дату** (date picker). **«Сегодня» и запрет прошлых дат** считать в **`timezone` выбранного филиала** (`studios[].timezone`), а не только в TZ браузера.
 2. Запрос слотов:  
-   **`GET /landing/studios/{studioId}/availability?date=YYYY-MM-DD&serviceId={serviceId}&staffUserId={optional}`**
-3. Ответ содержит **`freeSlots`**: массив `{ staffUserId, startAt, endAt, priority }` (ISO с timezone).
-4. UI времени:
-   - Если мастер **«Любой»** — показать слоты **всех мастеров** (группировка по времени или плоский список «14:00 — Имя мастера»).
-   - При выборе слота сохранить **`startAt`** (точное ISO из слота) и **`staffUserId`** (из слота — обязательно для submit).
-5. Пока слоты грузятся — skeleton; пустой массив — «На эту дату нет свободного времени, выберите другую дату».
-6. Таймзона: брать **`timezone`** выбранного филиала из списка студий (fallback `Asia/Almaty`). В API `startAt` с offset, напр. `2026-05-24T14:00:00+06:00`.
+   **`GET /landing/studios/{studioId}/availability?date=YYYY-MM-DD&serviceId={serviceId}&staffUserId={optional}`**  
+   (`staffUserId` — только если в select выбран конкретный мастер, не «Любой».)
+3. Ответ: **`freeSlots`**: `{ staffUserId, staffName?, startAt, endAt, priority }`.
 
-**Не давайте вручную вводить время текстом**, если есть свободные слоты — только выбор из списка.
+#### ⚠️ Время в `startAt`: UTC в API, локальное на экране
+
+Бэкенд отдаёт **`startAt` / `endAt` в UTC** (`toISOString()`, суффикс `Z`), например `2026-05-24T08:00:00.000Z` — это **14:00** в `Asia/Almaty`.
+
+| Действие | Правило |
+|----------|---------|
+| **Показ в UI** | Конвертировать в часы филиала через **`timezone`** из `GET .../organizations/.../studios`. **Не** парсить время regex `T(\d{2}):(\d{2})` из строки — получите UTC и ошибку на 5–6 часов. |
+| **Submit** | Передавать **`startAt` как в ответе слота** (ту же ISO-строку), без пересчёта «для красоты». |
+| Подпись мастера | При «Любой мастер» — **`staffName`** из слота или имя из справочника; ключ кнопки: **`staffUserId + startAt`**. |
+
+Пример форматирования для кнопки слота:
+
+```ts
+function formatSlotTime(startAtIso: string, studioTimezone: string): string {
+  return new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: studioTimezone || 'Asia/Almaty',
+  }).format(new Date(startAtIso));
+}
+// formatSlotTime('2026-05-24T08:00:00.000Z', 'Asia/Almaty') → "14:00"
+```
+
+4. UI времени:
+   - Если мастер **«Любой»** — сетка/список «14:00 — {staffName}».
+   - При выборе слота сохранить объект слота: **`startAt`** и **`staffUserId`** именно из этого элемента `freeSlots` (не из select «Мастер»).
+5. Пока слоты грузятся — skeleton; пустой массив — «На эту дату нет свободного времени»; **submit без слота разрешён** → `callback`.
+6. Если **`freeSlots.length > 0`** — выбор слота обязателен перед submit (иначе уйдёт `callback`, а не запись).
+
+**Не давайте вручную вводить время текстом**, пока на дату есть свободные слоты — только выбор из списка.
 
 ### 6. Отправка формы
 
@@ -72,7 +98,7 @@
   "phone": "+77001234567",
   "serviceId": "srv_xxx",
   "staffUserId": "usr_xxx",
-  "startAt": "2026-05-24T14:00:00+06:00",
+  "startAt": "2026-05-24T08:00:00.000Z",
   "comment": "Пожелания",
   "referralLinkId": "srl_xxx",
   "promoCode": "PROMO2026"
@@ -102,7 +128,7 @@
 - **Филиал** — обязателен (клиент выбрал в select или единственный подставлен автоматически).
 - **Имя** — не пустое.
 - **Телефон** — маска KZ (+7), минимум 10 цифр; перед submit нормализовать к `+7XXXXXXXXXX`.
-- Если пользователь выбрал дату и видит слоты — **нельзя отправить** без выбранного слота (иначе уйдёт в `callback`, а не запись).
+- Если на выбранную дату **`freeSlots.length > 0`** — **нельзя** отправить без выбранного слота. Если слотов **нет** — можно отправить заявку на перезвон (`callback`).
 - Кнопка «Отправить» disabled + loading при submit.
 - Ошибки 400/409 — toast с текстом `message` из ответа или дружелюбный fallback.
 
@@ -128,20 +154,23 @@
 ### 10. Открытие модалки
 
 - Кнопка «Записаться» на лендинге.
-- При заходе с **`?ref=`** — авто-открытие после resolve рефералки (как в `LOVABLE_LANDING_CALLBACK_MODAL_PROMPT.md`).
+- При заходе с **`?ref=`** — после **`GET .../organizations/.../studios`** вызвать resolve с любым `studioId` из ответа (или уже выбранным филиалом), затем авто-открыть модалку с бейджем «Источник: …» (см. `LOVABLE_LANDING_CALLBACK_MODAL_PROMPT.md`).
 
 ### 11. Не делать
 
+- **Не** вызывать **`GET /studios`** (CRM, нужен JWT) — только **`GET /landing/organizations/{organizationId}/studios`**.
 - Не хранить API-ключ Nextbot в браузере.
 - Не вызывать `POST /nextbot/.../appointments` с лендинга (это TENTATIVE для чат-бота, не для лендинга).
 - Не использовать `POST /clients` с CRM JWT с публичной страницы — всё через **`POST /landing/booking-request`**.
 - Не придумывать слоты — только из `freeSlots`.
+- Не показывать время слота regex по ISO-строке без `timeZone` филиала.
 
 ### 12. Технические заметки
 
 - Созданные с лендинга записи в CRM: **`createdSource: LANDING`**, статус **`BOOKED`** (не предоплата Nextbot).
-- Если клиент с таким телефоном уже есть — используется существующий профиль.
+- Если клиент с таким телефоном уже есть — используется существующий профиль (имя/Instagram из формы при повторном визите **не перезаписываются**, обновляются notes при `callback`).
 - Чёрный список — ошибка 400 с понятным текстом.
+- Гонка за слот: 400 «время недоступно» — предложить выбрать другой слот или отправить без `startAt`.
 
 ---
 
