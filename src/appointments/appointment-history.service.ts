@@ -10,6 +10,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { assertUserOrganizationMatchesStudio } from '../common/organization-scope';
+import { resolveHistoryActorUserId } from './appointment-author.util';
 import { APPOINTMENT_HISTORY_ACTION_LABELS } from './appointment-history.constants';
 import {
   formatCreatedSource,
@@ -50,7 +51,7 @@ export class AppointmentHistoryService {
         action: input.action,
         summary: input.summary,
         payload: input.payload ?? undefined,
-        actorUserId: input.actorUserId ?? null,
+        actorUserId: resolveHistoryActorUserId(input.actorUserId),
         actorLabel: input.actorLabel ?? null,
       },
     });
@@ -82,7 +83,7 @@ export class AppointmentHistoryService {
         createdSource: appointment.createdSource,
         prepaymentAmount: appointment.prepaymentAmount,
       },
-      actorUserId: actorUserId ?? appointment.createdByUserId,
+      actorUserId: resolveHistoryActorUserId(actorUserId, appointment.createdByUserId),
       actorLabel:
         actorLabel ??
         (appointment.createdSource !== AppointmentCreatedSource.CRM

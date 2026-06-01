@@ -38,6 +38,17 @@ export const appointmentCreatedByInclude = {
   },
 } as const;
 
+/** Для audit trail: `api-key` и прочие не-user id не пишем в FK `actorUserId`. */
+export function resolveHistoryActorUserId(
+  actorUserId?: string | null,
+  fallbackUserId?: string | null,
+): string | null {
+  if (!actorUserId || actorUserId === 'api-key') {
+    return fallbackUserId ?? null;
+  }
+  return actorUserId;
+}
+
 export function resolveAppointmentCreatedBy(
   actingUserId?: string,
   explicitSource?: AppointmentCreatedSource,
