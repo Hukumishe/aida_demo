@@ -199,6 +199,28 @@ export class LandingController {
   }
 
   @Public()
+  @Get('landing/studios/:studioId/bookable-services')
+  @ApiOperation({
+    summary: 'Услуги филиала для формы записи (публично)',
+    description:
+      'Каталог услуг CRM, доступных в филиале. Не путать с GET .../landing/services (карточки витрины).',
+  })
+  getPublicBookableServices(@Param('studioId') studioId: string) {
+    return this.landingService.getPublicBookableServices(studioId);
+  }
+
+  @Public()
+  @Get('landing/studios/:studioId/bookable-masters')
+  @ApiOperation({
+    summary: 'Мастера филиала для формы записи (публично)',
+    description:
+      'Активные MASTER/ADMIN в филиале. Если в админке настроена видимость лендинга — только отмеченные.',
+  })
+  getPublicBookableMasters(@Param('studioId') studioId: string) {
+    return this.landingService.getPublicBookableMasters(studioId);
+  }
+
+  @Public()
   @Get('landing/studios/:studioId/availability')
   @ApiOperation({
     summary: 'Свободные слоты для формы записи (публично)',

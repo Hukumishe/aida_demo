@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   AppointmentCreatedSource,
+  UserRole as PrismaUserRole,
   WaitlistEntrySource,
 } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
@@ -719,7 +720,7 @@ export class LandingService {
     }
     const org = await this.prisma.organization.findUnique({
       where: { id: orgId },
-      select: { id: true },
+      select: { id: true, name: true },
     });
     if (!org) {
       throw new NotFoundException('Organization not found');
@@ -729,7 +730,83 @@ export class LandingService {
       select: { id: true, name: true, address: true, timezone: true },
       orderBy: [{ name: 'asc' }, { createdAt: 'asc' }],
     });
-    return { organizationId: orgId, studios };
+    return { organizationId: orgId, organizationName: org.name, studios };
+  }
+
+  /**
+   * Услуги, доступные для записи в филиале (каталог CRM, не карточки лендинга).
+   */
+  async getPublicBookableServices(studioId: string) {
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const services = await this.servicesService.findAll(
+      UserRole.OWNER,
+      undefined,
+      organizationId,
+      undefined,
+      studioId,
+    );
+    return services.map((s) => ({
+      serviceId: s.id,
+      name: s.name,
+      defaultPrice: s.defaultPrice,
+      defaultDurationMin: s.defaultDurationMin,
+      categoryName: s.category?.name ?? null,
+    }));
+  }
+
+  /**
+   * Мастера для формы записи: активные MASTER/ADMIN в филиале (+ membership).
+   * Если в админке включена видимость на лендинге — только отмеченные; иначе все активные в филиале.
+   */
+  async getPublicBookableMasters(studioId: string) {
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { id: true },
+    });
+    if (!studio) {
+      throw new NotFoundException('Studio not found');
+    }
+
+    const configs = await this.prisma.landingMaster.findMany({
+      where: { organizationId },
+      orderBy: { order: 'asc' },
+    });
+    const configByStaffId = new Map(configs.map((c) => [c.staffUserId, c]));
+    const useLandingVisibility = configs.some((c) => c.isVisible);
+
+    const staff = await this.prisma.user.findMany({
+      where: {
+        organizationId,
+        isActive: true,
+        role: { in: [PrismaUserRole.MASTER, PrismaUserRole.ADMIN] },
+        OR: [
+          { studioId },
+          { studioMemberships: { some: { studioId } } },
+        ],
+      },
+      include: { staffProfile: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const items = staff
+      .map((u) => {
+        const cfg = configByStaffId.get(u.id);
+        const isVisible = useLandingVisibility ? (cfg?.isVisible ?? false) : true;
+        if (!isVisible) {
+          return null;
+        }
+        return {
+          staffUserId: u.id,
+          isVisible: true,
+          order: cfg?.order ?? 999,
+          staff: u,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
+
+    items.sort((a, b) => a.order - b.order || a.staffUserId.localeCompare(b.staffUserId));
+    return items;
   }
 
   /** Публичные свободные слоты для формы записи на лендинге. */

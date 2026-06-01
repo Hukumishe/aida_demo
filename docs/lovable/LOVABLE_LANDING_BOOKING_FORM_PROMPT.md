@@ -25,7 +25,8 @@
 При открытии модалки:
 
 1. **`GET /landing/organizations/{organizationId}/studios`**
-2. Ответ: `{ organizationId, studios: [{ id, name, address, timezone }] }`
+2. Ответ: `{ organizationId, organizationName, studios: [{ id, name, address, timezone }] }`  
+   **Проверка:** в шапке модалки (dev) можно показать `organizationName` — если видите чужое имя организации, в `.env` неверный `VITE_ORGANIZATION_ID`.
 3. Select **«Филиал»**:
    - label: `name` + при наличии `address` (например: `IT-PRO Consulting — Шымкент, ул. Дарвина 5`)
    - value: `id` (`studioId`)
@@ -37,8 +38,9 @@
 
 | Данные | Метод |
 |--------|--------|
-| Мастера | `GET /studios/{studioId}/landing/masters` — только `isVisible === true`, сортировка `order`. **«Любой мастер»** = не передавать `staffUserId` в availability до выбора слота. |
-| Услуги | `GET /studios/{studioId}/landing/services` — в select **value = `card.serviceId`** или **`card.service.id`**. **Не** использовать `card.id` (id карточки лендинга `lsc_…`). |
+| Мастера (форма записи) | **`GET /landing/studios/{studioId}/bookable-masters`** — мастера филиала для записи. Первый пункт UI: **«Любой мастер»**. **Не** использовать `GET /studios/.../landing/masters` в форме (там по умолчанию все скрыты, пока владелец не включил галочки в админке). |
+| Услуги (форма записи) | **`GET /landing/studios/{studioId}/bookable-services`** — каталог услуг CRM в филиале. В select **value = `serviceId`**, label = `name`. **Не** использовать `GET .../landing/services` в форме — это **карточки витрины** (2–3 штуки), не весь прайс. |
+| Карточки витрины | `GET /studios/{studioId}/landing/services` — только для блока «Услуги» на главной странице лендинга, **не** для модалки записи. |
 | Рефералка `?ref=` | `GET /studios/{studioId}/referral-links/resolve/{linkId}` — **после** загрузки списка филиалов (любой `studioId` этой организации подойдёт); read-only «Источник», в submit `referralLinkId`. При смене филиала `referralLinkId` **не сбрасывать**. |
 | Промокод | `POST /landing/promotions/resolve-code` — `{ "code", "organizationId", "studioId" }` (актуальный выбранный филиал). |
 
@@ -158,7 +160,8 @@ function formatSlotTime(startAtIso: string, studioTimezone: string): string {
 
 ### 11. Не делать
 
-- **Не** вызывать **`GET /studios`** (CRM, нужен JWT) — только **`GET /landing/organizations/{organizationId}/studios`**.
+- **Не** вызывать **`GET /studios`** (CRM, JWT; у **DEVELOPER** отдаёт **все** филиалы **всех** организаций — отсюда «IT-PRO», «TEST», «DEMO» в одном списке).
+- **Не** подставлять `organizationId` / `studioId` из JWT preview Lovable — только **`import.meta.env.VITE_ORGANIZATION_ID`** (и при необходимости дефолтный филиал из первого элемента ответа API).
 - Не хранить API-ключ Nextbot в браузере.
 - Не вызывать `POST /nextbot/.../appointments` с лендинга (это TENTATIVE для чат-бота, не для лендинга).
 - Не использовать `POST /clients` с CRM JWT с публичной страницы — всё через **`POST /landing/booking-request`**.
@@ -174,6 +177,17 @@ function formatSlotTime(startAtIso: string, studioTimezone: string): string {
 
 ---
 
+## Частые ошибки (симптомы на скриншотах)
+
+| Симптом | Причина | Исправление |
+|---------|---------|-------------|
+| В «Филиал» все салоны платформы | `GET /studios` с токеном DEVELOPER | `GET /landing/organizations/{VITE_ORGANIZATION_ID}/studios` **без** Bearer |
+| В «Услуга» 0–2 позиции или пусто | Взяли карточки витрины | `GET /landing/studios/{studioId}/bookable-services` |
+| В «Мастер» только «Любой мастер» | `landing/masters` + фильтр `isVisible` | `GET /landing/studios/{studioId}/bookable-masters` |
+| Другая сеть в филиалах | Неверный `VITE_ORGANIZATION_ID` | В CRM: **Настройки → id организации** салона «ТД Евразия» |
+
+---
+
 ## Краткая схема потока
 
 ```mermaid
@@ -185,7 +199,7 @@ sequenceDiagram
   U->>L: Открывает форму
   L->>API: GET landing/organizations/.../studios
   U->>L: Выбирает филиал
-  L->>API: GET landing/masters, services
+  L->>API: GET bookable-masters, bookable-services
   U->>L: Услуга + дата (+ мастер)
   L->>API: GET landing/.../availability
   API-->>L: freeSlots
