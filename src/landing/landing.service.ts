@@ -1,5 +1,20 @@
-import { Injectable, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
+import {
+  AppointmentCreatedSource,
+  WaitlistEntrySource,
+} from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { AppointmentsService } from '../appointments/appointments.service';
+import { AvailabilityService } from '../availability/availability.service';
+import { ClientsService } from '../clients/clients.service';
+import { LandingBookingRequestDto } from './dto/landing-booking-request.dto';
+import { UserRole } from '../common/decorators/roles.decorator';
 import { CreateLandingPromotionDto } from './dto/create-promotion.dto';
 import { UpdateLandingPromotionDto } from './dto/update-promotion.dto';
 import { UpdateLandingMastersDto } from './dto/update-masters.dto';
@@ -20,11 +35,28 @@ import {
 import { isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { ServicesService } from '../services/services.service';
 
+function normalizeLandingPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('8')) {
+    return `+7${digits.slice(1)}`;
+  }
+  if (digits.length === 11 && digits.startsWith('7')) {
+    return `+${digits}`;
+  }
+  if (digits.length === 10) {
+    return `+7${digits}`;
+  }
+  return raw.trim();
+}
+
 @Injectable()
 export class LandingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly servicesService: ServicesService,
+    private readonly appointmentsService: AppointmentsService,
+    private readonly availabilityService: AvailabilityService,
+    private readonly clientsService: ClientsService,
   ) {}
 
   /**
@@ -677,6 +709,164 @@ export class LandingService {
     }
 
     throw new BadRequestException('Could not generate unique promo code');
+  }
+
+  /** Публичные свободные слоты для формы записи на лендинге. */
+  async getPublicAvailability(
+    studioId: string,
+    date: string,
+    serviceId: string,
+    staffUserId?: string,
+  ) {
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { id: true, timezone: true },
+    });
+    if (!studio) {
+      throw new NotFoundException('Studio not found');
+    }
+    if (!serviceId?.trim()) {
+      throw new BadRequestException('serviceId is required');
+    }
+    return this.availabilityService.computeNextbotFreeSlots(studioId, date, {
+      staffUserId: staffUserId?.trim() || undefined,
+      serviceIds: [serviceId.trim()],
+    });
+  }
+
+  /**
+   * Публичная отправка формы «Запись в удобное время».
+   * Полная запись: startAt + serviceId + staffUserId (staff из выбранного слота).
+   * Иначе — заявка на обратный звонок (обновление notes у клиента).
+   */
+  async submitBookingRequest(dto: LandingBookingRequestDto) {
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: dto.studioId },
+      include: { organization: true },
+    });
+    if (!studio) {
+      throw new NotFoundException('Studio not found');
+    }
+
+    const phone = normalizeLandingPhone(dto.phone);
+    const organizationId = studio.organizationId;
+
+    let client = await this.prisma.client.findUnique({
+      where: {
+        organizationId_phone: { organizationId, phone },
+      },
+    });
+
+    if (client?.isBlacklisted) {
+      throw new BadRequestException('Запись недоступна для этого номера телефона');
+    }
+
+    if (!client) {
+      client = await this.clientsService.create(
+        {
+          firstName: dto.firstName.trim(),
+          lastName: dto.lastName?.trim() || undefined,
+          patronymic: dto.patronymic?.trim() || undefined,
+          instagram: dto.instagram?.trim() || undefined,
+          phone,
+          referralLinkId: dto.referralLinkId?.trim() || undefined,
+        },
+        UserRole.SERVICE,
+        undefined,
+        organizationId,
+      );
+    }
+
+    const wantsBooking =
+      !!dto.startAt?.trim() && !!dto.serviceId?.trim() && !!dto.staffUserId?.trim();
+
+    if (wantsBooking) {
+      const createDto = {
+        staffUserId: dto.staffUserId!.trim(),
+        clientId: client.id,
+        serviceIds: [dto.serviceId!.trim()],
+        startAt: dto.startAt!.trim(),
+        comment: dto.comment?.trim() || undefined,
+        preferWaitlist: true,
+        waitlistSource: WaitlistEntrySource.LANDING,
+        createdSource: AppointmentCreatedSource.LANDING,
+        promoCode: dto.promoCode?.trim() || undefined,
+      };
+
+      try {
+        const created = await this.appointmentsService.create(
+          dto.studioId,
+          createDto,
+          UserRole.SERVICE,
+          dto.studioId,
+          organizationId,
+          'api-key',
+        );
+
+        if (created && typeof created === 'object' && 'outcome' in created) {
+          const wrapped = created as {
+            outcome: 'booked' | 'waitlist';
+            appointment?: { id: string; status: string; startAt: string };
+            waitlistEntry?: { id: string };
+          };
+          if (wrapped.outcome === 'waitlist') {
+            return {
+              outcome: 'waitlist' as const,
+              message:
+                'Выбранное время занято. Мы добавили вас в лист ожидания и свяжемся, когда появится окно.',
+              waitlistEntryId: wrapped.waitlistEntry?.id,
+              clientId: client.id,
+            };
+          }
+          return {
+            outcome: 'booked' as const,
+            message: 'Запись создана. Мы свяжемся с вами для подтверждения.',
+            appointmentId: wrapped.appointment?.id,
+            clientId: client.id,
+          };
+        }
+
+        const appt = created as { id: string };
+        return {
+          outcome: 'booked' as const,
+          message: 'Запись создана. Мы свяжемся с вами для подтверждения.',
+          appointmentId: appt.id,
+          clientId: client.id,
+        };
+      } catch (e) {
+        if (e instanceof ConflictException) {
+          throw new BadRequestException(
+            'Выбранное время недоступно. Выберите другое время или оставьте заявку без точного слота.',
+          );
+        }
+        throw e;
+      }
+    }
+
+    const noteBlock = [
+      '[Заявка с лендинга — перезвоним]',
+      dto.serviceId ? `Услуга (id): ${dto.serviceId}` : 'Услуга: не выбрана',
+      dto.startAt
+        ? `Желаемое время: ${dto.startAt}`
+        : 'Желаемое время: не указано',
+      dto.comment?.trim() ? `Комментарий: ${dto.comment.trim()}` : 'Комментарий: —',
+      dto.promoCode?.trim() ? `Промокод: ${dto.promoCode.trim()}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const mergedNotes = [client.notes?.trim(), noteBlock].filter(Boolean).join('\n\n');
+
+    await this.prisma.client.update({
+      where: { id: client.id },
+      data: { notes: mergedNotes },
+    });
+
+    return {
+      outcome: 'callback' as const,
+      message: 'Заявка принята. Мы перезвоним и подберём удобное время.',
+      clientId: client.id,
+    };
   }
 }
 

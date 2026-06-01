@@ -4,10 +4,16 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LandingController } from './landing.controller';
 import { LandingService } from './landing.service';
 import { ServicesModule } from '../services/services.module';
+import { AppointmentsModule } from '../appointments/appointments.module';
+import { AvailabilityModule } from '../availability/availability.module';
+import { ClientsModule } from '../clients/clients.module';
 
 @Module({
   imports: [
     ServicesModule,
+    AppointmentsModule,
+    AvailabilityModule,
+    ClientsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({

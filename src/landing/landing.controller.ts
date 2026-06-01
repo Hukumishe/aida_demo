@@ -34,6 +34,7 @@ import { CreateLandingServiceCardDto } from './dto/create-service-card.dto';
 import { UpdateLandingServiceCardDto } from './dto/update-service-card.dto';
 import { ReorderLandingServiceCardsDto } from './dto/reorder-service-cards.dto';
 import { ResolvePromotionCodeDto } from './dto/resolve-promotion-code.dto';
+import { LandingBookingRequestDto } from './dto/landing-booking-request.dto';
 
 @ApiTags('landing')
 @Controller()
@@ -184,6 +185,41 @@ export class LandingController {
       organizationIdQuery,
     );
     return this.landingService.deletePromotionForOrganization(organizationId, id);
+  }
+
+  @Public()
+  @Get('landing/studios/:studioId/availability')
+  @ApiOperation({
+    summary: 'Свободные слоты для формы записи (публично)',
+    description: 'date=YYYY-MM-DD, serviceId обязателен; staffUserId опционален (фильтр мастера).',
+  })
+  @ApiQuery({ name: 'date', required: true })
+  @ApiQuery({ name: 'serviceId', required: true })
+  @ApiQuery({ name: 'staffUserId', required: false })
+  getPublicAvailability(
+    @Param('studioId') studioId: string,
+    @Query('date') date: string,
+    @Query('serviceId') serviceId: string,
+    @Query('staffUserId') staffUserId?: string,
+  ) {
+    return this.landingService.getPublicAvailability(
+      studioId,
+      date,
+      serviceId,
+      staffUserId,
+    );
+  }
+
+  @Public()
+  @Post('landing/booking-request')
+  @ApiOperation({
+    summary: 'Отправка формы «Запись в удобное время» (публично)',
+    description:
+      'Полная запись при startAt+serviceId+staffUserId; иначе заявка на перезвон (notes).',
+  })
+  @ApiResponse({ status: 201 })
+  submitBookingRequest(@Body() dto: LandingBookingRequestDto) {
+    return this.landingService.submitBookingRequest(dto);
   }
 
   // --- Masters ---
