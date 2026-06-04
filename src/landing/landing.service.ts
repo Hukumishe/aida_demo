@@ -758,8 +758,9 @@ export class LandingService {
   }
 
   /**
-   * Мастера для формы записи: активные MASTER/ADMIN в филиале (+ membership).
-   * Если в админке включена видимость на лендинге — только отмеченные; иначе все активные в филиале.
+   * Мастера для формы записи: все активные MASTER/ADMIN в филиале (+ membership).
+   * Настройки «Показывать на сайте» (landing/masters) на этот список не влияют — только витрина.
+   * Опционально serviceIds — только те, кто оказывает все выбранные услуги (staff_services).
    */
   async getPublicBookableMasters(studioId: string, serviceIds?: string[]) {
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
@@ -787,8 +788,7 @@ export class LandingService {
       where: { organizationId },
       orderBy: { order: 'asc' },
     });
-    const configByStaffId = new Map(configs.map((c) => [c.staffUserId, c]));
-    const useLandingVisibility = configs.some((c) => c.isVisible);
+    const orderByStaffId = new Map(configs.map((c) => [c.staffUserId, c.order]));
 
     const staff = await this.prisma.user.findMany({
       where: {
@@ -805,23 +805,12 @@ export class LandingService {
     });
 
     const items = staff
-      .map((u) => {
-        if (allowedStaffIds && !allowedStaffIds.has(u.id)) {
-          return null;
-        }
-        const cfg = configByStaffId.get(u.id);
-        const isVisible = useLandingVisibility ? (cfg?.isVisible ?? false) : true;
-        if (!isVisible) {
-          return null;
-        }
-        return {
-          staffUserId: u.id,
-          isVisible: true,
-          order: cfg?.order ?? 999,
-          staff: u,
-        };
-      })
-      .filter((row): row is NonNullable<typeof row> => row !== null);
+      .filter((u) => !allowedStaffIds || allowedStaffIds.has(u.id))
+      .map((u) => ({
+        staffUserId: u.id,
+        order: orderByStaffId.get(u.id) ?? 999,
+        staff: u,
+      }));
 
     items.sort((a, b) => a.order - b.order || a.staffUserId.localeCompare(b.staffUserId));
     return items;

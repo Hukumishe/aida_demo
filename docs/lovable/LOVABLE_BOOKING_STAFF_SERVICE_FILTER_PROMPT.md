@@ -23,12 +23,13 @@
 |--------|--------|
 | Все услуги филиала | `GET /landing/studios/{studioId}/bookable-services` |
 | Услуги **конкретного мастера** | `GET /landing/studios/{studioId}/bookable-services?staffUserId={staffUserId}` |
-| Все мастера филиала | `GET /landing/studios/{studioId}/bookable-masters` |
+| Все мастера филиала | `GET /landing/studios/{studioId}/bookable-masters` — **все** активные MASTER/ADMIN в филиале, без галочек «Показывать на сайте» |
 | Мастера под **выбранные услуги** | `GET /landing/studios/{studioId}/bookable-masters?serviceId={id1}&serviceId={id2}` — для каждой выбранной услуги свой `serviceId` в query (AND: мастер должен оказывать **все** выбранные услуги) |
 
 **Не использовать** в этих экранах:
 
 - `GET /studios/{studioId}/landing/services` — только витрина главной страницы, не форма записи.
+- `GET /studios/{studioId}/landing/masters` — только блок «Наша команда» на главной (с галочками `isVisible`), **не** окно записи.
 - `GET /studios` — CRM, JWT.
 
 ### 3. Состояние формы (общее)
