@@ -759,8 +759,7 @@ export class LandingService {
 
   /**
    * Мастера для формы записи: все активные MASTER/ADMIN в филиале (+ membership).
-   * Настройки «Показывать на сайте» (landing/masters) на этот список не влияют — только витрина.
-   * Опционально serviceIds — только те, кто оказывает все выбранные услуги (staff_services).
+   * Настройки «Показывать на сайте» (landing_masters) здесь не используются — только для витрины GET .../landing/masters.
    */
   async getPublicBookableMasters(studioId: string, serviceIds?: string[]) {
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
@@ -788,7 +787,7 @@ export class LandingService {
       where: { organizationId },
       orderBy: { order: 'asc' },
     });
-    const orderByStaffId = new Map(configs.map((c) => [c.staffUserId, c.order]));
+    const configByStaffId = new Map(configs.map((c) => [c.staffUserId, c]));
 
     const staff = await this.prisma.user.findMany({
       where: {
@@ -805,12 +804,19 @@ export class LandingService {
     });
 
     const items = staff
-      .filter((u) => !allowedStaffIds || allowedStaffIds.has(u.id))
-      .map((u) => ({
-        staffUserId: u.id,
-        order: orderByStaffId.get(u.id) ?? 999,
-        staff: u,
-      }));
+      .map((u) => {
+        if (allowedStaffIds && !allowedStaffIds.has(u.id)) {
+          return null;
+        }
+        const cfg = configByStaffId.get(u.id);
+        return {
+          staffUserId: u.id,
+          isVisible: true,
+          order: cfg?.order ?? 999,
+          staff: u,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
 
     items.sort((a, b) => a.order - b.order || a.staffUserId.localeCompare(b.staffUserId));
     return items;

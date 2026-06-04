@@ -222,7 +222,7 @@ export class LandingController {
   @ApiOperation({
     summary: 'Мастера филиала для формы записи (публично)',
     description:
-      'Все активные MASTER/ADMIN филиала (не фильтр «лендинг → мастера»). Опционально serviceId — только оказывающие все указанные услуги.',
+      'Все активные мастера/админы филиала (без фильтра «на лендинге»). Опционально serviceId — по staff_services.',
   })
   @ApiQuery({
     name: 'serviceId',

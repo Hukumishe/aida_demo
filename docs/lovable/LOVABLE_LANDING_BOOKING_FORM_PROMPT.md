@@ -38,7 +38,7 @@
 
 | Данные | Метод |
 |--------|--------|
-| Мастера (форма записи) | **`GET /landing/studios/{studioId}/bookable-masters`** — **все** активные MASTER/ADMIN филиала. Галочки «Показывать на сайте» в админке лендинга **не** влияют на форму записи (только на витрину). Первый пункт: **«Любой мастер»**. **Не** использовать `GET /studios/.../landing/masters` в форме записи. |
+| Мастера (форма записи) | **`GET /landing/studios/{studioId}/bookable-masters`** — **все** активные мастера/админы филиала. Галочки «на лендинге» в админке **не** влияют на форму записи. **Не** использовать `GET .../landing/masters` в модалке записи. |
 | Услуги (форма записи) | **`GET /landing/studios/{studioId}/bookable-services`** — каталог услуг CRM в филиале. В select **value = `serviceId`**, label = `name`. **Не** использовать `GET .../landing/services` в форме — это **карточки витрины** (2–3 штуки), не весь прайс. |
 | Карточки витрины | `GET /studios/{studioId}/landing/services` — только для блока «Услуги» на главной странице лендинга, **не** для модалки записи. |
 | Рефералка `?ref=` | `GET /studios/{studioId}/referral-links/resolve/{linkId}` — **после** загрузки списка филиалов (любой `studioId` этой организации подойдёт); read-only «Источник», в submit `referralLinkId`. При смене филиала `referralLinkId` **не сбрасывать**. |
@@ -183,7 +183,7 @@ function formatSlotTime(startAtIso: string, studioTimezone: string): string {
 |---------|---------|-------------|
 | В «Филиал» все салоны платформы | `GET /studios` с токеном DEVELOPER | `GET /landing/organizations/{VITE_ORGANIZATION_ID}/studios` **без** Bearer |
 | В «Услуга» 0–2 позиции или пусто | Взяли карточки витрины | `GET /landing/studios/{studioId}/bookable-services` |
-| В «Мастер» только «Любой мастер» | `landing/masters` + `isVisible` в форме записи | `GET /landing/studios/{studioId}/bookable-masters` (все мастера филиала) |
+| В «Мастер» только «Любой мастер» | `landing/masters` + фильтр `isVisible` | `GET /landing/studios/{studioId}/bookable-masters` |
 | Другая сеть в филиалах | Неверный `VITE_ORGANIZATION_ID` | В CRM: **Настройки → id организации** салона «ТД Евразия» |
 
 ---
