@@ -213,5 +213,6 @@ sequenceDiagram
 
 ## Связанные документы
 
+- `docs/lovable/LOVABLE_BOOKING_STAFF_SERVICE_FILTER_PROMPT.md` — **мастер ↔ услуги** (экраны «Выбор услуг» / «Выбор специалиста»).
 - `docs/lovable/LOVABLE_LANDING_CALLBACK_MODAL_PROMPT.md` — рефералка и поля клиента (устаревший submit только через notes; для записи использовать этот документ).
 - `docs/LANDING_PROMOTIONS.md` — промокоды.

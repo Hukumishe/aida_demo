@@ -140,6 +140,40 @@ export async function assignStaffServiceAcrossStudios(
   return created;
 }
 
+/**
+ * Мастера филиала, которые оказывают все перечисленные услуги (staff_services в studioId).
+ */
+export async function getStaffUserIdsOfferingAllServicesInStudio(
+  prisma: PrismaService,
+  studioId: string,
+  serviceIds: string[],
+): Promise<string[]> {
+  const ids = [...new Set(serviceIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const rows = await prisma.staffService.findMany({
+    where: { studioId, serviceId: { in: ids } },
+    select: { staffUserId: true, serviceId: true },
+  });
+
+  const countByStaff = new Map<string, Set<string>>();
+  for (const row of rows) {
+    let set = countByStaff.get(row.staffUserId);
+    if (!set) {
+      set = new Set();
+      countByStaff.set(row.staffUserId, set);
+    }
+    set.add(row.serviceId);
+  }
+
+  const required = ids.length;
+  return [...countByStaff.entries()]
+    .filter(([, offered]) => offered.size >= required && ids.every((id) => offered.has(id)))
+    .map(([staffUserId]) => staffUserId);
+}
+
 /** Снять услугу с мастера во всех филиалах. */
 export async function removeStaffServiceAcrossStudios(
   prisma: PrismaService,

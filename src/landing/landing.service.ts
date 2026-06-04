@@ -33,6 +33,7 @@ import {
   getDisabledCategoryIdsForStudio,
   isServiceOfferedInStudio,
 } from '../common/service-studio-offering';
+import { getStaffUserIdsOfferingAllServicesInStudio } from '../common/staff-service-offering';
 import { isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { ServicesService } from '../services/services.service';
 
@@ -736,14 +737,16 @@ export class LandingService {
   /**
    * Услуги, доступные для записи в филиале (каталог CRM, не карточки лендинга).
    */
-  async getPublicBookableServices(studioId: string) {
+  async getPublicBookableServices(studioId: string, staffUserId?: string) {
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const staffFilter = staffUserId?.trim() || undefined;
     const services = await this.servicesService.findAll(
       UserRole.OWNER,
       undefined,
       organizationId,
       undefined,
       studioId,
+      staffFilter,
     );
     return services.map((s) => ({
       serviceId: s.id,
@@ -758,8 +761,20 @@ export class LandingService {
    * Мастера для формы записи: активные MASTER/ADMIN в филиале (+ membership).
    * Если в админке включена видимость на лендинге — только отмеченные; иначе все активные в филиале.
    */
-  async getPublicBookableMasters(studioId: string) {
+  async getPublicBookableMasters(studioId: string, serviceIds?: string[]) {
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const filterServiceIds = (serviceIds ?? [])
+      .map((id) => id.trim())
+      .filter(Boolean);
+    let allowedStaffIds: Set<string> | null = null;
+    if (filterServiceIds.length > 0) {
+      const offering = await getStaffUserIdsOfferingAllServicesInStudio(
+        this.prisma,
+        studioId,
+        filterServiceIds,
+      );
+      allowedStaffIds = new Set(offering);
+    }
     const studio = await this.prisma.studio.findUnique({
       where: { id: studioId },
       select: { id: true },
@@ -791,6 +806,9 @@ export class LandingService {
 
     const items = staff
       .map((u) => {
+        if (allowedStaffIds && !allowedStaffIds.has(u.id)) {
+          return null;
+        }
         const cfg = configByStaffId.get(u.id);
         const isVisible = useLandingVisibility ? (cfg?.isVisible ?? false) : true;
         if (!isVisible) {

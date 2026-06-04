@@ -203,10 +203,18 @@ export class LandingController {
   @ApiOperation({
     summary: 'Услуги филиала для формы записи (публично)',
     description:
-      'Каталог услуг CRM, доступных в филиале. Не путать с GET .../landing/services (карточки витрины).',
+      'Каталог услуг CRM в филиале. Опционально staffUserId — только услуги выбранного мастера (staff_services).',
   })
-  getPublicBookableServices(@Param('studioId') studioId: string) {
-    return this.landingService.getPublicBookableServices(studioId);
+  @ApiQuery({
+    name: 'staffUserId',
+    required: false,
+    description: 'После выбора мастера — только его услуги',
+  })
+  getPublicBookableServices(
+    @Param('studioId') studioId: string,
+    @Query('staffUserId') staffUserId?: string,
+  ) {
+    return this.landingService.getPublicBookableServices(studioId, staffUserId);
   }
 
   @Public()
@@ -214,10 +222,20 @@ export class LandingController {
   @ApiOperation({
     summary: 'Мастера филиала для формы записи (публично)',
     description:
-      'Активные MASTER/ADMIN в филиале. Если в админке настроена видимость лендинга — только отмеченные.',
+      'Опционально serviceId (повторяемый query) — только мастера, оказывающие все указанные услуги.',
   })
-  getPublicBookableMasters(@Param('studioId') studioId: string) {
-    return this.landingService.getPublicBookableMasters(studioId);
+  @ApiQuery({
+    name: 'serviceId',
+    required: false,
+    isArray: true,
+    description: 'Фильтр после выбора услуг: ?serviceId=srv_a&serviceId=srv_b',
+  })
+  getPublicBookableMasters(
+    @Param('studioId') studioId: string,
+    @Query('serviceId') serviceId?: string | string[],
+  ) {
+    const ids = serviceId == null ? [] : Array.isArray(serviceId) ? serviceId : [serviceId];
+    return this.landingService.getPublicBookableMasters(studioId, ids);
   }
 
   @Public()
