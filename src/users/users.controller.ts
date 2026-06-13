@@ -57,6 +57,7 @@ export class UsersController {
       user.studioId,
       user.organizationId,
       includeDismissedFlag,
+      user.userId,
     );
   }
 

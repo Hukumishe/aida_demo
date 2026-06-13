@@ -18,6 +18,7 @@ import {
   buildStaffProfilePermissions,
 } from '../common/master-access';
 import { mapStaffServiceRow } from '../common/staff-service-timing.util';
+import { assertUserStudioAccessForResource } from '../common/studio-access.util';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { CreateOrganizationOwnerDto } from './dto/create-organization-owner.dto';
@@ -98,19 +99,16 @@ export class UsersService {
     userStudioId?: string,
     userOrganizationId?: string,
     includeDismissed = false,
+    userId?: string,
   ) {
     if (!isOwnerLevelRole(userRole)) {
-      if (userRole === UserRole.MANAGER) {
-        const studioScope = await this.prisma.studio.findUnique({
-          where: { id: studioId },
-          select: { organizationId: true },
-        });
-        if (!studioScope || studioScope.organizationId !== userOrganizationId) {
-          throw new ForbiddenException('Access denied to this studio');
-        }
-      } else if (userStudioId !== studioId) {
-        throw new ForbiddenException('Access denied to this studio');
-      }
+      await assertUserStudioAccessForResource(this.prisma, {
+        userRole,
+        userId,
+        userStudioId,
+        userOrganizationId,
+        studioId,
+      });
     }
 
     const studio = await this.prisma.studio.findUnique({
@@ -155,17 +153,13 @@ export class UsersService {
     // - manager: any studio in own organization
     // - others: only own studio
     if (!isOwnerLevelRole(userRole)) {
-      if (userRole === UserRole.MANAGER) {
-        const studioScope = await this.prisma.studio.findUnique({
-          where: { id: studioId },
-          select: { organizationId: true },
-        });
-        if (!studioScope || studioScope.organizationId !== userOrganizationId) {
-          throw new ForbiddenException('Access denied to this studio');
-        }
-      } else if (userStudioId !== studioId) {
-        throw new ForbiddenException('Access denied to this studio');
-      }
+      await assertUserStudioAccessForResource(this.prisma, {
+        userRole,
+        userId: userStaffId,
+        userStudioId,
+        userOrganizationId,
+        studioId,
+      });
     }
 
     const branchStaffWhere = {
