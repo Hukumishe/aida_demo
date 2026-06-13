@@ -304,8 +304,9 @@ export class AppointmentsService {
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
       await assertUserStudioAccessForResource(this.prisma, {
         userRole,
-        userId: userStaffId,
+        userId: actingUserId,
         userStudioId,
+        userOrganizationId,
         studioId,
       });
     }
