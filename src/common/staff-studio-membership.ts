@@ -99,3 +99,28 @@ export async function getWorkStudiosForUser(
 
   return out;
 }
+
+/** Основной studioId или membership — для guard и проверок доступа. */
+export async function staffWorksAtStudio(
+  prisma: PrismaService,
+  staffUserId: string,
+  studioId: string,
+): Promise<boolean> {
+  const staff = await prisma.user.findUnique({
+    where: { id: staffUserId },
+    select: { studioId: true },
+  });
+  if (!staff) {
+    return false;
+  }
+  if (staff.studioId === studioId) {
+    return true;
+  }
+  const membership = await prisma.userStudioMembership.findUnique({
+    where: {
+      userId_studioId: { userId: staffUserId, studioId },
+    },
+    select: { id: true },
+  });
+  return !!membership;
+}

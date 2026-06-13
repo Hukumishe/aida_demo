@@ -45,6 +45,7 @@ import {
 import { assertStaffWorksAtStudio } from '../common/staff-studio-membership';
 import { assertServiceBookableAtStudio } from '../common/service-studio-offering';
 import { assertStaffOffersService } from '../common/staff-service-offering';
+import { assertUserStudioAccessForResource } from '../common/studio-access.util';
 import { NextbotAutoMessageOrchestratorService } from '../nextbot-auto-messages/nextbot-auto-message-orchestrator.service';
 import {
   appointmentCreatedByInclude,
@@ -192,12 +193,13 @@ export class AppointmentsService {
     createdByUserIdFilter?: string,
   ) {
     // Check access
-    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      // ADMIN and MASTER can only access their own studio
-      if (userStudioId !== studioId) {
-        throw new ForbiddenException('Access denied to this studio');
-      }
+      await assertUserStudioAccessForResource(this.prisma, {
+        userRole,
+        userId: userStaffId,
+        userStudioId,
+        studioId,
+      });
     }
 
     const where: any = { studioId };
@@ -299,12 +301,13 @@ export class AppointmentsService {
     actingUserId?: string,
   ) {
     // Check access
-    // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      // ADMIN and MASTER can only access their own studio
-      if (userStudioId !== studioId) {
-        throw new ForbiddenException('Access denied to this studio');
-      }
+      await assertUserStudioAccessForResource(this.prisma, {
+        userRole,
+        userId: userStaffId,
+        userStudioId,
+        studioId,
+      });
     }
 
     // Verify studio exists
@@ -605,9 +608,12 @@ export class AppointmentsService {
     options?: { date?: string; status?: WaitlistEntryStatus | 'all' },
   ) {
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      if (userStudioId !== studioId) {
-        throw new ForbiddenException('Access denied to this studio');
-      }
+      await assertUserStudioAccessForResource(this.prisma, {
+        userRole,
+        userId: userStaffId,
+        userStudioId,
+        studioId,
+      });
     }
 
     const where: Record<string, unknown> = { studioId };
@@ -676,9 +682,12 @@ export class AppointmentsService {
     }
 
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      if (userStudioId !== studioId) {
-        throw new ForbiddenException('Access denied to this studio');
-      }
+      await assertUserStudioAccessForResource(this.prisma, {
+        userRole,
+        userId: userStaffId,
+        userStudioId,
+        studioId,
+      });
       if (userRole === UserRole.MASTER && userStaffId && entry.staffUserId !== userStaffId) {
         throw new ForbiddenException('Masters can only cancel own waitlist entries');
       }

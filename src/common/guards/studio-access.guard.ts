@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserRole, isDeveloperRole, isOwnerLevelRole } from '../decorators/roles.decorator';
+import { staffWorksAtStudio } from '../staff-studio-membership';
 
 @Injectable()
 export class StudioAccessGuard implements CanActivate {
@@ -79,23 +80,34 @@ export class StudioAccessGuard implements CanActivate {
       return true;
     }
 
-    // ADMIN and MASTER can only access their own studio
-    if (user.studioId !== studioId) {
-      throw new ForbiddenException('Access denied to this studio');
+    // ADMIN and MASTER: основной филиал или user_studio_memberships (мульти-филиал)
+    if (user.role === UserRole.ADMIN || user.role === UserRole.MASTER) {
+      const studio = await this.prisma.studio.findUnique({
+        where: { id: studioId },
+        select: { id: true, organizationId: true },
+      });
+      if (!studio) {
+        throw new NotFoundException(`Studio with ID ${studioId} not found`);
+      }
+      if (studio.organizationId !== user.organizationId) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
+
+      const userId = user.userId ?? user.sub;
+      if (!userId) {
+        throw new ForbiddenException('User not authenticated');
+      }
+      if (user.studioId === studioId) {
+        return true;
+      }
+      const worksAtStudio = await staffWorksAtStudio(this.prisma, userId, studioId);
+      if (!worksAtStudio) {
+        throw new ForbiddenException('Access denied to this studio');
+      }
+      return true;
     }
 
-    const studio = await this.prisma.studio.findUnique({
-      where: { id: studioId },
-      select: { id: true, organizationId: true },
-    });
-    if (!studio) {
-      throw new NotFoundException(`Studio with ID ${studioId} not found`);
-    }
-    if (studio.organizationId !== user.organizationId) {
-      throw new ForbiddenException('Access denied to this studio');
-    }
-
-    return true;
+    throw new ForbiddenException('Access denied to this studio');
   }
 }
 

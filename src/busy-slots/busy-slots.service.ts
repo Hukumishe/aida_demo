@@ -11,6 +11,7 @@ import { UpdateBusySlotDto } from './dto/update-busy-slot.dto';
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { AvailabilityService } from '../availability/availability.service';
 import { assertStaffWorksAtStudio } from '../common/staff-studio-membership';
+import { assertUserStudioAccessForResource } from '../common/studio-access.util';
 import { enrichBusySlotsForSchedule } from './busy-slot-response.util';
 
 @Injectable()
@@ -63,10 +64,12 @@ export class BusySlotsService {
     // Check access
     // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
-      // ADMIN and MASTER can only access their own studio
-      if (userStudioId !== studioId) {
-        throw new ForbiddenException('Access denied to this studio');
-      }
+      await assertUserStudioAccessForResource(this.prisma, {
+        userRole,
+        userId: userStaffId,
+        userStudioId,
+        studioId,
+      });
     }
 
     const where: any = { studioId };

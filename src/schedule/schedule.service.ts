@@ -12,6 +12,7 @@ import { GenerateScheduleDto, SchedulePattern } from './dto/generate-schedule.dt
 import { UserRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { assertMasterCannotEditWorkSchedule } from '../common/master-access';
 import { assertStaffWorksAtStudio } from '../common/staff-studio-membership';
+import { assertUserStudioAccessForResource } from '../common/studio-access.util';
 
 @Injectable()
 export class ScheduleService {
@@ -70,17 +71,13 @@ export class ScheduleService {
     // - manager: any studio in their organization
     // - others: only own studio
     if (!isOwnerLevelRole(userRole)) {
-      if (userRole === UserRole.MANAGER) {
-        const studio = await this.prisma.studio.findUnique({
-          where: { id: studioId },
-          select: { organizationId: true },
-        });
-        if (!studio || studio.organizationId !== userOrganizationId) {
-          throw new ForbiddenException('Access denied to this studio');
-        }
-      } else if (userStudioId !== studioId) {
-        throw new ForbiddenException('Access denied to this studio');
-      }
+      await assertUserStudioAccessForResource(this.prisma, {
+        userRole,
+        userId: userStaffId,
+        userStudioId,
+        userOrganizationId,
+        studioId,
+      });
     }
 
     const where: any = { studioId };
