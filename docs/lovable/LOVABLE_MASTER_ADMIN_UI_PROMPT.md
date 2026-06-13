@@ -54,6 +54,8 @@ function displayClientPhone(client: { phone?: string; phoneMasked?: string | nul
 
 **Не путать с OWNER:** владелец/менеджер сети может брать филиалы из `GET /studios`; для MASTER/ADMIN достаточно `auth/me.workStudios`.
 
+**Бэкенд:** доступ к `/studios/:studioId/...` для MASTER/ADMIN разрешён, если филиал в `workStudios` (основной + membership). 403 на фронте почти всегда = неверный `studioId` в URL (см. `LOVABLE_MASTER_MULTI_STUDIO_403_PROMPT.md`).
+
 Если в JWT `user.studioId` один, а в `workStudios` несколько — активный филиал = выбор пользователя (localStorage), иначе `user.studioId`.
 
 ---
