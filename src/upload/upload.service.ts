@@ -3,19 +3,15 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { ensureUploadDir, resolveUploadDir } from '../common/upload-path.util';
 
 @Injectable()
 export class UploadService {
   private readonly uploadPath: string;
 
   constructor(private configService: ConfigService) {
-    // Путь для сохранения файлов
-    this.uploadPath = path.join(process.cwd(), 'uploads');
-    
-    // Создаем папку uploads если её нет
-    if (!fs.existsSync(this.uploadPath)) {
-      fs.mkdirSync(this.uploadPath, { recursive: true });
-    }
+    this.uploadPath = resolveUploadDir();
+    ensureUploadDir(this.uploadPath);
   }
 
   async saveFile(file: Express.Multer.File): Promise<string> {

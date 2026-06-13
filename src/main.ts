@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import * as fs from 'fs';
+import { ensureUploadDir, resolveUploadDir } from './common/upload-path.util';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TimezoneInterceptor } from './common/interceptors/timezone.interceptor';
@@ -20,8 +21,9 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // Настройка статической раздачи файлов
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+  const uploadDir = resolveUploadDir();
+  ensureUploadDir(uploadDir);
+  app.useStaticAssets(uploadDir, {
     prefix: '/uploads/',
   });
 
