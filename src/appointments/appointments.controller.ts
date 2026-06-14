@@ -255,6 +255,29 @@ export class AppointmentsController {
     );
   }
 
+  @Post('appointments/:id/fine-master-for-late')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Оштрафовать мастера за опоздание (только ADMIN)',
+    description:
+      'Доступно через 10 минут после начала записи. Сумма из masterLateFineAmount в параметрах системы. Клиент платит на эту сумму меньше при завершении визита.',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Appointment not found' })
+  async fineMasterForLate(
+    @Param('id') id: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.appointmentsService.fineMasterForLate(
+      id,
+      user?.role,
+      user?.studioId,
+      user?.userId,
+      user?.organizationId,
+    );
+  }
+
   @Post('appointments/:id/no-show')
   @ApiOperation({ summary: 'Mark appointment as no-show (Не пришёл)' })
   @ApiResponse({ status: 200, description: 'Appointment marked as no-show and deleted' })

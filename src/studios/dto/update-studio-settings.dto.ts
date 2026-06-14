@@ -266,6 +266,17 @@ export class UpdateStudioSettingsDto {
   feedbackLowRatingTaskTitle?: string | null;
 
   @ApiPropertyOptional({
+    description:
+      'Штраф мастера за опоздание к началу записи (₸). При нажатии «Оштрафовать мастера» ADMIN клиент получает скидку на эту сумму при завершении визита. 0 — функция выключена.',
+    minimum: 0,
+    example: 1000,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  masterLateFineAmount?: number;
+
+  @ApiPropertyOptional({
     description: 'Ссылка на 2GIS для филиала (после оценки 4–5).',
     nullable: true,
   })

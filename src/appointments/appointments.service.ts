@@ -1091,6 +1091,115 @@ export class AppointmentsService {
     return maskAppointmentClientForRole(updated, userRole);
   }
 
+  /**
+   * Штраф мастера за опоздание: ADMIN фиксирует штраф из настроек организации.
+   * При завершении визита клиент платит на эту сумму меньше.
+   */
+  async fineMasterForLate(
+    id: string,
+    userRole?: string,
+    userStudioId?: string,
+    userStaffId?: string,
+    userOrganizationId?: string,
+  ) {
+    if (userRole !== UserRole.ADMIN) {
+      throw new ForbiddenException(
+        'Оштрафовать мастера может только администратор филиала',
+      );
+    }
+
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+      include: {
+        service: true,
+        serviceItems: true,
+        client: true,
+        staff: { include: { staffProfile: true } },
+        studio: {
+          include: {
+            organization: { select: { masterLateFineAmount: true } },
+          },
+        },
+      },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException(`Appointment with ID ${id} not found`);
+    }
+
+    await assertUserOrganizationMatchesStudio(
+      this.prisma,
+      appointment.studioId,
+      userOrganizationId,
+      userRole,
+    );
+    await assertUserStudioAccessForResource(this.prisma, {
+      userRole,
+      userId: userStaffId,
+      userStudioId,
+      userOrganizationId,
+      studioId: appointment.studioId,
+    });
+
+    if (
+      appointment.status !== AppointmentStatus.BOOKED &&
+      appointment.status !== AppointmentStatus.ARRIVED
+    ) {
+      throw new BadRequestException(
+        'Штраф мастера можно применить только к активной записи (забронирована или клиент пришёл)',
+      );
+    }
+
+    const now = new Date();
+    const tenMinutesAfterStart = new Date(
+      new Date(appointment.startAt).getTime() + 10 * 60 * 1000,
+    );
+    if (now < tenMinutesAfterStart) {
+      throw new BadRequestException(
+        '«Оштрафовать мастера» доступно не раньше чем через 10 минут после начала записи',
+      );
+    }
+
+    const fineAmount = appointment.studio.organization.masterLateFineAmount ?? 0;
+    if (fineAmount <= 0) {
+      throw new BadRequestException(
+        'Сумма штрафа мастера не задана в параметрах системы (masterLateFineAmount)',
+      );
+    }
+
+    if ((appointment.masterLateFineAmount ?? 0) > 0) {
+      throw new BadRequestException('Штраф мастера по этой записи уже применён');
+    }
+
+    const updated = await this.prisma.appointment.update({
+      where: { id },
+      data: { masterLateFineAmount: fineAmount },
+      include: {
+        staff: { include: { staffProfile: true } },
+        client: true,
+        service: true,
+        serviceItems: {
+          include: { service: true },
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    });
+
+    await this.appointmentHistory.record({
+      appointmentId: id,
+      studioId: appointment.studioId,
+      action: AppointmentHistoryAction.STAFF_LATE_FINE,
+      summary: `Штраф мастера за опоздание: ${formatMoneyTenge(fineAmount)} (скидка клиенту при расчёте)`,
+      payload: {
+        appointmentId: id,
+        masterLateFineAmount: fineAmount,
+      },
+      actorUserId: userStaffId,
+    });
+
+    return maskAppointmentClientForRole(updated, userRole);
+  }
+
   async markNoShow(
     id: string,
     userRole?: string,
@@ -1458,6 +1567,11 @@ export class AppointmentsService {
       total = Math.round((grossTotal * (100 - p)) / 100);
     }
 
+    const masterLateFine = existingAppointment.masterLateFineAmount ?? 0;
+    if (masterLateFine > 0) {
+      total = Math.max(0, total - masterLateFine);
+    }
+
     const limitPercent = org.globalBonusPaymentLimitPercent ?? 30;
     const maxBonusesAllowed = Math.floor((total * limitPercent) / 100);
     const requestedBonus = Math.max(
@@ -1653,6 +1767,7 @@ export class AppointmentsService {
             ? `${org.referFriendInviteeValue}%`
             : '—',
         total: `${total} ₸`,
+        masterLateFine: masterLateFine > 0 ? `${masterLateFine} ₸` : '—',
         prepayment: `${prepayment} ₸`,
         limitPercent: `${limitPercent}%`,
         maxBonusesAllowed,

@@ -120,6 +120,7 @@ export class StudiosService {
             nextbotOutboundWebhookUrl: true,
             nextbotOutboundWebhookApiKey: true,
             feedbackLowRatingTaskTitle: true,
+            masterLateFineAmount: true,
           },
         },
       },
@@ -149,6 +150,7 @@ export class StudiosService {
       highPriorityGapMinutes: org.highPriorityGapMinutes,
       normalPriorityToleranceMinutes: org.normalPriorityToleranceMinutes,
       feedbackLowRatingTaskTitle: org.feedbackLowRatingTaskTitle,
+      masterLateFineAmount: org.masterLateFineAmount ?? 0,
       feedbackTwoGisUrl: studio.feedbackTwoGisUrl,
     };
     if (!isDeveloperRole(userRole)) {
@@ -185,6 +187,7 @@ export class StudiosService {
       nextbotOutboundWebhookApiKey?: string | null;
       feedbackLowRatingTaskTitle?: string | null;
       feedbackTwoGisUrl?: string | null;
+      masterLateFineAmount?: number;
     },
     userRole: string,
   ) {
@@ -346,6 +349,9 @@ export class StudiosService {
     }
     if (Object.prototype.hasOwnProperty.call(dto, 'feedbackLowRatingTaskTitle')) {
       data.feedbackLowRatingTaskTitle = dto.feedbackLowRatingTaskTitle ?? null;
+    }
+    if (dto.masterLateFineAmount !== undefined) {
+      data.masterLateFineAmount = dto.masterLateFineAmount;
     }
 
     const studioData: { feedbackTwoGisUrl?: string | null } = {};

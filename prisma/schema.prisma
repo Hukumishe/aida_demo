@@ -44,6 +44,7 @@ enum AppointmentHistoryAction {
   VISIT_COMPLETED
   NO_SHOW
   LATE_PENALTY
+  STAFF_LATE_FINE
   CANCELLED
   UPSELL_ADDED
   UPSELL_UPDATED
@@ -310,6 +311,8 @@ model Organization {
   nextbotOutboundWebhookApiKey   String?
   /// Задача менеджерам при оценке визита ≤3 (заголовок).
   feedbackLowRatingTaskTitle     String?
+  /// Штраф мастера за опоздание к началу записи (₸). Скидка клиенту при завершении визита.
+  masterLateFineAmount           Int                            @default(0)
   createdAt                      DateTime                       @default(now())
   updatedAt                      DateTime                       @updatedAt
 
@@ -1207,6 +1210,8 @@ model Appointment {
   /// Комментарий к записи (заметка администратора / из CRM).
   comment                   String?
   forfeitedPrepaymentAmount Int? // Предоплата, сгоревшая при поздней отмене
+  /// Штраф мастера за опоздание: сумма скидки клиенту при завершении визита (₸).
+  masterLateFineAmount      Int?
   completedBonusesUsed      Int? // Сколько бонусов списано при завершении (DONE)
   completedMoneyPaid        Int? // Сумма, оплаченная деньгами при DONE (для уровня и кэшбэка)
   completedPaymentMethod    VisitPaymentMethod?
