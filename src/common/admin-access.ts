@@ -41,12 +41,14 @@ export function assertCanChangeStaffPhone(actorRole: string | undefined): void {
 export function assertAdminMasterStaffUpdate(
   actorRole: string | undefined,
   targetUserRole: string,
-  dto: Record<string, unknown>,
+  dto: { phone?: string },
 ): void {
   if (actorRole !== UserRole.ADMIN || targetUserRole !== UserRole.MASTER) {
     return;
   }
-  const keys = Object.keys(dto).filter((k) => dto[k] !== undefined);
+  const keys = (Object.keys(dto) as (keyof typeof dto)[]).filter(
+    (k) => dto[k] !== undefined,
+  );
   if (keys.length === 0) {
     return;
   }
