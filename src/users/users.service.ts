@@ -12,6 +12,8 @@ import {
   removeStaffServiceAcrossStudios,
 } from '../common/staff-service-offering';
 import { assertAdminCannotEditMaster } from '../common/admin-access';
+import { assertCanChangeStaffPhone } from '../common/staff-login-access';
+import { normalizeStaffPhone } from '../common/staff-phone.util';
 import {
   assertMasterCanOnlyViewSelf,
   assertMasterCannotEditStaff,
@@ -23,6 +25,7 @@ import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { CreateOrganizationOwnerDto } from './dto/create-organization-owner.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
+import { UpdateStaffPhoneDto } from './dto/update-staff-phone.dto';
 import { UpdateStaffProfileDto } from './dto/update-staff-profile.dto';
 import { CreateServiceOverrideDto } from './dto/create-service-override.dto';
 import { UpdateServiceOverrideDto } from './dto/update-service-override.dto';
@@ -87,6 +90,37 @@ export class UsersService {
       );
     }
     return unique;
+  }
+
+  private async resolveStaffPhoneForUpdate(
+    targetUserId: string,
+    current: { phone: string | null; email: string | null },
+    rawPhone: string,
+    actorRole: string,
+  ): Promise<string | null> {
+    assertCanChangeStaffPhone(actorRole);
+    const normalized = normalizeStaffPhone(rawPhone);
+    if (!normalized) {
+      throw new BadRequestException('Укажите корректный номер телефона');
+    }
+    if (!current.email && normalized === current.phone) {
+      return normalized;
+    }
+    if (normalized === current.phone) {
+      return normalized;
+    }
+    if (!current.email && !normalized) {
+      throw new BadRequestException(
+        'Нельзя убрать телефон: у сотрудника не указан email для входа',
+      );
+    }
+    const existingPhone = await this.prisma.user.findUnique({
+      where: { phone: normalized },
+    });
+    if (existingPhone && existingPhone.id !== targetUserId) {
+      throw new BadRequestException('Этот номер уже используется другим пользователем');
+    }
+    return normalized;
   }
 
   /**
@@ -483,6 +517,42 @@ export class UsersService {
     return createdUser;
   }
 
+  async updateStaffPhone(
+    userId: string,
+    dto: UpdateStaffPhoneDto,
+    userRole: string,
+    userStudioId?: string,
+    actorUserId?: string,
+  ) {
+    assertCanChangeStaffPhone(userRole);
+    assertMasterCannotEditStaff(userRole);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { staffProfile: true },
+    });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    await this.assertActorCanAccessStaff(user, userRole, userStudioId, actorUserId);
+    assertAdminCannotEditMaster(userRole, user.role);
+
+    const phone = await this.resolveStaffPhoneForUpdate(userId, user, dto.phone, userRole);
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { phone },
+      include: { staffProfile: true },
+    });
+
+    if (!isOwnerLevelRole(userRole)) {
+      const { password, ...rest } = updated;
+      return rest;
+    }
+    return updated;
+  }
+
   async update(
     userId: string,
     updateStaffDto: UpdateStaffDto,
@@ -514,7 +584,11 @@ export class UsersService {
       throw new BadRequestException('Only DEVELOPER can assign DEVELOPER role');
     }
 
-    // Check email/phone uniqueness
+    if (updateStaffDto.phone !== undefined) {
+      assertCanChangeStaffPhone(userRole);
+    }
+
+    // Check email uniqueness
     if (updateStaffDto.email && updateStaffDto.email !== user.email) {
       const existingEmail = await this.prisma.user.findUnique({
         where: { email: updateStaffDto.email },
@@ -524,21 +598,24 @@ export class UsersService {
       }
     }
 
-    if (updateStaffDto.phone && updateStaffDto.phone !== user.phone) {
-      const existingPhone = await this.prisma.user.findUnique({
-        where: { phone: updateStaffDto.phone },
-      });
-      if (existingPhone) {
-        throw new BadRequestException('Phone already exists');
-      }
+    let resolvedPhone: string | null | undefined;
+    if (updateStaffDto.phone !== undefined) {
+      resolvedPhone = await this.resolveStaffPhoneForUpdate(
+        userId,
+        user,
+        updateStaffDto.phone,
+        userRole,
+      );
     }
 
     const updateData: any = {
       email: updateStaffDto.email,
-      phone: updateStaffDto.phone,
       role: updateStaffDto.role,
       isActive: updateStaffDto.isActive,
     };
+    if (resolvedPhone !== undefined) {
+      updateData.phone = resolvedPhone;
+    }
 
     if (updateStaffDto.password) {
       updateData.passwordHash = await bcrypt.hash(updateStaffDto.password, 10);

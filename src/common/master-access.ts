@@ -1,5 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 import { UserRole, isOwnerLevelRole } from './decorators/roles.decorator';
+import { canChangeStaffPhone } from './staff-login-access';
 
 /** Мастер не редактирует графики работы (только просмотр своего). */
 export function assertMasterCannotEditWorkSchedule(userRole?: string): void {
@@ -33,6 +34,7 @@ export type StaffProfilePermissions = {
   canEditServices: boolean;
   canEditServiceOverrides: boolean;
   canDismissStaff: boolean;
+  canChangePhone: boolean;
 };
 
 export function buildStaffProfilePermissions(
@@ -45,6 +47,7 @@ export function buildStaffProfilePermissions(
       canEditServices: false,
       canEditServiceOverrides: false,
       canDismissStaff: false,
+      canChangePhone: false,
     };
   }
   if (actorRole === UserRole.ADMIN && targetRole === UserRole.MASTER) {
@@ -53,6 +56,7 @@ export function buildStaffProfilePermissions(
       canEditServices: false,
       canEditServiceOverrides: false,
       canDismissStaff: false,
+      canChangePhone: false,
     };
   }
   const canManage =
@@ -65,5 +69,6 @@ export function buildStaffProfilePermissions(
     canEditServices: canManage,
     canEditServiceOverrides: canManage,
     canDismissStaff: isOwnerLevelRole(actorRole) || actorRole === UserRole.MANAGER,
+    canChangePhone: canChangeStaffPhone(actorRole),
   };
 }

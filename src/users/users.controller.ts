@@ -19,6 +19,7 @@ import { UsersService } from './users.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { UpdateStaffProfileDto } from './dto/update-staff-profile.dto';
+import { UpdateStaffPhoneDto } from './dto/update-staff-phone.dto';
 import { AddStaffServiceDto } from './dto/add-staff-service.dto';
 import { CreateServiceOverrideDto } from './dto/create-service-override.dto';
 import { UpdateServiceOverrideDto } from './dto/update-service-override.dto';
@@ -101,6 +102,28 @@ export class UsersController {
     @CurrentUser() user: any,
   ) {
     return this.usersService.create(studioId, createStaffDto, user.role, user.studioId);
+  }
+
+  @Patch('staff/:userId/phone')
+  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.DEVELOPER)
+  @ApiOperation({
+    summary: 'Изменить телефон сотрудника для входа',
+    description: 'Только OWNER, DEPUTY_OWNER, DEVELOPER. Номер нормализуется к +7…',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async updateStaffPhone(
+    @Param('userId') userId: string,
+    @Body() dto: UpdateStaffPhoneDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.usersService.updateStaffPhone(
+      userId,
+      dto,
+      user.role,
+      user.studioId,
+      user.userId,
+    );
   }
 
   @Patch('staff/:userId')
