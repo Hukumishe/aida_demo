@@ -25,25 +25,9 @@ export class NextbotBirthdaySettingsService {
     }
   }
 
-  private validateBonus(dto: {
-    bonusType?: BirthdayBonusType;
-    bonusValue?: number;
-    discountValidDays?: number | null;
-  }) {
-    if (dto.bonusType === BirthdayBonusType.DISCOUNT_PERCENT) {
-      if (dto.bonusValue != null && (dto.bonusValue < 1 || dto.bonusValue > 100)) {
-        throw new BadRequestException('Скидка должна быть от 1 до 100%');
-      }
-      if (dto.discountValidDays == null || dto.discountValidDays < 1) {
-        throw new BadRequestException(
-          'Для скидки укажите срок действия discountValidDays (суток)',
-        );
-      }
-    }
-    if (dto.bonusType === BirthdayBonusType.BONUS_POINTS && dto.bonusValue != null) {
-      if (dto.bonusValue < 1) {
-        throw new BadRequestException('Количество бонусных баллов должно быть ≥ 1');
-      }
+  private validateBonus(dto: { bonusValue?: number }) {
+    if (dto.bonusValue != null && dto.bonusValue < 1) {
+      throw new BadRequestException('Количество бонусных баллов должно быть ≥ 1');
     }
   }
 
@@ -54,7 +38,6 @@ export class NextbotBirthdaySettingsService {
     daysBeforeBirthday: number;
     bonusType: BirthdayBonusType;
     bonusValue: number;
-    discountValidDays: number | null;
     messageText: string;
     updatedAt: Date;
   }) {
@@ -65,7 +48,6 @@ export class NextbotBirthdaySettingsService {
       daysBeforeBirthday: row.daysBeforeBirthday,
       bonusType: row.bonusType,
       bonusValue: row.bonusValue,
-      discountValidDays: row.discountValidDays,
       messageText: row.messageText,
       updatedAt: row.updatedAt,
     };
@@ -95,7 +77,6 @@ export class NextbotBirthdaySettingsService {
         daysBeforeBirthday: 3,
         bonusType: BirthdayBonusType.BONUS_POINTS,
         bonusValue: 500,
-        discountValidDays: null,
         messageText:
           '{{name}}, с наступающим днём рождения! Вам начислено {{bonusDescription}}.',
         configured: false,
@@ -128,12 +109,8 @@ export class NextbotBirthdaySettingsService {
       minClientLevel: dto.minClientLevel ?? existing?.minClientLevel ?? ClientLevel.BRONZE,
       daysBeforeBirthday:
         dto.daysBeforeBirthday ?? existing?.daysBeforeBirthday ?? 3,
-      bonusType: dto.bonusType ?? existing?.bonusType ?? BirthdayBonusType.BONUS_POINTS,
+      bonusType: BirthdayBonusType.BONUS_POINTS,
       bonusValue: dto.bonusValue ?? existing?.bonusValue ?? 500,
-      discountValidDays:
-        dto.discountValidDays !== undefined
-          ? dto.discountValidDays
-          : (existing?.discountValidDays ?? null),
       messageText:
         dto.messageText?.trim() ??
         existing?.messageText ??
@@ -153,10 +130,6 @@ export class NextbotBirthdaySettingsService {
       daysBeforeBirthday: merged.daysBeforeBirthday,
       bonusType: merged.bonusType,
       bonusValue: merged.bonusValue,
-      discountValidDays:
-        merged.bonusType === BirthdayBonusType.DISCOUNT_PERCENT
-          ? merged.discountValidDays
-          : null,
       messageText: merged.messageText.trim(),
     };
 
@@ -169,10 +142,6 @@ export class NextbotBirthdaySettingsService {
         daysBeforeBirthday: merged.daysBeforeBirthday,
         bonusType: merged.bonusType,
         bonusValue: merged.bonusValue,
-        discountValidDays:
-          merged.bonusType === BirthdayBonusType.DISCOUNT_PERCENT
-            ? merged.discountValidDays
-            : null,
         messageText: merged.messageText.trim(),
       },
     });

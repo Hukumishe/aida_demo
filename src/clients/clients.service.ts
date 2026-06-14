@@ -569,7 +569,6 @@ export class ClientsService {
             notes: createClientDto.notes,
             bonuses: createClientDto.bonuses ?? 0,
             loyaltyEnabled: loyaltyEnabledOnCreate,
-            discount: createClientDto.discount ?? 0,
             balance: createClientDto.balance ?? 0,
             referralCode,
             referredByClientId,

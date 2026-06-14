@@ -293,8 +293,7 @@ export class NextbotService {
 
   /** Убираем поля, которые не должны уходить в Nextbot-контекст. */
   private sanitizeClientForNextbot(client: Record<string, unknown>): Record<string, unknown> {
-    const { discount, ...safeClient } = client;
-    return safeClient;
+    return client;
   }
 
   private parseNextbotDialogId(raw: string | number | undefined): number | undefined {
@@ -654,7 +653,6 @@ export class NextbotService {
         clientId: null,
         level: null,
         bonuses: null,
-        discount: null,
         rawClient: null,
       });
     }

@@ -61,6 +61,18 @@ import {
 import { AppointmentHistoryService } from './appointment-history.service';
 import { formatDateTime, formatMoneyTenge, formatStatus } from './appointment-history.util';
 import { PayrollService } from '../payroll/payroll.service';
+import { computeVisitCheckout } from './visit-checkout.util';
+
+const doneCheckoutInclude = {
+  client: true,
+  service: { include: { category: true } },
+  serviceItems: {
+    include: { service: { include: { category: true } } },
+    orderBy: { sortOrder: 'asc' as const },
+  },
+  studio: { include: { organization: true } },
+  upsells: { include: { service: { include: { category: true } } } },
+} as const;
 
 @Injectable()
 export class AppointmentsService {
@@ -1486,6 +1498,42 @@ export class AppointmentsService {
     return maskAppointmentClientForRole(appointment, userRole);
   }
 
+  async getDoneCheckout(
+    id: string,
+    requestedBonus: number,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    const existingAppointment = await this.prisma.appointment.findUnique({
+      where: { id },
+      include: doneCheckoutInclude,
+    });
+
+    if (!existingAppointment) {
+      throw new NotFoundException(`Appointment with ID ${id} not found`);
+    }
+
+    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
+      if (userStudioId !== existingAppointment.studioId) {
+        throw new ForbiddenException('Access denied to this appointment');
+      }
+    }
+
+    if (existingAppointment.status === AppointmentStatus.CANCELLED) {
+      throw new BadRequestException('Cannot checkout a cancelled appointment');
+    }
+
+    if (existingAppointment.status === AppointmentStatus.DONE) {
+      throw new BadRequestException('Appointment is already marked as done');
+    }
+
+    return computeVisitCheckout(
+      this.prisma,
+      existingAppointment,
+      requestedBonus,
+    );
+  }
+
   async markDone(
     id: string,
     userId: string,
@@ -1495,16 +1543,7 @@ export class AppointmentsService {
   ) {
     const existingAppointment = await this.prisma.appointment.findUnique({
       where: { id },
-      include: {
-        client: true,
-        service: { include: { category: true } },
-        serviceItems: {
-          include: { service: { include: { category: true } } },
-          orderBy: { sortOrder: 'asc' },
-        },
-        studio: { include: { organization: true } },
-        upsells: { include: { service: { include: { category: true } } } },
-      },
+      include: doneCheckoutInclude,
     });
 
     if (!existingAppointment) {
@@ -1545,61 +1584,28 @@ export class AppointmentsService {
       (item) => item.service?.bonusAccrualEnabled !== false,
     );
     const upsellsSum = upsells.reduce((s, u) => s + u.totalAmount, 0);
-    const grossTotal = baseAmount + upsellsSum;
 
-    const doneBefore = await this.prisma.appointment.count({
-      where: { clientId: client.id, status: AppointmentStatus.DONE },
-    });
-    const referProgramOn = org.referFriendEnabled === true;
-    const eligibleFirstVisitReferral =
-      !!client.referredByClientId &&
-      doneBefore === 0 &&
-      !client.referralFirstVisitBonusCredited;
-    const applyReferFriendRewards = loyaltyEnabled && referProgramOn && eligibleFirstVisitReferral;
-
-    let total = grossTotal;
-    if (
-      applyReferFriendRewards &&
-      org.referFriendInviteeRewardType === 'DISCOUNT_PERCENT' &&
-      org.referFriendInviteeValue != null
-    ) {
-      const p = Math.min(100, Math.max(0, org.referFriendInviteeValue));
-      total = Math.round((grossTotal * (100 - p)) / 100);
-    }
-
-    const masterLateFine = existingAppointment.masterLateFineAmount ?? 0;
-    if (masterLateFine > 0) {
-      total = Math.max(0, total - masterLateFine);
-    }
-
-    const limitPercent = org.globalBonusPaymentLimitPercent ?? 30;
-    const maxBonusesAllowed = Math.floor((total * limitPercent) / 100);
     const requestedBonus = Math.max(
       0,
       dto?.bonusesUsed ?? dto?.completedBonusesUsed ?? 0,
     );
-    const bonusesUsed = loyaltyEnabled
-      ? Math.min(
-          requestedBonus,
-          Math.max(0, client.bonuses),
-          maxBonusesAllowed,
-        )
-      : 0;
+    const checkout = await computeVisitCheckout(
+      this.prisma,
+      existingAppointment,
+      requestedBonus,
+    );
 
-    // Общая сумма, которую клиент оплачивает деньгами за визит (включая предоплату)
-    let totalMoneyPaid: number;
-    if (dto?.completedMoneyPaid != null) {
-      totalMoneyPaid = dto.completedMoneyPaid;
-      if (totalMoneyPaid + bonusesUsed > total) {
-        throw new BadRequestException(
-          'Сумма оплаты и списанные бонусы не могут превышать стоимость визита',
-        );
-      }
-    } else {
-      totalMoneyPaid = total - bonusesUsed;
-    }
-    // Сколько клиент доплачивает при расчёте (на кассе сейчас)
-    const moneyPaidNow = Math.max(0, totalMoneyPaid - prepayment);
+    const grossTotal = checkout.grossTotal;
+    const total = checkout.totalAfterDiscounts;
+    const masterLateFine = checkout.masterLateFineAmount;
+    const applyReferFriendRewards = checkout.applyReferFriendRewards;
+    const eligibleFirstVisitReferral = checkout.eligibleFirstVisitReferral;
+    const referProgramOn = org.referFriendEnabled === true;
+    const limitPercent = checkout.globalBonusPaymentLimitPercent;
+    const maxBonusesAllowed = checkout.maxBonusesAllowed;
+    const bonusesUsed = checkout.bonusesUsed;
+    const totalMoneyPaid = checkout.totalMoneyPaid;
+    const moneyPaidNow = checkout.moneyPaidNow;
 
     const useCustomLoyalty = org.loyaltyMode === 'CUSTOM';
 

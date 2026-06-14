@@ -229,7 +229,6 @@ enum NextbotAutoMessageLogStatus {
 /// Тип бонуса в сценарии «День рождения».
 enum BirthdayBonusType {
   BONUS_POINTS
-  DISCOUNT_PERCENT
 }
 
 /// Способ оплаты при завершении визита (касса).
@@ -692,9 +691,6 @@ model Client {
   totalPaidForLevel               Int         @default(0) // Сумма оплаченных деньгами по DONE (для расчёта уровня в PRESET; глобально по клиенту)
   bonuses                         Int         @default(0) // Бонусные баллы (1 балл = 1 ₸)
   loyaltyEnabled                  Boolean     @default(true) // Персональный переключатель лояльности клиента (false = бонусы/кэшбэк/реферальные начисления отключены)
-  discount                        Int         @default(0) // Скидка в процентах (0-100)
-  /// До какой даты действует персональная скидка (например после ДР).
-  discountExpiresAt               DateTime?
   balance                         Int         @default(0) // Баланс в тенге (историческое поле)
   isBlacklisted                   Boolean     @default(false) // Флаг черного списка
   blacklistReason                 String? // Причина добавления в черный список
@@ -884,10 +880,8 @@ model StudioBirthdayMessageSettings {
   /// За сколько календарных дней до дня рождения отправить (0 — в день ДР).
   daysBeforeBirthday Int               @default(3)
   bonusType          BirthdayBonusType
-  /// Баллы (BONUS_POINTS) или процент скидки (DISCOUNT_PERCENT).
+  /// Количество бонусных баллов (BONUS_POINTS).
   bonusValue         Int
-  /// Срок действия скидки в сутках (только для DISCOUNT_PERCENT).
-  discountValidDays  Int?
   messageText        String
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt

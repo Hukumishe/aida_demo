@@ -315,6 +315,33 @@ export class AppointmentsController {
     return this.appointmentsService.markArrived(id, user?.userId, user?.role, user?.studioId);
   }
 
+  @Get('appointments/:id/done-checkout')
+  @ApiOperation({
+    summary: 'Расчёт суммы к оплате при завершении записи',
+    description:
+      'Серверный расчёт: услуги + допродажи − скидки − бонусы − предоплата. Поле moneyPaidNow — «Итого к оплате» на кассе. Query bonusesUsed — для ползунка бонусов.',
+  })
+  @ApiQuery({ name: 'bonusesUsed', required: false, type: Number, example: 0 })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Appointment not found' })
+  async getDoneCheckout(
+    @Param('id') id: string,
+    @Query('bonusesUsed') bonusesUsed?: string,
+    @CurrentUser() user?: any,
+  ) {
+    const bonus =
+      bonusesUsed != null && bonusesUsed !== ''
+        ? Math.max(0, parseInt(bonusesUsed, 10) || 0)
+        : 0;
+    return this.appointmentsService.getDoneCheckout(
+      id,
+      bonus,
+      user?.role,
+      user?.studioId,
+    );
+  }
+
   @Post('appointments/:id/done')
   @ApiOperation({ summary: 'Mark appointment as done (completed)' })
   @ApiResponse({ status: 200, description: 'Appointment marked as done' })

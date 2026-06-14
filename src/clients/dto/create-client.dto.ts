@@ -68,13 +68,6 @@ export class CreateClientDto {
   @IsOptional()
   bonuses?: number;
 
-  @ApiProperty({ example: 0, required: false, description: 'Скидка в процентах (0-100)' })
-  @IsInt()
-  @Min(0)
-  @Max(100)
-  @IsOptional()
-  discount?: number;
-
   @ApiProperty({ example: 0, required: false, description: 'Баланс в тенге' })
   @IsInt()
   @Min(0)

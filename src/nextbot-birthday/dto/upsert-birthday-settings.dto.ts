@@ -9,7 +9,6 @@ import {
   IsString,
   Max,
   Min,
-  ValidateIf,
 } from 'class-validator';
 
 export class UpsertBirthdaySettingsDto {
@@ -37,31 +36,23 @@ export class UpsertBirthdaySettingsDto {
   @Max(60)
   daysBeforeBirthday?: number;
 
-  @ApiPropertyOptional({ enum: BirthdayBonusType })
+  @ApiPropertyOptional({
+    enum: BirthdayBonusType,
+    description: 'Только BONUS_POINTS — начисление бонусных баллов',
+  })
   @IsOptional()
   @IsEnum(BirthdayBonusType)
   bonusType?: BirthdayBonusType;
 
   @ApiPropertyOptional({
     example: 500,
-    description: 'Баллы или % скидки в зависимости от bonusType',
+    description: 'Количество бонусных баллов',
   })
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(100_000)
   bonusValue?: number;
-
-  @ApiPropertyOptional({
-    example: 7,
-    description: 'Срок действия скидки в сутках (обязательно для DISCOUNT_PERCENT)',
-  })
-  @IsOptional()
-  @ValidateIf((o) => o.bonusType === BirthdayBonusType.DISCOUNT_PERCENT)
-  @IsInt()
-  @Min(1)
-  @Max(365)
-  discountValidDays?: number;
 
   @ApiPropertyOptional({
     example:

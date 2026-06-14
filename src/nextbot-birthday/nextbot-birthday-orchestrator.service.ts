@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
-  BirthdayBonusType,
   ClientLevel,
   NextbotAutoMessageLogStatus,
   Prisma,
@@ -169,9 +168,6 @@ export class NextbotBirthdayOrchestratorService {
       studio: settings.studio.name,
       bonusDescription,
       bonusValue: String(settings.bonusValue),
-      discountValidDays: settings.discountValidDays
-        ? String(settings.discountValidDays)
-        : '',
     };
 
     const text = renderNextbotAutoMessageTemplate(settings.messageText, variables);
@@ -205,26 +201,14 @@ export class NextbotBirthdayOrchestratorService {
     }
   }
 
-  private formatBonusDescription(settings: {
-    bonusType: BirthdayBonusType;
-    bonusValue: number;
-    discountValidDays: number | null;
-  }): string {
-    if (settings.bonusType === BirthdayBonusType.BONUS_POINTS) {
-      return `${settings.bonusValue} бонусных баллов`;
-    }
-    const days = settings.discountValidDays ?? 0;
-    return `скидку ${settings.bonusValue}% на ${days} дн.`;
+  private formatBonusDescription(settings: { bonusValue: number }): string {
+    return `${settings.bonusValue} бонусных баллов`;
   }
 
   private async applyBonus(
     tx: Prisma.TransactionClient,
     clientId: string,
-    settings: {
-      bonusType: BirthdayBonusType;
-      bonusValue: number;
-      discountValidDays: number | null;
-    },
+    settings: { bonusValue: number },
   ) {
     const client = await tx.client.findUnique({
       where: { id: clientId },
@@ -232,51 +216,20 @@ export class NextbotBirthdayOrchestratorService {
     });
     if (!client) return;
 
-    if (settings.bonusType === BirthdayBonusType.BONUS_POINTS) {
-      await tx.client.update({
-        where: { id: clientId },
-        data: { bonuses: client.bonuses + settings.bonusValue },
-      });
-      await tx.bonusHistoryEntry.create({
-        data: {
-          id: generateId(IdPrefix.BonusHistoryEntry),
-          clientId,
-          organizationId: client.organizationId,
-          amount: settings.bonusValue,
-          type: 'BIRTHDAY',
-          comment: 'Автоначисление: день рождения',
-        },
-      });
-      return;
-    }
-
-    const days = settings.discountValidDays ?? 7;
-    const expires = new Date();
-    expires.setUTCDate(expires.getUTCDate() + days);
-    expires.setUTCHours(23, 59, 59, 999);
-
     await tx.client.update({
       where: { id: clientId },
+      data: { bonuses: client.bonuses + settings.bonusValue },
+    });
+    await tx.bonusHistoryEntry.create({
       data: {
-        discount: settings.bonusValue,
-        discountExpiresAt: expires,
+        id: generateId(IdPrefix.BonusHistoryEntry),
+        clientId,
+        organizationId: client.organizationId,
+        amount: settings.bonusValue,
+        type: 'BIRTHDAY',
+        comment: 'Автоначисление: день рождения',
       },
     });
-  }
-
-  /** Сброс просроченных персональных скидок. */
-  async clearExpiredDiscounts(): Promise<number> {
-    const result = await this.prisma.client.updateMany({
-      where: {
-        discountExpiresAt: { lte: new Date() },
-        discount: { gt: 0 },
-      },
-      data: {
-        discount: 0,
-        discountExpiresAt: null,
-      },
-    });
-    return result.count;
   }
 
   private async markLog(

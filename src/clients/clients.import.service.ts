@@ -54,7 +54,6 @@ type NormalizedRow = {
   legacyLastVisitDate: Date | null;
   registrationSource: string | null;
   bonuses: number;
-  discount: number;
   balance: number;
   level: ClientLevel | null;
   isBlacklisted: boolean;
@@ -111,9 +110,6 @@ const HEADER_ALIASES: Record<string, string> = {
   баллы: 'bonuses',
   bonuses: 'bonuses',
   bonus: 'bonuses',
-
-  скидка: 'discount',
-  discount: 'discount',
 
   баланс: 'balance',
   balance: 'balance',
@@ -495,7 +491,6 @@ export class ClientsImportService {
           birthDate: row.birthDate ?? undefined,
           notes: resolvedNotes || undefined,
           bonuses: row.bonuses,
-          discount: row.discount,
           balance: row.balance,
           registrationSource: sourceResolved ?? undefined,
           referralCode,
@@ -682,7 +677,6 @@ export class ClientsImportService {
     }
 
     const bonuses = parseInteger(row['bonuses']);
-    const discount = parseInteger(row['discount']);
     const balance = parseInteger(row['balance']);
 
     if (bonuses !== null && bonuses < 0) {
@@ -693,17 +687,6 @@ export class ClientsImportService {
           phone,
           name: firstName,
           reason: 'Бонусы не могут быть отрицательными',
-        },
-      };
-    }
-    if (discount !== null && (discount < 0 || discount > 100)) {
-      return {
-        error: {
-          row: rowNumber,
-          status: 'error',
-          phone,
-          name: firstName,
-          reason: 'Скидка должна быть в диапазоне 0-100',
         },
       };
     }
@@ -776,7 +759,6 @@ export class ClientsImportService {
         legacyLastVisitDate: legacyLastVisitDateResult ?? null,
         registrationSource,
         bonuses: bonuses ?? 0,
-        discount: discount ?? 0,
         balance: balance ?? 0,
         level,
         isBlacklisted: isBlacklistedRaw,

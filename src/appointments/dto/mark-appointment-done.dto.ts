@@ -6,7 +6,8 @@ import { Type } from 'class-transformer';
 export class MarkAppointmentDoneDto {
   @ApiPropertyOptional({
     description:
-      'Сумма оплаты деньгами за визит (в тенге, с учётом предоплаты). Если не указано — считается из услуг минус бонусы.',
+      'Устарело и игнорируется: сумма оплаты считается на сервере (GET /appointments/:id/done-checkout).',
+    deprecated: true,
     example: 8500,
     minimum: 0,
   })

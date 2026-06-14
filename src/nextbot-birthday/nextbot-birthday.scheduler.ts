@@ -32,16 +32,4 @@ export class NextbotBirthdayScheduler {
       this.logger.error(`birthday dispatchDue failed: ${e}`);
     }
   }
-
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  async clearExpiredDiscounts(): Promise<void> {
-    try {
-      const n = await this.orchestrator.clearExpiredDiscounts();
-      if (n > 0) {
-        this.logger.log(`Cleared expired birthday discounts for ${n} clients`);
-      }
-    } catch (e) {
-      this.logger.error(`clearExpiredDiscounts failed: ${e}`);
-    }
-  }
 }
