@@ -59,7 +59,7 @@ import {
   maskClientPhoneForRole,
 } from '../common/client-phone-privacy.util';
 import { AppointmentHistoryService } from './appointment-history.service';
-import { formatDateTime, formatMoneyTenge } from './appointment-history.util';
+import { formatDateTime, formatMoneyTenge, formatStatus } from './appointment-history.util';
 import { PayrollService } from '../payroll/payroll.service';
 
 @Injectable()
@@ -979,6 +979,116 @@ export class AppointmentsService {
         );
         return maskAppointmentClientForRole(updated, userRole);
       });
+  }
+
+  /**
+   * Отмена записи администратором филиала без сгорания предоплаты
+   * (даже если до начала меньше 4 часов).
+   */
+  async cancelWithoutPrepaymentForfeit(
+    id: string,
+    userRole?: string,
+    userStudioId?: string,
+    userStaffId?: string,
+    userOrganizationId?: string,
+  ) {
+    if (userRole !== UserRole.ADMIN) {
+      throw new ForbiddenException(
+        'Отменить запись без сгорания предоплаты может только администратор филиала',
+      );
+    }
+
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+      include: {
+        service: true,
+        serviceItems: true,
+        client: true,
+        staff: { include: { staffProfile: true } },
+      },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException(`Appointment with ID ${id} not found`);
+    }
+
+    await assertUserOrganizationMatchesStudio(
+      this.prisma,
+      appointment.studioId,
+      userOrganizationId,
+      userRole,
+    );
+    await assertUserStudioAccessForResource(this.prisma, {
+      userRole,
+      userId: userStaffId,
+      userStudioId,
+      userOrganizationId,
+      studioId: appointment.studioId,
+    });
+
+    if (appointment.status === AppointmentStatus.DONE) {
+      throw new BadRequestException('Cannot cancel a completed appointment');
+    }
+    if (appointment.status === AppointmentStatus.CANCELLED) {
+      throw new BadRequestException('Appointment is already cancelled');
+    }
+    if ((appointment.forfeitedPrepaymentAmount ?? 0) > 0) {
+      throw new BadRequestException(
+        'Предоплата по этой записи уже учтена в доход; отмена без сгорания недоступна',
+      );
+    }
+
+    const previousStatus = appointment.status;
+
+    const updated = await this.prisma.appointment.update({
+      where: { id },
+      data: {
+        status: AppointmentStatus.CANCELLED,
+        holdExpiresAt: null,
+      },
+      include: {
+        staff: { include: { staffProfile: true } },
+        client: true,
+        service: true,
+        serviceItems: {
+          include: { service: true },
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+    });
+
+    await this.autoMessages.handleAppointmentStatusChanged(
+      id,
+      previousStatus,
+      AppointmentStatus.CANCELLED,
+    );
+    this.scheduleAutoMessages(id);
+
+    await this.appointmentHistory.record({
+      appointmentId: id,
+      studioId: appointment.studioId,
+      action: AppointmentHistoryAction.STATUS_CHANGED,
+      summary: `Статус: «${formatStatus(previousStatus)}» → «${formatStatus(AppointmentStatus.CANCELLED)}»`,
+      payload: {
+        appointmentId: id,
+        from: previousStatus,
+        to: AppointmentStatus.CANCELLED,
+      },
+      actorUserId: userStaffId,
+    });
+    await this.appointmentHistory.record({
+      appointmentId: id,
+      studioId: appointment.studioId,
+      action: AppointmentHistoryAction.CANCELLED,
+      summary: 'Запись отменена без сгорания предоплаты',
+      payload: {
+        appointmentId: id,
+        waivePrepaymentForfeit: true,
+      },
+      actorUserId: userStaffId,
+    });
+
+    return maskAppointmentClientForRole(updated, userRole);
   }
 
   async markNoShow(

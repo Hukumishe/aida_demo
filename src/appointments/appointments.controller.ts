@@ -24,6 +24,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles, UserRole } from '../common/decorators/roles.decorator';
 import { listAppointmentStatusOptions } from './appointment-status.constants';
 
 @ApiTags('appointments')
@@ -224,6 +225,29 @@ export class AppointmentsController {
     return this.appointmentsService.update(
       id,
       updateAppointmentDto,
+      user?.role,
+      user?.studioId,
+      user?.userId,
+      user?.organizationId,
+    );
+  }
+
+  @Post('appointments/:id/cancel-without-prepayment-forfeit')
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Отменить запись без сгорания предоплаты (только ADMIN)',
+    description:
+      'Поздняя отмена (< 4 ч до начала) без forfeitedPrepaymentAmount. Обычная отмена через PATCH с status=CANCELLED списывает предоплату в доход.',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Appointment not found' })
+  async cancelWithoutPrepaymentForfeit(
+    @Param('id') id: string,
+    @CurrentUser() user?: any,
+  ) {
+    return this.appointmentsService.cancelWithoutPrepaymentForfeit(
+      id,
       user?.role,
       user?.studioId,
       user?.userId,
