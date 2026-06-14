@@ -17,7 +17,7 @@ import {
   StudioLoyaltyMilestoneItemDto,
   StudioLoyaltyTierItemDto,
 } from './dto/update-studio-loyalty.dto';
-import { UserRole, isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { UserRole, isDeveloperRole, isOwnerLevelRole, canEditMasterLateFineAmount } from '../common/decorators/roles.decorator';
 import { resolveAutoTierForTotalPaid } from '../common/loyalty/studio-loyalty.util';
 import { DEFAULT_IANA_TIMEZONE } from '../common/effective-timezone';
 
@@ -152,6 +152,9 @@ export class StudiosService {
       feedbackLowRatingTaskTitle: org.feedbackLowRatingTaskTitle,
       masterLateFineAmount: org.masterLateFineAmount ?? 0,
       feedbackTwoGisUrl: studio.feedbackTwoGisUrl,
+      permissions: {
+        canEditMasterLateFineAmount: canEditMasterLateFineAmount(userRole),
+      },
     };
     if (!isDeveloperRole(userRole)) {
       return base;

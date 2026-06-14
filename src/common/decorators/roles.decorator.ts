@@ -32,6 +32,11 @@ export function isDeveloperRole(role: string | undefined): boolean {
   return role === UserRole.DEVELOPER;
 }
 
+/** Штраф мастера за опоздание в «Параметрах системы»: OWNER, DEPUTY_OWNER, DEVELOPER, SERVICE. */
+export function canEditMasterLateFineAmount(role: string | undefined): boolean {
+  return isOwnerLevelRole(role);
+}
+
 /**
  * Проверяет, может ли роль управлять владельцами (создавать/удалять OWNER)
  * Только OWNER может управлять владельцами
