@@ -11,7 +11,11 @@ import {
   getStaffServiceIdsUnion,
   removeStaffServiceAcrossStudios,
 } from '../common/staff-service-offering';
-import { assertAdminCannotEditMaster } from '../common/admin-access';
+import {
+  assertAdminCannotEditMaster,
+  assertAdminMasterStaffUpdate,
+  assertCanChangeStaffPhone,
+} from '../common/admin-access';
 import {
   assertMasterCanOnlyViewSelf,
   assertMasterCannotEditStaff,
@@ -67,6 +71,24 @@ export class UsersService {
       if (m) return;
     }
     throw new ForbiddenException('Access denied to this staff member');
+  }
+
+  private normalizeStaffPhone(raw: string): string {
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length === 11 && digits.startsWith('8')) {
+      return `+7${digits.slice(1)}`;
+    }
+    if (digits.length === 11 && digits.startsWith('7')) {
+      return `+${digits}`;
+    }
+    if (digits.length === 10) {
+      return `+7${digits}`;
+    }
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      return '';
+    }
+    return trimmed.startsWith('+') ? trimmed : digits ? `+${digits}` : trimmed;
   }
 
   private async validateStudioIdsBelongToOrganization(
@@ -500,9 +522,13 @@ export class UsersService {
     }
 
     await this.assertActorCanAccessStaff(user, userRole, userStudioId, actorUserId);
-    assertAdminCannotEditMaster(userRole, user.role);
+    assertAdminMasterStaffUpdate(userRole, user.role, updateStaffDto);
 
-    // Cannot change to OWNER role (only OWNER can do this, and only via special endpoint)
+    if (updateStaffDto.phone !== undefined) {
+      assertCanChangeStaffPhone(userRole);
+    }
+
+    // Cannot change to OWNER role
     if (updateStaffDto.role === UserRole.OWNER && !canManageOwners(userRole)) {
       throw new BadRequestException('Cannot change role to OWNER');
     }
@@ -521,6 +547,13 @@ export class UsersService {
       });
       if (existingEmail) {
         throw new BadRequestException('Email already exists');
+      }
+    }
+
+    if (updateStaffDto.phone !== undefined) {
+      updateStaffDto.phone = this.normalizeStaffPhone(updateStaffDto.phone);
+      if (!updateStaffDto.phone) {
+        throw new BadRequestException('Phone is required');
       }
     }
 
