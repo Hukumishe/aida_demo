@@ -104,11 +104,7 @@ export class UsersController {
   }
 
   @Patch('staff/:userId')
-  @ApiOperation({
-    summary: 'Update staff member',
-    description:
-      'Email, phone, role, password, филиалы. Админ может у мастера менять только `phone`. Телефон: OWNER, DEPUTY_OWNER, SERVICE, DEVELOPER, ADMIN.',
-  })
+  @ApiOperation({ summary: 'Update staff member' })
   @ApiResponse({ status: 200, description: 'Staff member updated' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Staff member not found' })
