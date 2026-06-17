@@ -330,6 +330,7 @@ model Organization {
   staffPayrollAccruals  StaffPayrollAccrual[]
   landingMasters        LandingMaster[]
   landingServiceCards   LandingServiceCard[]
+  landingCategoryCards  LandingCategoryCard[]
   loyaltyTiers          StudioLoyaltyTier[]
   loyaltyMilestones     StudioLoyaltyMilestone[]
   clientStudioLoyalties ClientStudioLoyalty[]
@@ -809,6 +810,7 @@ model ServiceCategory {
   studioDisabledCategories      StudioDisabledCategory[]
   nextbotAutoMessageTemplates   NextbotAutoMessageTemplate[]
   payrollCategoryRates          OrganizationPayrollCategoryRate[]
+  landingCategoryCards          LandingCategoryCard[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -1151,6 +1153,27 @@ model LandingServiceCard {
   @@index([organizationId])
   @@index([serviceId])
   @@map("landing_service_cards")
+}
+
+model LandingCategoryCard {
+  id             String   @id
+  organizationId String
+  categoryId     String
+  /// Заголовок на лендинге; если пусто — имя категории из CRM.
+  title          String?
+  /// Описание на лендинге; если пусто — description категории из CRM.
+  description    String?
+  order          Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category     ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, categoryId])
+  @@index([organizationId])
+  @@index([categoryId])
+  @@map("landing_category_cards")
 }
 
 model StaffService {

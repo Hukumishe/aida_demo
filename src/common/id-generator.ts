@@ -24,6 +24,7 @@ export const IdPrefix = {
   LandingPromotionCode: 'lpc',
   LandingMaster: 'lma',
   LandingServiceCard: 'lsc',
+  LandingCategoryCard: 'lcc',
   StaffService: 'sts',
   StaffServiceOverride: 'sso',
   Appointment: 'apt',

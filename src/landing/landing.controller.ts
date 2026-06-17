@@ -33,6 +33,9 @@ import { UpdateLandingMastersDto } from './dto/update-masters.dto';
 import { CreateLandingServiceCardDto } from './dto/create-service-card.dto';
 import { UpdateLandingServiceCardDto } from './dto/update-service-card.dto';
 import { ReorderLandingServiceCardsDto } from './dto/reorder-service-cards.dto';
+import { CreateLandingCategoryCardDto } from './dto/create-category-card.dto';
+import { UpdateLandingCategoryCardDto } from './dto/update-category-card.dto';
+import { ReorderLandingCategoryCardsDto } from './dto/reorder-category-cards.dto';
 import { ResolvePromotionCodeDto } from './dto/resolve-promotion-code.dto';
 import { LandingBookingRequestDto } from './dto/landing-booking-request.dto';
 
@@ -418,6 +421,121 @@ export class LandingController {
     @CurrentUser() user: any,
   ) {
     return this.landingService.reorderServiceCards(
+      studioId,
+      dto,
+      user?.role,
+      user?.studioId,
+    );
+  }
+
+  /**
+   * Каталог категорий (CRM) для админки: выпадающий список при добавлении карточки категории на лендинг.
+   */
+  @Get('studios/:studioId/landing/category-catalog')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @ApiOperation({
+    summary: 'Каталог категорий для карточки лендинга (админка)',
+    description:
+      'Тот же состав, что GET /categories?studioId=… (с полем isOfferedInStudio). Для селекта «Категория» в модалке.',
+  })
+  @ApiResponse({ status: 200 })
+  async getCategoryCatalogForLanding(
+    @Param('studioId') studioId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.landingService.getCategoryCatalogForLandingCards(
+      studioId,
+      user?.role,
+      user?.studioId,
+      user?.organizationId,
+    );
+  }
+
+  @Public()
+  @Get('studios/:studioId/landing/categories')
+  @ApiOperation({
+    summary: 'Карточки категорий для лендинга (публично)',
+    description:
+      'Название и описание для витрины. Цена не возвращается. Для админки — category-catalog и CRUD ниже.',
+  })
+  @ApiResponse({ status: 200 })
+  async getCategoryCards(@Param('studioId') studioId: string) {
+    return this.landingService.getCategoryCards(studioId);
+  }
+
+  @Post('studios/:studioId/landing/categories')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @ApiOperation({ summary: 'Добавить категорию на лендинг' })
+  @ApiResponse({ status: 201 })
+  async createCategoryCard(
+    @Param('studioId') studioId: string,
+    @Body() dto: CreateLandingCategoryCardDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.landingService.createCategoryCard(
+      studioId,
+      dto,
+      user?.role,
+      user?.studioId,
+    );
+  }
+
+  @Patch('studios/:studioId/landing/categories/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @ApiOperation({ summary: 'Обновить карточку категории (заголовок, описание)' })
+  @ApiResponse({ status: 200 })
+  async updateCategoryCard(
+    @Param('studioId') studioId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateLandingCategoryCardDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.landingService.updateCategoryCard(
+      studioId,
+      id,
+      dto,
+      user?.role,
+      user?.studioId,
+    );
+  }
+
+  @Delete('studios/:studioId/landing/categories/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @ApiOperation({ summary: 'Удалить карточку категории с лендинга' })
+  @ApiResponse({ status: 200 })
+  async deleteCategoryCard(
+    @Param('studioId') studioId: string,
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.landingService.deleteCategoryCard(
+      studioId,
+      id,
+      user?.role,
+      user?.studioId,
+    );
+  }
+
+  @Patch('studios/:studioId/landing/categories/reorder')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @ApiOperation({ summary: 'Обновить порядок карточек категорий (drag&drop)' })
+  @ApiResponse({ status: 200 })
+  async reorderCategoryCards(
+    @Param('studioId') studioId: string,
+    @Body() dto: ReorderLandingCategoryCardsDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.landingService.reorderCategoryCards(
       studioId,
       dto,
       user?.role,

@@ -22,6 +22,9 @@ import { UpdateLandingMastersDto } from './dto/update-masters.dto';
 import { CreateLandingServiceCardDto } from './dto/create-service-card.dto';
 import { UpdateLandingServiceCardDto } from './dto/update-service-card.dto';
 import { ReorderLandingServiceCardsDto } from './dto/reorder-service-cards.dto';
+import { CreateLandingCategoryCardDto } from './dto/create-category-card.dto';
+import { UpdateLandingCategoryCardDto } from './dto/update-category-card.dto';
+import { ReorderLandingCategoryCardsDto } from './dto/reorder-category-cards.dto';
 import { generateId, IdPrefix } from '../common/id-generator';
 import {
   assertUserOrganizationMatchesStudio,
@@ -29,8 +32,10 @@ import {
 } from '../common/organization-scope';
 import {
   assertServiceBookableAtStudio,
+  assertCategoryOfferedAtStudio,
   getDisabledServiceIdsForStudio,
   getDisabledCategoryIdsForStudio,
+  isCategoryOfferedInStudio,
   isServiceOfferedInStudio,
 } from '../common/service-studio-offering';
 import { getStaffUserIdsOfferingAllServicesInStudio } from '../common/staff-service-offering';
@@ -72,6 +77,21 @@ export class LandingService {
     userOrganizationId?: string,
   ) {
     return this.servicesService.findAll(
+      userRole,
+      userStudioId,
+      userOrganizationId,
+      undefined,
+      studioId,
+    );
+  }
+
+  getCategoryCatalogForLandingCards(
+    studioId: string,
+    userRole?: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+  ) {
+    return this.servicesService.findCategories(
       userRole,
       userStudioId,
       userOrganizationId,
@@ -652,6 +672,157 @@ export class LandingService {
     );
 
     return this.getServiceCards(studioId);
+  }
+
+  // --- Category cards ---
+
+  private mapCategoryCardForLanding(card: {
+    id: string;
+    categoryId: string;
+    title: string | null;
+    description: string | null;
+    order: number;
+    category: { id: string; name: string; description: string | null };
+  }) {
+    return {
+      id: card.id,
+      categoryId: card.categoryId,
+      title: card.title ?? card.category.name,
+      description: card.description ?? card.category.description ?? null,
+      order: card.order,
+    };
+  }
+
+  async getCategoryCards(studioId: string) {
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const disabledCategoryIds = await getDisabledCategoryIdsForStudio(this.prisma, studioId);
+    const cards = await this.prisma.landingCategoryCard.findMany({
+      where: { organizationId },
+      include: { category: true },
+      orderBy: { order: 'asc' },
+    });
+    return cards
+      .filter((c) => c.category && isCategoryOfferedInStudio(c.category, disabledCategoryIds))
+      .map((c) => this.mapCategoryCardForLanding(c));
+  }
+
+  async createCategoryCard(
+    studioId: string,
+    dto: CreateLandingCategoryCardDto,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    this.ensureStudioAccess(studioId, userRole, userStudioId);
+
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
+    await assertCategoryOfferedAtStudio(
+      this.prisma,
+      studioId,
+      dto.categoryId,
+      organizationId,
+    );
+
+    const count = await this.prisma.landingCategoryCard.count({
+      where: { organizationId },
+    });
+
+    const card = await this.prisma.landingCategoryCard.create({
+      data: {
+        id: generateId(IdPrefix.LandingCategoryCard),
+        organizationId,
+        categoryId: dto.categoryId,
+        title: dto.title ?? null,
+        description: dto.description ?? null,
+        order: dto.order ?? count,
+      },
+      include: { category: true },
+    });
+
+    return this.mapCategoryCardForLanding(card);
+  }
+
+  async updateCategoryCard(
+    studioId: string,
+    id: string,
+    dto: UpdateLandingCategoryCardDto,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    this.ensureStudioAccess(studioId, userRole, userStudioId);
+
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
+    const existing = await this.prisma.landingCategoryCard.findFirst({
+      where: { id, organizationId },
+      include: { category: true },
+    });
+    if (!existing) {
+      throw new NotFoundException('Category card not found');
+    }
+
+    const card = await this.prisma.landingCategoryCard.update({
+      where: { id },
+      data: {
+        title: dto.title ?? undefined,
+        description: dto.description ?? undefined,
+      },
+      include: { category: true },
+    });
+
+    return this.mapCategoryCardForLanding(card);
+  }
+
+  async deleteCategoryCard(
+    studioId: string,
+    id: string,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    this.ensureStudioAccess(studioId, userRole, userStudioId);
+
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
+    const existing = await this.prisma.landingCategoryCard.findFirst({
+      where: { id, organizationId },
+    });
+    if (!existing) {
+      throw new NotFoundException('Category card not found');
+    }
+
+    await this.prisma.landingCategoryCard.delete({ where: { id } });
+    return { success: true };
+  }
+
+  async reorderCategoryCards(
+    studioId: string,
+    dto: ReorderLandingCategoryCardsDto,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    this.ensureStudioAccess(studioId, userRole, userStudioId);
+
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+
+    const ids = dto.items.map((i) => i.id);
+    const existing = await this.prisma.landingCategoryCard.findMany({
+      where: { id: { in: ids }, organizationId },
+      select: { id: true },
+    });
+    const validIds = new Set(existing.map((c) => c.id));
+
+    const updates = dto.items.filter((i) => validIds.has(i.id));
+
+    await this.prisma.$transaction(
+      updates.map((i) =>
+        this.prisma.landingCategoryCard.update({
+          where: { id: i.id },
+          data: { order: i.order },
+        }),
+      ),
+    );
+
+    return this.getCategoryCards(studioId);
   }
 
   // --- Helpers ---

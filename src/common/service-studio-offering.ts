@@ -28,6 +28,38 @@ export async function getDisabledCategoryIdsForStudio(
  * Услуга доступна в филиале: активны категория и услуга в каталоге сети,
  * нет отключения категории и нет отключения услуги в этом филиале.
  */
+/** Категория доступна в филиале: активна в каталоге сети и не отключена в этом филиале. */
+export function isCategoryOfferedInStudio(
+  category: { id: string; isActive: boolean },
+  disabledCategoryIds: Set<string>,
+): boolean {
+  if (!category.isActive) return false;
+  return !disabledCategoryIds.has(category.id);
+}
+
+export async function assertCategoryOfferedAtStudio(
+  prisma: PrismaService,
+  studioId: string,
+  categoryId: string,
+  organizationId: string,
+): Promise<ServiceCategory> {
+  const category = await prisma.serviceCategory.findFirst({
+    where: { id: categoryId, organizationId },
+  });
+  if (!category || !category.isActive) {
+    throw new NotFoundException(
+      'Service category not found, does not belong to this organization, or is inactive',
+    );
+  }
+  const disabled = await prisma.studioDisabledCategory.findUnique({
+    where: { studioId_categoryId: { studioId, categoryId: category.id } },
+  });
+  if (disabled) {
+    throw new NotFoundException('Service category is not offered at this studio');
+  }
+  return category;
+}
+
 export function isServiceOfferedInStudio(
   service: { id: string; isActive: boolean; categoryId: string },
   category: { id: string; isActive: boolean },
