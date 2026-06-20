@@ -36,6 +36,7 @@ import { ReorderLandingServiceCardsDto } from './dto/reorder-service-cards.dto';
 import { CreateLandingCategoryCardDto } from './dto/create-category-card.dto';
 import { UpdateLandingCategoryCardDto } from './dto/update-category-card.dto';
 import { ReorderLandingCategoryCardsDto } from './dto/reorder-category-cards.dto';
+import { UpdateLandingWhatsAppSettingsDto } from './dto/update-whatsapp-settings.dto';
 import { ResolvePromotionCodeDto } from './dto/resolve-promotion-code.dto';
 import { LandingBookingRequestDto } from './dto/landing-booking-request.dto';
 
@@ -274,6 +275,43 @@ export class LandingController {
   @ApiResponse({ status: 201 })
   submitBookingRequest(@Body() dto: LandingBookingRequestDto) {
     return this.landingService.submitBookingRequest(dto);
+  }
+
+  // --- WhatsApp settings ---
+
+  @Public()
+  @Get('studios/:studioId/landing/whatsapp-settings')
+  @ApiOperation({
+    summary: 'WhatsApp настройки лендинга (публично)',
+    description:
+      'Номер менеджера и префил сообщения для кнопки перехода в WhatsApp на лендинге.',
+  })
+  @ApiResponse({ status: 200 })
+  async getWhatsAppSettings(@Param('studioId') studioId: string) {
+    return this.landingService.getWhatsAppSettings(studioId);
+  }
+
+  @Patch('studios/:studioId/landing/whatsapp-settings')
+  @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
+  @ApiBearerAuth()
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @ApiOperation({
+    summary: 'Обновить WhatsApp настройки лендинга',
+    description:
+      'Изменяет номер менеджера и приветственный текст для кнопки WhatsApp. Настройка на уровне организации.',
+  })
+  @ApiResponse({ status: 200 })
+  async updateWhatsAppSettings(
+    @Param('studioId') studioId: string,
+    @Body() dto: UpdateLandingWhatsAppSettingsDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.landingService.updateWhatsAppSettings(
+      studioId,
+      dto,
+      user?.role,
+      user?.studioId,
+    );
   }
 
   // --- Masters ---

@@ -308,6 +308,10 @@ model Organization {
   /// Исходящие сообщения Nextbot (webhook URL задаётся с frontend / маркетинг).
   nextbotOutboundWebhookUrl      String?
   nextbotOutboundWebhookApiKey   String?
+  /// WhatsApp для лендинга: номер менеджера для перехода в чат.
+  landingWhatsappPhone           String?
+  /// WhatsApp для лендинга: префил сообщения, которое отправит клиент.
+  landingWhatsappPrefillMessage  String?
   /// Задача менеджерам при оценке визита ≤3 (заголовок).
   feedbackLowRatingTaskTitle     String?
   /// Штраф мастера за опоздание к началу записи (₸). Скидка клиенту при завершении визита.

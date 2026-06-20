@@ -25,6 +25,7 @@ import { ReorderLandingServiceCardsDto } from './dto/reorder-service-cards.dto';
 import { CreateLandingCategoryCardDto } from './dto/create-category-card.dto';
 import { UpdateLandingCategoryCardDto } from './dto/update-category-card.dto';
 import { ReorderLandingCategoryCardsDto } from './dto/reorder-category-cards.dto';
+import { UpdateLandingWhatsAppSettingsDto } from './dto/update-whatsapp-settings.dto';
 import { generateId, IdPrefix } from '../common/id-generator';
 import {
   assertUserOrganizationMatchesStudio,
@@ -54,6 +55,16 @@ function normalizeLandingPhone(raw: string): string {
     return `+7${digits}`;
   }
   return raw.trim();
+}
+
+function buildWhatsAppDeepLink(phone: string | null, text: string | null): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+  const encodedText = text?.trim() ? encodeURIComponent(text.trim()) : '';
+  return encodedText
+    ? `https://wa.me/${digits}?text=${encodedText}`
+    : `https://wa.me/${digits}`;
 }
 
 @Injectable()
@@ -98,6 +109,68 @@ export class LandingService {
       undefined,
       studioId,
     );
+  }
+
+  async getWhatsAppSettings(studioId: string) {
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: {
+        landingWhatsappPhone: true,
+        landingWhatsappPrefillMessage: true,
+      },
+    });
+    if (!org) {
+      throw new NotFoundException('Organization not found');
+    }
+    return {
+      whatsappPhone: org.landingWhatsappPhone,
+      whatsappPrefillMessage: org.landingWhatsappPrefillMessage,
+      whatsappUrl: buildWhatsAppDeepLink(
+        org.landingWhatsappPhone,
+        org.landingWhatsappPrefillMessage,
+      ),
+    };
+  }
+
+  async updateWhatsAppSettings(
+    studioId: string,
+    dto: UpdateLandingWhatsAppSettingsDto,
+    userRole?: string,
+    userStudioId?: string,
+  ) {
+    this.ensureStudioAccess(studioId, userRole, userStudioId);
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const data: {
+      landingWhatsappPhone?: string | null;
+      landingWhatsappPrefillMessage?: string | null;
+    } = {};
+    if (dto.whatsappPhone !== undefined) {
+      const raw = dto.whatsappPhone ?? '';
+      const normalized = raw.trim() ? normalizeLandingPhone(raw) : null;
+      data.landingWhatsappPhone = normalized;
+    }
+    if (dto.whatsappPrefillMessage !== undefined) {
+      const raw = dto.whatsappPrefillMessage ?? '';
+      const message = raw.trim();
+      data.landingWhatsappPrefillMessage = message || null;
+    }
+    const org = await this.prisma.organization.update({
+      where: { id: organizationId },
+      data,
+      select: {
+        landingWhatsappPhone: true,
+        landingWhatsappPrefillMessage: true,
+      },
+    });
+    return {
+      whatsappPhone: org.landingWhatsappPhone,
+      whatsappPrefillMessage: org.landingWhatsappPrefillMessage,
+      whatsappUrl: buildWhatsAppDeepLink(
+        org.landingWhatsappPhone,
+        org.landingWhatsappPrefillMessage,
+      ),
+    };
   }
 
   // --- Promotions (organization-level) ---
