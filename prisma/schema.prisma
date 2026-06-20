@@ -347,6 +347,7 @@ model Organization {
   notifications         Notification[]
   devTickets            DevTicket[]
   waitlistEntries       WaitlistEntry[]
+  clientStaffDiaryEntries ClientStaffDiaryEntry[]
 
   @@map("organizations")
 }
@@ -534,6 +535,7 @@ model User {
   waitlistEntries       WaitlistEntry[]
   appointmentHistoryActions AppointmentHistoryEntry[] @relation("AppointmentHistoryActor")
   payrollAccruals           StaffPayrollAccrual[]
+  clientStaffDiaryEntries   ClientStaffDiaryEntry[]
 
   @@index([organizationId])
   @@index([studioId])
@@ -726,6 +728,7 @@ model Client {
   appointmentFeedbacks   AppointmentFeedback[]
   birthdayMessageLogs    NextbotBirthdayMessageLog[]
   targetPromoActivations TargetPromoActivation[]
+  staffDiaryEntries      ClientStaffDiaryEntry[]
 
   @@unique([organizationId, phone])
   @@unique([organizationId, referralCode])
@@ -1264,6 +1267,7 @@ model Appointment {
   feedback               AppointmentFeedback?
   historyEntries         AppointmentHistoryEntry[]
   payrollAccruals        StaffPayrollAccrual[]
+  staffDiaryEntries      ClientStaffDiaryEntry[]
 
   @@index([studioId, staffUserId, startAt])
   @@index([studioId, startAt])
@@ -1289,6 +1293,28 @@ model AppointmentHistoryEntry {
   @@index([appointmentId, createdAt])
   @@index([studioId, createdAt])
   @@map("appointment_history_entries")
+}
+
+/// Личный дневник мастера о клиенте (видит автор и owner/deputy).
+model ClientStaffDiaryEntry {
+  id             String   @id
+  organizationId String
+  clientId       String
+  staffUserId    String
+  appointmentId  String?
+  body           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  staff        User         @relation(fields: [staffUserId], references: [id], onDelete: Cascade)
+  appointment  Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, staffUserId, createdAt])
+  @@index([organizationId, clientId])
+  @@index([appointmentId])
+  @@map("client_staff_diary_entries")
 }
 
 /// Основные услуги в рамках одной записи (мультисервисная запись, не допродажи).

@@ -37,6 +37,19 @@ export function canEditMasterLateFineAmount(role: string | undefined): boolean {
   return isOwnerLevelRole(role);
 }
 
+/** Личный дневник мастера: OWNER, DEPUTY_OWNER, DEVELOPER видят все записи; MASTER — только свои. */
+export function canViewAllClientStaffDiaryEntries(role: string | undefined): boolean {
+  return (
+    role === UserRole.DEVELOPER ||
+    role === UserRole.OWNER ||
+    role === UserRole.DEPUTY_OWNER
+  );
+}
+
+export function canUseClientStaffDiary(role: string | undefined): boolean {
+  return canViewAllClientStaffDiaryEntries(role) || role === UserRole.MASTER;
+}
+
 /**
  * Проверяет, может ли роль управлять владельцами (создавать/удалять OWNER)
  * Только OWNER может управлять владельцами

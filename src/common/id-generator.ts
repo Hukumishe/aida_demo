@@ -13,6 +13,7 @@ export const IdPrefix = {
   /** Привязка сотрудника к филиалу (несколько филиалов) */
   UserStudioMembership: 'usm',
   Client: 'cli',
+  ClientStaffDiaryEntry: 'csd',
   Prompt: 'prm',
   WorkScheduleDay: 'wsd',
   BusySlot: 'bsy',
