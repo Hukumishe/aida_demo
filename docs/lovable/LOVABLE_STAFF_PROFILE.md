@@ -24,6 +24,11 @@
 Authorization: Bearer <token>
 ```
 
+**Query Parameters (опционально):**
+- `from` — начало периода (`YYYY-MM-DD`)
+- `to` — конец периода (`YYYY-MM-DD`)
+- `studioId` — филиал для подсчёта записей мастера
+
 **Response 200:**
 ```json
 {
@@ -55,10 +60,24 @@ Authorization: Bearer <token>
       "defaultPrice": 2000
     }
   ],
+  "appointmentStats": {
+    "period": { "from": "2026-06-01", "to": "2026-06-30" },
+    "studioId": "studio-uuid",
+    "studioScope": "single",
+    "total": 42,
+    "excludingCancelled": 38,
+    "byStatus": {
+      "BOOKED": 5,
+      "DONE": 30,
+      "CANCELLED": 4
+    }
+  },
   "createdAt": "2024-01-15T10:00:00.000Z",
   "updatedAt": "2024-01-15T10:00:00.000Z"
 }
 ```
+
+Поле **`appointmentStats`** только для **`role === MASTER`**. Основная метрика для UI — **`excludingCancelled`**. Промпт Lovable: `LOVABLE_STAFF_PROFILE_APPOINTMENT_STATS_PROMPT.md`.
 
 ### 2. Обновить профиль сотрудника
 

@@ -36,6 +36,15 @@ import {
   canManageOwners,
   canManageDeputies,
 } from '../common/decorators/roles.decorator';
+import { assertStaffWorksAtStudio } from '../common/staff-studio-membership';
+import { StaffProfileQueryDto } from './dto/staff-profile-query.dto';
+import {
+  StaffProfileAppointmentStats,
+  buildAppointmentStatsFromRows,
+  collectStaffWorkStudioIds,
+  resolveStaffProfileStatsPeriod,
+  timezoneFromStudio,
+} from './staff-profile-appointment-stats.util';
 
 /** Роли, которые могут быть на уровне сети (`studioId` = null) и показываются во всех филиалах. */
 const NETWORK_STAFF_ROLES: UserRole[] = [
@@ -852,6 +861,7 @@ export class UsersService {
     userRole: string,
     userStudioId?: string,
     actorUserId?: string,
+    query?: StaffProfileQueryDto,
   ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -940,12 +950,110 @@ export class UsersService {
       updatedAt: user.updatedAt,
     };
 
+    if (user.role === UserRole.MASTER) {
+      result.appointmentStats = await this.loadStaffAppointmentStats(
+        user,
+        userRole,
+        userStudioId,
+        actorUserId,
+        query,
+      );
+    }
+
     // Include password only for OWNER and DEPUTY_OWNER
     if (isOwnerLevelRole(userRole)) {
       result.password = user.password;
     }
 
     return result;
+  }
+
+  private async loadStaffAppointmentStats(
+    staff: {
+      id: string;
+      studioId: string | null;
+      studioMemberships: { studioId: string }[];
+    },
+    actorRole: string,
+    actorStudioId: string | undefined,
+    actorUserId: string | undefined,
+    query?: StaffProfileQueryDto,
+  ): Promise<StaffProfileAppointmentStats> {
+    const workStudioIds = collectStaffWorkStudioIds(staff);
+    const requestedStudioId = query?.studioId?.trim() || undefined;
+    let scopedStudioId: string | null = null;
+    let studioScope: 'single' | 'all_work_studios' = 'all_work_studios';
+    let studioFilter: string | { in: string[] } | undefined;
+
+    if (requestedStudioId) {
+      if (!workStudioIds.includes(requestedStudioId)) {
+        throw new BadRequestException(
+          'Указанный филиал не входит в список филиалов мастера',
+        );
+      }
+      await assertStaffWorksAtStudio(this.prisma, staff.id, requestedStudioId);
+      if (!isOwnerLevelRole(actorRole) && actorRole !== UserRole.MANAGER) {
+        await assertUserStudioAccessForResource(this.prisma, {
+          userRole: actorRole,
+          userId: actorUserId,
+          userStudioId: actorStudioId,
+          studioId: requestedStudioId,
+        });
+      }
+      scopedStudioId = requestedStudioId;
+      studioScope = 'single';
+      studioFilter = requestedStudioId;
+    } else if (actorStudioId?.trim()) {
+      const sid = actorStudioId.trim();
+      if (workStudioIds.includes(sid)) {
+        scopedStudioId = sid;
+        studioScope = 'single';
+        studioFilter = sid;
+      } else if (workStudioIds.length > 0) {
+        studioFilter = { in: workStudioIds };
+      }
+    } else if (workStudioIds.length > 0) {
+      studioFilter = { in: workStudioIds };
+    }
+
+    const statsStudio = scopedStudioId
+      ? await this.prisma.studio.findUnique({
+          where: { id: scopedStudioId },
+          include: { organization: true },
+        })
+      : staff.studioId
+        ? await this.prisma.studio.findUnique({
+            where: { id: staff.studioId },
+            include: { organization: true },
+          })
+        : workStudioIds[0]
+          ? await this.prisma.studio.findUnique({
+              where: { id: workStudioIds[0] },
+              include: { organization: true },
+            })
+          : null;
+
+    const tz = timezoneFromStudio(statsStudio);
+    const period = resolveStaffProfileStatsPeriod(query?.from, query?.to, tz);
+
+    const rows = await this.prisma.appointment.findMany({
+      where: {
+        staffUserId: staff.id,
+        ...(studioFilter ? { studioId: studioFilter } : {}),
+        startAt: {
+          gte: period.startAtGte,
+          lt: period.startAtLt,
+        },
+      },
+      select: { status: true },
+    });
+
+    return buildAppointmentStatsFromRows(
+      rows,
+      { from: period.fromLabel, to: period.toLabel },
+      scopedStudioId,
+      studioScope,
+    );
   }
 
   async updateStaffProfile(

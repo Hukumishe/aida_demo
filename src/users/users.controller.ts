@@ -23,6 +23,7 @@ import { UpdateStaffPhoneDto } from './dto/update-staff-phone.dto';
 import { AddStaffServiceDto } from './dto/add-staff-service.dto';
 import { CreateServiceOverrideDto } from './dto/create-service-override.dto';
 import { UpdateServiceOverrideDto } from './dto/update-service-override.dto';
+import { StaffProfileQueryDto } from './dto/staff-profile-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
@@ -208,9 +209,16 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'Staff member not found' })
   async getStaffProfile(
     @Param('userId') userId: string,
+    @Query() query: StaffProfileQueryDto,
     @CurrentUser() user: any,
   ) {
-    return this.usersService.getStaffProfile(userId, user.role, user.studioId, user.userId);
+    return this.usersService.getStaffProfile(
+      userId,
+      user.role,
+      user.studioId,
+      user.userId,
+      query,
+    );
   }
 
   @Patch('staff/:userId/profile')
