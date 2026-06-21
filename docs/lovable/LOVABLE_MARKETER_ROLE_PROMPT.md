@@ -30,7 +30,7 @@ JWT: `role === 'MARKETER'`, `organizationId` — сеть салонов, `studi
 | **Автосообщения Nextbot** | `GET/POST/PATCH/DELETE /studios/:studioId/nextbot-auto-messages/*`, logs, test-send, presets | «Догоняющие» сценарии |
 | **Реф. ссылки (?ref=)** | `GET/POST/PATCH /studios/:studioId/referral-links` | UTM-источники |
 | **Настройки маркетинга** | `GET/PATCH /studios/:studioId/settings` | **Только** поля ниже |
-| **Программа лояльности** | `GET/PUT /studios/:studioId/loyalty` | PRESET / CUSTOM: уровни, % кэшбэка, вехи |
+| **Программа лояльности** | `GET/PUT /studios/:studioId/loyalty` | PRESET / CUSTOM + `permissions.canEdit`; лимит бонусов в settings; `bonusAccrualEnabled` на услугах |
 | **Список филиалов** | `GET /studios` | Все студии своей организации |
 
 **PATCH settings — разрешённые поля для MARKETER:**
@@ -38,6 +38,7 @@ JWT: `role === 'MARKETER'`, `organizationId` — сеть салонов, `studi
 - `referFriendEnabled`, `referFriendInviteeRewardType`, `referFriendInviteeValue`, `referFriendReferrerRewardType`, `referFriendReferrerValue` — «Приведи друга»
 - `marketingHoursStartHour`, `marketingHoursEndHour` — рабочие часы отдела маркетинга (Nextbot)
 - `feedbackTwoGisUrl`, `feedbackLowRatingTaskTitle` — автосообщения «запрос оценки»
+- `globalBonusPaymentLimitPercent` — лимит оплаты бонусами (0–100%)
 
 Остальные поля settings (бонусы, Kaspi, штрафы, webhook Nextbot) — **read-only или скрыть** для маркетолога.
 
@@ -89,7 +90,9 @@ function canAccessMarketingSection(section: string): boolean {
 
 Владелец создаёт через существующий CRUD сотрудников: роль **`MARKETER`**, `studioId = null` (уровень сети). См. `POST /studios/:studioId/staff` с `role: "MARKETER"`.
 
-**Форма «Добавить сотрудника»:** для роли MARKETER (и MANAGER) **не отправлять** `studioIds` / блок «Филиалы» можно скрыть — бэкенд всё равно игнорирует филиалы, но лучше не показывать лишнее.
+**Форма «Добавить сотрудника»:** для роли MARKETER (и MANAGER) **не отправлять** `studioIds` / блок «Филиалы» можно скрыть.
+
+**Лояльность (UI):** см. **`LOVABLE_MARKETER_LOYALTY_FULL_ACCESS_PROMPT.md`** — toggle и редактор не только для OWNER.
 
 ---
 

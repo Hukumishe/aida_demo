@@ -19,6 +19,7 @@ import {
 } from './dto/update-studio-loyalty.dto';
 import { UserRole, isDeveloperRole, isOwnerLevelRole, canEditMasterLateFineAmount, hasOrganizationWideStudioAccess, isMarketerRole, canManageMarketingContent } from '../common/decorators/roles.decorator';
 import { resolveAutoTierForTotalPaid } from '../common/loyalty/studio-loyalty.util';
+import { LEVEL_ORDER, LEVEL_THRESHOLDS } from '../clients/constants/levels.constants';
 import { DEFAULT_IANA_TIMEZONE } from '../common/effective-timezone';
 
 /** Поля PATCH /studios/:id/settings, доступные роли MARKETER. */
@@ -32,6 +33,7 @@ const MARKETER_STUDIO_SETTINGS_FIELDS = new Set([
   'marketingHoursEndHour',
   'feedbackTwoGisUrl',
   'feedbackLowRatingTaskTitle',
+  'globalBonusPaymentLimitPercent',
 ]);
 
 function assertMarketerStudioSettingsScope(dto: Record<string, unknown>): void {
@@ -176,6 +178,8 @@ export class StudiosService {
       feedbackTwoGisUrl: studio.feedbackTwoGisUrl,
       permissions: {
         canEditMasterLateFineAmount: canEditMasterLateFineAmount(userRole),
+        canEditLoyalty: canManageMarketingContent(userRole),
+        canEditGlobalBonusLimit: canManageMarketingContent(userRole),
       },
     };
     if (!isDeveloperRole(userRole)) {
@@ -466,7 +470,31 @@ export class StudiosService {
         orderBy: { minTotalPaid: 'asc' },
       }),
     ]);
-    return { loyaltyMode: studio.organization.loyaltyMode, tiers, milestones };
+    return {
+      loyaltyMode: studio.organization.loyaltyMode,
+      tiers,
+      milestones,
+      presetLevels:
+        studio.organization.loyaltyMode === StudioLoyaltyMode.PRESET
+          ? LEVEL_ORDER.map((key) => ({
+              key,
+              name:
+                key === 'BRONZE'
+                  ? 'Бронза'
+                  : key === 'SILVER'
+                    ? 'Серебро'
+                    : key === 'GOLD'
+                      ? 'Золото'
+                      : 'Бриллиант',
+              cashbackPercent: LEVEL_THRESHOLDS[key]?.cashbackPercent ?? 3,
+              minTotalPaid: LEVEL_THRESHOLDS[key]?.minTotalPaid ?? 0,
+              manualOnly: key === 'DIAMOND',
+            }))
+          : undefined,
+      permissions: {
+        canEdit: canManageMarketingContent(userRole),
+      },
+    };
   }
 
   async updateLoyalty(

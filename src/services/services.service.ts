@@ -23,7 +23,7 @@ import { CreateServiceCategoryDto } from './dto/create-service-category.dto';
 import { UpdateServiceCategoryDto } from './dto/update-service-category.dto';
 import { CreateServiceSubcategoryDto } from './dto/create-service-subcategory.dto';
 import { UpdateServiceSubcategoryDto } from './dto/update-service-subcategory.dto';
-import { UserRole, isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { UserRole, isDeveloperRole, isOwnerLevelRole, isMarketerRole } from '../common/decorators/roles.decorator';
 import { AppointmentStatus, ServiceAudience } from '@prisma/client';
 
 @Injectable()
@@ -240,7 +240,19 @@ export class ServicesService {
     userOrganizationId?: string,
     organizationIdQuery?: string,
   ) {
-    this.assertOrganizationCatalogAccess(userRole, userStudioId);
+    if (isMarketerRole(userRole)) {
+      const dtoKeys = Object.keys(updateServiceDto).filter(
+        (key) => (updateServiceDto as Record<string, unknown>)[key] !== undefined,
+      );
+      const forbidden = dtoKeys.filter((key) => key !== 'bonusAccrualEnabled');
+      if (forbidden.length > 0 || updateServiceDto.bonusAccrualEnabled === undefined) {
+        throw new ForbiddenException(
+          'Маркетолог может менять у услуги только поле bonusAccrualEnabled',
+        );
+      }
+    } else {
+      this.assertOrganizationCatalogAccess(userRole, userStudioId);
+    }
 
     const organizationId = await this.resolveOrganizationId(
       userRole,

@@ -9,7 +9,7 @@ import { assertUserOrganizationMatchesStudioOrganizationId } from '../common/org
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { UserRole, isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { UserRole, isDeveloperRole, isOwnerLevelRole, canManageMarketingContent, isMarketerRole } from '../common/decorators/roles.decorator';
 import { assertAdminCannotBrowseClientList } from '../common/admin-access';
 import { maskClientPhoneForRole } from '../common/client-phone-privacy.util';
 import {
@@ -996,8 +996,10 @@ export class ClientsService {
           'Для кастомной лояльности укажите customLoyaltyOrganizationId (или устаревший customLoyaltyStudioId)',
         );
       }
-      if (!isOwnerLevelRole(userRole)) {
-        throw new ForbiddenException('Only owner level role can change custom loyalty tier');
+      if (!canManageMarketingContent(userRole)) {
+        throw new ForbiddenException(
+          'Ручной уровень CUSTOM-лояльности может менять владелец сети или маркетолог',
+        );
       }
       if (customLoyaltyTierId == null && customLoyaltyClearManual !== true) {
         throw new BadRequestException(
