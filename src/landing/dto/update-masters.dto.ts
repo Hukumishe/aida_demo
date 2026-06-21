@@ -3,7 +3,7 @@ import { IsArray, IsBoolean, IsInt, IsString, Min, ValidateNested } from 'class-
 import { Type } from 'class-transformer';
 
 export class LandingMasterConfigDto {
-  @ApiProperty({ description: 'ID сотрудника (userId) из студии' })
+  @ApiProperty({ description: 'ID сотрудника (userId) из любого филиала сети' })
   @IsString()
   staffUserId: string;
 

@@ -78,38 +78,34 @@
 
 ### 2. Раздел «Мастера» (Masters)
 
-Раздел предназначен для управления тем, какие мастера отображаются на лендинге, и в каком порядке.
+Раздел предназначен для управления тем, **какие мастера отображаются на лендинге**, и в каком порядке. Настройки **единые для всей сети** (organization), не per-филиал.
 
-**API:**
+**API (админка — использовать этот):**
 
-- `GET /studios/:studioId/landing/masters`  
-  Возвращает массив объектов:
+- `GET /organizations/:organizationId/landing/masters`  
+  `:organizationId` из JWT (`auth/me`).
 
-  ```ts
+  Ответ:
+
+  ```json
   {
-    staffUserId: string;
-    isVisible: boolean;
-    order: number;
-    staff: {
-      id: string;
-      email: string | null;
-      phone: string | null;
-      role: string;
-      studioId: string | null;
-      isActive: boolean;
-      staffProfile: {
-        firstName: string;
-        lastName: string | null;
-        avatar: string | null;
-        title: string | null;
-        // и другие поля профиля
-      } | null;
-    };
+    "organizationId": "org_...",
+    "items": [
+      {
+        "staffUserId": "usr_...",
+        "isVisible": true,
+        "order": 0,
+        "primaryStudioId": "stu_...",
+        "primaryStudioName": "Филиал 1",
+        "workStudios": [{ "id": "stu_...", "name": "Филиал 1" }],
+        "staff": { "...": "..." }
+      }
+    ]
   }
   ```
 
-- `PATCH /studios/:studioId/landing/masters`  
-  Полностью обновляет конфигурацию видимости и порядка. Тело:
+- `PATCH /organizations/:organizationId/landing/masters`  
+  Полностью обновляет конфигурацию видимости и порядка **для всей сети**. Тело:
 
   ```json
   {
@@ -120,18 +116,28 @@
   }
   ```
 
+  В `items` можно передавать мастеров из **разных филиалов**.
+
+**API (публичный лендинг):**
+
+- `GET /studios/:studioId/landing/masters` — только мастера, **работающие в этом филиале**, с общими флагами `isVisible` / `order`. Не использовать для экрана настроек админки.
+
+**Legacy:** `PATCH /studios/:studioId/landing/masters` — alias (то же сохранение на organization). Новый UI — только organization endpoints.
+
+Промпт Lovable: `LOVABLE_LANDING_MASTERS_UNIFIED_PROMPT.md`.
+
 **UI‑требования:**
 
-- Показать всех активных сотрудников студии (использовать данные из поля `staff`):
+- **Один экран** на всю сеть, не дублировать по филиалам CRM.
+- Показать всех активных сотрудников **всех филиалов** из `items`:
   - имя и фамилия (из `staff.staffProfile.firstName`/`lastName`),
-  - должность/описание (`title`),
-  - аватар, если есть.
+  - должность (`title`),
+  - аватар,
+  - **филиал** — `primaryStudioName` или `workStudios`.
 - Для каждого мастера:
   - чекбокс «Показывать на сайте» (`isVisible`),
-  - возможность перетаскивать карточки мастеров (drag&drop) для изменения `order` (чем меньше, тем выше в списке/на лендинге).
-- После изменения:
-  - формировать массив `items` с актуальными `staffUserId`, `isVisible`, `order`,
-  - отправлять один `PATCH /studios/:studioId/landing/masters`.
+  - drag-and-drop для `order`.
+- Сохранение: один `PATCH /organizations/:organizationId/landing/masters` с полным массивом `items`.
 
 ---
 

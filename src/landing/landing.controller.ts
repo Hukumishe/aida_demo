@@ -319,7 +319,11 @@ export class LandingController {
   // Публичный список мастеров для лендинга
   @Public()
   @Get('studios/:studioId/landing/masters')
-  @ApiOperation({ summary: 'Список мастеров для лендинга с конфигурацией видимости и порядка' })
+  @ApiOperation({
+    summary: 'Мастера для витрины лендинга филиала (публично)',
+    description:
+      'Только сотрудники, работающие в этом филиале. Настройки видимости и порядка — общие для сети (organization). Для админки — GET /organizations/:organizationId/landing/masters.',
+  })
   @ApiResponse({ status: 200 })
   async getMasters(
     @Param('studioId') studioId: string,
@@ -327,11 +331,55 @@ export class LandingController {
     return this.landingService.getMasters(studioId);
   }
 
+  @Get('organizations/:organizationId/landing/masters')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiBearerAuth()
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE, UserRole.MARKETER)
+  @ApiOperation({
+    summary: 'Единые настройки мастеров лендинга (все филиалы сети)',
+    description:
+      'Список всех активных сотрудников организации с флагами isVisible и order. Один PATCH обновляет витрину для всей сети.',
+  })
+  @ApiResponse({ status: 200 })
+  async getMastersForOrganization(
+    @Param('organizationId') organizationId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.landingService.getMastersForOrganization(
+      organizationId,
+      user?.role,
+      user?.organizationId,
+    );
+  }
+
+  @Patch('organizations/:organizationId/landing/masters')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiBearerAuth()
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE, UserRole.MARKETER)
+  @ApiOperation({ summary: 'Обновить единый список мастеров лендинга для всей сети' })
+  @ApiResponse({ status: 200, description: 'Список мастеров обновлён' })
+  async updateMastersForOrganization(
+    @Param('organizationId') organizationId: string,
+    @Body() dto: UpdateLandingMastersDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.landingService.updateMastersForOrganization(
+      organizationId,
+      dto,
+      user?.role,
+      user?.organizationId,
+    );
+  }
+
   @Patch('studios/:studioId/landing/masters')
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
-  @ApiOperation({ summary: 'Обновить список мастеров для лендинга (галочки + порядок)' })
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE, UserRole.MARKETER)
+  @ApiOperation({
+    summary: 'Обновить мастеров лендинга (alias организации)',
+    description:
+      'Сохраняет единую конфигурацию organization. Рекомендуется PATCH /organizations/:organizationId/landing/masters.',
+  })
   @ApiResponse({ status: 200, description: 'Список мастеров обновлён' })
   async updateMasters(
     @Param('studioId') studioId: string,
@@ -343,6 +391,7 @@ export class LandingController {
       dto,
       user?.role,
       user?.studioId,
+      user?.organizationId,
     );
   }
 

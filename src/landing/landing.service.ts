@@ -29,6 +29,7 @@ import { UpdateLandingWhatsAppSettingsDto } from './dto/update-whatsapp-settings
 import { generateId, IdPrefix } from '../common/id-generator';
 import {
   assertUserOrganizationMatchesStudio,
+  assertUserOrganizationMatchesOrganizationId,
   getOrganizationIdForStudio,
 } from '../common/organization-scope';
 import {
@@ -42,6 +43,12 @@ import {
 import { getStaffUserIdsOfferingAllServicesInStudio } from '../common/staff-service-offering';
 import { isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { ServicesService } from '../services/services.service';
+import {
+  assertLandingMasterStaffIdsBelongToOrganization,
+  filterLandingMastersForStudio,
+  findOrganizationLandingStaff,
+  mapStaffToLandingMasterItems,
+} from './landing-masters.util';
 
 function normalizeLandingPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '');
@@ -546,30 +553,48 @@ export class LandingService {
 
   // --- Masters ---
 
+  /** Публичная витрина: мастера, работающие в филиале, с org-настройками видимости. */
   async getMasters(studioId: string) {
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const items = await this.buildOrganizationLandingMasterItems(organizationId);
+    const forStudio = await filterLandingMastersForStudio(this.prisma, studioId, items);
+    return forStudio.map(({ staffUserId, isVisible, order, staff }) => ({
+      staffUserId,
+      isVisible,
+      order,
+      staff,
+    }));
+  }
+
+  /** Админка: все сотрудники всех филиалов сети + единые настройки лендинга. */
+  async getMastersForOrganization(
+    organizationId: string,
+    userRole?: string,
+    userOrganizationId?: string,
+  ) {
+    assertUserOrganizationMatchesOrganizationId(
+      organizationId,
+      userOrganizationId,
+      userRole,
+    );
+    const items = await this.buildOrganizationLandingMasterItems(organizationId);
+    return {
+      organizationId,
+      items: items.sort(
+        (a, b) => a.order - b.order || a.staffUserId.localeCompare(b.staffUserId),
+      ),
+    };
+  }
+
+  private async buildOrganizationLandingMasterItems(organizationId: string) {
     const [configs, staff] = await Promise.all([
       this.prisma.landingMaster.findMany({
         where: { organizationId },
         orderBy: { order: 'asc' },
       }),
-      this.prisma.user.findMany({
-        where: { studioId, isActive: true },
-        include: { staffProfile: true },
-      }),
+      findOrganizationLandingStaff(this.prisma, organizationId),
     ]);
-
-    const byStaffId = new Map(configs.map((c) => [c.staffUserId, c]));
-
-    return staff.map((u) => {
-      const cfg = byStaffId.get(u.id);
-      return {
-        staffUserId: u.id,
-        isVisible: cfg?.isVisible ?? false,
-        order: cfg?.order ?? 0,
-        staff: u,
-      };
-    });
+    return mapStaffToLandingMasterItems(staff, configs);
   }
 
   async updateMasters(
@@ -577,23 +602,45 @@ export class LandingService {
     dto: UpdateLandingMastersDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    this.ensureStudioAccess(studioId, userRole, userStudioId);
-
+    await assertUserOrganizationMatchesStudio(
+      this.prisma,
+      studioId,
+      userOrganizationId,
+      userRole,
+    );
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    return this.updateMastersForOrganization(
+      organizationId,
+      dto,
+      userRole,
+      userOrganizationId,
+    );
+  }
+
+  async updateMastersForOrganization(
+    organizationId: string,
+    dto: UpdateLandingMastersDto,
+    userRole?: string,
+    userOrganizationId?: string,
+  ) {
+    assertUserOrganizationMatchesOrganizationId(
+      organizationId,
+      userOrganizationId,
+      userRole,
+    );
 
     const staffIds = dto.items.map((i) => i.staffUserId);
-    const existingStaff = await this.prisma.user.findMany({
-      where: { id: { in: staffIds }, studioId },
-      select: { id: true },
-    });
-    const validIds = new Set(existingStaff.map((s) => s.id));
-
-    const filtered = dto.items.filter((i) => validIds.has(i.staffUserId));
+    await assertLandingMasterStaffIdsBelongToOrganization(
+      this.prisma,
+      organizationId,
+      staffIds,
+    );
 
     await this.prisma.$transaction(async (tx) => {
       await tx.landingMaster.deleteMany({ where: { organizationId } });
-      for (const i of filtered) {
+      for (const i of dto.items) {
         await tx.landingMaster.create({
           data: {
             id: generateId(IdPrefix.LandingMaster),
@@ -606,7 +653,7 @@ export class LandingService {
       }
     });
 
-    return this.getMasters(studioId);
+    return this.getMastersForOrganization(organizationId, userRole, userOrganizationId);
   }
 
   // --- Services ---
