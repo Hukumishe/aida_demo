@@ -58,6 +58,8 @@
 - **Создать филиал:** `POST /studios` — тело `{ "name", "address?", "timezone?", "organizationId?" }`.  
   - Для **DEVELOPER**: если нужно создать филиал в **конкретной** организации, передай **`organizationId`** (созданную из `/organizations`).  
   - Для OWNER/DEPUTY/SERVICE филиал создаётся в **организации пользователя**, поле `organizationId` не требуется.
+- **Изменить название / адрес:** `PATCH /studios/:studioId` — `{ "name"?, "address"? }`. Роли **OWNER**, **DEPUTY_OWNER**, **DEVELOPER**. Флаги `permissions.canEditProfile` / `canDelete` в **`GET /studios/:studioId`**.
+- **Удалить филиал:** `DELETE /studios/:studioId` — **только DEVELOPER**; 400, если есть привязанные сотрудники.
 
 **Никогда не подставляй** в URL литералы вроде `{studioId}` или `{{studioId}}` — реальный id бери из **`GET /studios`** или из **`user.studioId`**.
 

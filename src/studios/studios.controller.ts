@@ -6,6 +6,7 @@ import {
   Body,
   Patch,
   Param,
+  Delete,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -16,6 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { StudiosService } from './studios.service';
 import { CreateStudioDto } from './dto/create-studio.dto';
+import { UpdateStudioDto } from './dto/update-studio.dto';
 import { UpdateStudioSettingsDto } from './dto/update-studio-settings.dto';
 import { UpdateStudioLoyaltyDto } from './dto/update-studio-loyalty.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -66,6 +68,35 @@ export class StudiosController {
     @CurrentUser() user: any,
   ) {
     return this.studiosService.findOne(studioId, user.role, user.studioId, user.organizationId);
+  }
+
+  @Patch(':studioId')
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER)
+  @ApiOperation({
+    summary: 'Обновить название и адрес филиала',
+    description: 'OWNER/DEPUTY — только филиалы своей организации. DEVELOPER — любой филиал.',
+  })
+  @ApiResponse({ status: 200, description: 'Studio updated' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async updateProfile(
+    @Param('studioId') studioId: string,
+    @Body() dto: UpdateStudioDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.studiosService.updateProfile(studioId, dto, user.role, user.organizationId);
+  }
+
+  @Delete(':studioId')
+  @Roles(UserRole.DEVELOPER)
+  @ApiOperation({
+    summary: 'Удалить филиал (только DEVELOPER)',
+    description:
+      'Полное удаление филиала и связанных данных. Запрещено, если к филиалу привязаны сотрудники.',
+  })
+  @ApiResponse({ status: 200, description: 'Studio deleted' })
+  @ApiResponse({ status: 400, description: 'Studio has linked users' })
+  async remove(@Param('studioId') studioId: string, @CurrentUser() user: any) {
+    return this.studiosService.remove(studioId, user.role);
   }
 
   @Get(':studioId/settings')

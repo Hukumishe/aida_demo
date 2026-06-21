@@ -13,6 +13,7 @@ import {
 } from '@prisma/client';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateStudioDto } from './dto/create-studio.dto';
+import { UpdateStudioDto } from './dto/update-studio.dto';
 import {
   StudioLoyaltyMilestoneItemDto,
   StudioLoyaltyTierItemDto,
@@ -52,6 +53,14 @@ function assertMarketerStudioSettingsScope(dto: Record<string, unknown>): void {
       `Маркетолог может менять только маркетинговые настройки. Запрещённые поля: ${forbidden.join(', ')}`,
     );
   }
+}
+
+function canEditStudioProfile(role: string): boolean {
+  return (
+    isDeveloperRole(role) ||
+    role === UserRole.OWNER ||
+    role === UserRole.DEPUTY_OWNER
+  );
 }
 
 @Injectable()
@@ -113,14 +122,99 @@ export class StudiosService {
     }
 
     if (hasOrganizationWideStudioAccess(userRole)) {
-      return studio;
+      return {
+        ...studio,
+        permissions: {
+          canEditProfile: canEditStudioProfile(userRole),
+          canDelete: isDeveloperRole(userRole),
+        },
+      };
     }
 
     if (userStudioId !== id) {
       throw new ForbiddenException('Access denied to this studio');
     }
 
-    return studio;
+    return {
+      ...studio,
+      permissions: {
+        canEditProfile: canEditStudioProfile(userRole),
+        canDelete: isDeveloperRole(userRole),
+      },
+    };
+  }
+
+  async updateProfile(
+    studioId: string,
+    dto: UpdateStudioDto,
+    userRole: string,
+    organizationId: string,
+  ) {
+    if (!canEditStudioProfile(userRole)) {
+      throw new ForbiddenException('Only owner, deputy owner or developer can edit studio profile');
+    }
+
+    const hasName = Object.prototype.hasOwnProperty.call(dto, 'name');
+    const hasAddress = Object.prototype.hasOwnProperty.call(dto, 'address');
+    if (!hasName && !hasAddress) {
+      throw new BadRequestException('Укажите name и/или address');
+    }
+
+    const studio = await this.prisma.studio.findUnique({ where: { id: studioId } });
+    if (!studio) {
+      throw new NotFoundException('Studio not found');
+    }
+    if (!isDeveloperRole(userRole) && studio.organizationId !== organizationId) {
+      throw new ForbiddenException('Access denied to this studio');
+    }
+
+    const data: { name?: string; address?: string | null } = {};
+    if (hasName) {
+      const name = dto.name?.trim();
+      if (!name) {
+        throw new BadRequestException('name cannot be empty');
+      }
+      data.name = name;
+    }
+    if (hasAddress) {
+      const raw = dto.address;
+      data.address = raw == null || raw.trim() === '' ? null : raw.trim();
+    }
+
+    return this.prisma.studio.update({
+      where: { id: studioId },
+      data,
+    });
+  }
+
+  async remove(studioId: string, userRole: string) {
+    if (!isDeveloperRole(userRole)) {
+      throw new ForbiddenException('Only DEVELOPER can delete a studio');
+    }
+
+    const studio = await this.prisma.studio.findUnique({ where: { id: studioId } });
+    if (!studio) {
+      throw new NotFoundException('Studio not found');
+    }
+
+    const linkedUsers = await this.prisma.user.count({
+      where: {
+        OR: [{ studioId }, { studioMemberships: { some: { studioId } } }],
+      },
+    });
+    if (linkedUsers > 0) {
+      throw new BadRequestException(
+        'Нельзя удалить филиал: к нему привязаны сотрудники. Переназначьте или удалите пользователей.',
+      );
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.appointmentHistoryEntry.deleteMany({ where: { studioId } }),
+      this.prisma.nextbotBirthdayMessageLog.deleteMany({ where: { studioId } }),
+      this.prisma.studio.delete({ where: { id: studioId } }),
+    ]);
+
+    return { success: true, id: studioId };
   }
 
   async getSettings(studioId: string, userRole: string, userStudioId: string | undefined) {
