@@ -45,17 +45,42 @@ export class AppointmentsController {
     summary: 'Журнал на день: записи клиентов + личное время (для сетки и списка)',
   })
   @ApiQuery({ name: 'date', required: true, description: 'YYYY-MM-DD' })
+  @ApiQuery({
+    name: 'createdByUserId',
+    required: false,
+    description: 'Только записи, созданные указанным пользователем (автор)',
+  })
+  @ApiQuery({
+    name: 'onlyMine',
+    required: false,
+    description: 'true — только записи, созданные текущим пользователем',
+  })
+  @ApiQuery({
+    name: 'staffUserId',
+    required: false,
+    description: 'Только записи к указанному мастеру (исполнитель визита)',
+  })
   async getAppointmentLogDay(
     @Param('studioId') studioId: string,
     @Query('date') date: string,
+    @Query('createdByUserId') createdByUserId?: string,
+    @Query('onlyMine') onlyMine?: string,
+    @Query('staffUserId') staffUserId?: string,
     @CurrentUser() user?: any,
   ) {
+    const authorFilter = this.resolveAppointmentAuthorFilter(
+      createdByUserId,
+      onlyMine,
+      user?.userId,
+    );
     return this.appointmentsService.getAppointmentLogDay(
       studioId,
       date,
       user?.role,
       user?.studioId,
       user?.userId,
+      authorFilter,
+      staffUserId?.trim() || undefined,
     );
   }
 
@@ -72,6 +97,11 @@ export class AppointmentsController {
     required: false,
     description: 'true — только записи, созданные текущим пользователем',
   })
+  @ApiQuery({
+    name: 'staffUserId',
+    required: false,
+    description: 'Только записи к указанному мастеру (исполнитель визита)',
+  })
   @ApiResponse({ status: 200, description: 'List of appointments' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAll(
@@ -79,14 +109,14 @@ export class AppointmentsController {
     @Query('date') date?: string,
     @Query('createdByUserId') createdByUserId?: string,
     @Query('onlyMine') onlyMine?: string,
+    @Query('staffUserId') staffUserId?: string,
     @CurrentUser() user?: any,
   ) {
-    let authorFilter = createdByUserId?.trim() || undefined;
-    if (onlyMine === 'true' || onlyMine === '1') {
-      if (user?.userId && user.userId !== 'api-key') {
-        authorFilter = user.userId;
-      }
-    }
+    const authorFilter = this.resolveAppointmentAuthorFilter(
+      createdByUserId,
+      onlyMine,
+      user?.userId,
+    );
     return this.appointmentsService.findAll(
       studioId,
       date,
@@ -94,7 +124,22 @@ export class AppointmentsController {
       user?.studioId,
       user?.userId,
       authorFilter,
+      staffUserId?.trim() || undefined,
     );
+  }
+
+  /** Автор записи: onlyMine перекрывает явный createdByUserId. */
+  private resolveAppointmentAuthorFilter(
+    createdByUserId?: string,
+    onlyMine?: string,
+    currentUserId?: string,
+  ): string | undefined {
+    if (onlyMine === 'true' || onlyMine === '1') {
+      if (currentUserId && currentUserId !== 'api-key') {
+        return currentUserId;
+      }
+    }
+    return createdByUserId?.trim() || undefined;
   }
 
   @Get('studios/:studioId/waitlist-entries')

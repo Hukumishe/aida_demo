@@ -30,6 +30,9 @@ Authorization: Bearer <accessToken>
 
 **Query Parameters:**
 - `date` (опционально): Фильтр по дате в формате `YYYY-MM-DD` (например: `2024-01-30`)
+- `onlyMine` (опционально): `true` / `1` — только записи, созданные текущим пользователем
+- `createdByUserId` (опционально): фильтр по автору записи (кто завёл в CRM)
+- `staffUserId` (опционально): фильтр по мастеру (исполнитель визита). См. `LOVABLE_APPOINTMENT_AUTHOR.md`
 
 **Response (200):**
 ```json

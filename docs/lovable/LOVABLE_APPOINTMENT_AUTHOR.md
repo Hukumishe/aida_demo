@@ -19,6 +19,18 @@
 
 Или явно: `?createdByUserId=<userId>`.
 
+## Фильтр по мастеру (исполнитель визита)
+
+`GET /studios/:studioId/appointments?staffUserId=<userId>` — только записи к указанному мастеру.
+
+Комбинируется с фильтром автора, например:
+
+`?onlyMine=true&staffUserId=<masterUserId>` — мои созданные записи к этому мастеру.
+
+Для **MASTER** параметр игнорируется — сервер всегда отдаёт только свои приёмы.
+
+Те же query работают на `GET /studios/:studioId/appointment-log?date=YYYY-MM-DD` (личное время в ответе тоже фильтруется по `staffUserId`).
+
 ## UI
 
 - В карточке/строке записи в журнале мастеров показывать колонку **«Автор»** (`author`).

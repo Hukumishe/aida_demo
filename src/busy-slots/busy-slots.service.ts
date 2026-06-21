@@ -60,6 +60,7 @@ export class BusySlotsService {
     userRole?: string,
     userStudioId?: string,
     userStaffId?: string,
+    staffUserIdFilter?: string,
   ) {
     // Check access
     // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
@@ -76,6 +77,10 @@ export class BusySlotsService {
 
     if (userRole === UserRole.MASTER && userStaffId) {
       where.staffUserId = userStaffId;
+    } else if (staffUserIdFilter?.trim()) {
+      const staffId = staffUserIdFilter.trim();
+      await assertStaffWorksAtStudio(this.prisma, staffId, studioId);
+      where.staffUserId = staffId;
     }
 
     if (date) {

@@ -203,6 +203,7 @@ export class AppointmentsService {
     userStudioId?: string,
     userStaffId?: string,
     createdByUserIdFilter?: string,
+    staffUserIdFilter?: string,
   ) {
     // Check access
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
@@ -223,6 +224,10 @@ export class AppointmentsService {
     // MASTER can only see their own appointments
     if (userRole === UserRole.MASTER && userStaffId) {
       where.staffUserId = userStaffId;
+    } else if (staffUserIdFilter?.trim()) {
+      const staffId = staffUserIdFilter.trim();
+      await assertStaffWorksAtStudio(this.prisma, staffId, studioId);
+      where.staffUserId = staffId;
     }
 
     if (date) {
@@ -285,6 +290,8 @@ export class AppointmentsService {
     userRole?: string,
     userStudioId?: string,
     userId?: string,
+    createdByUserIdFilter?: string,
+    staffUserIdFilter?: string,
   ) {
     const dateStr = date?.trim();
     if (!dateStr) {
@@ -292,8 +299,23 @@ export class AppointmentsService {
     }
 
     const [appointments, personalTimeSlots] = await Promise.all([
-      this.findAll(studioId, dateStr, userRole, userStudioId, userId),
-      this.busySlotsService.findAll(studioId, dateStr, userRole, userStudioId, userId),
+      this.findAll(
+        studioId,
+        dateStr,
+        userRole,
+        userStudioId,
+        userId,
+        createdByUserIdFilter,
+        staffUserIdFilter,
+      ),
+      this.busySlotsService.findAll(
+        studioId,
+        dateStr,
+        userRole,
+        userStudioId,
+        userId,
+        staffUserIdFilter,
+      ),
     ]);
 
     return {
