@@ -7,7 +7,10 @@ import {
 import { PrismaService } from '../common/prisma/prisma.service';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { getOrganizationIdForStudio } from '../common/organization-scope';
-import { isOwnerLevelRole, UserRole } from '../common/decorators/roles.decorator';
+import {
+  canManageMarketingContent,
+  hasOrganizationWideStudioAccess,
+} from '../common/decorators/roles.decorator';
 import { CreateStudioReferralLinkDto } from './dto/create-referral-link.dto';
 import { UpdateStudioReferralLinkDto } from './dto/update-referral-link.dto';
 
@@ -15,16 +18,16 @@ import { UpdateStudioReferralLinkDto } from './dto/update-referral-link.dto';
 export class ReferralLinksService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private assertOwnerOrDeputy(userRole: string) {
-    if (!isOwnerLevelRole(userRole)) {
+  private assertCanManageLinks(userRole: string) {
+    if (!canManageMarketingContent(userRole)) {
       throw new ForbiddenException(
-        'Только уровень владельца (OWNER, DEPUTY, SERVICE, DEVELOPER) может управлять реферальными ссылками',
+        'Управлять реферальными ссылками может владелец сети или маркетолог',
       );
     }
   }
 
   private assertStudioRead(studioId: string, userRole: string, userStudioId?: string) {
-    if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
+    if (!hasOrganizationWideStudioAccess(userRole)) {
       if (userStudioId !== studioId) {
         throw new ForbiddenException('Access denied to this studio');
       }
@@ -46,7 +49,7 @@ export class ReferralLinksService {
     userRole: string,
     userStudioId?: string,
   ) {
-    this.assertOwnerOrDeputy(userRole);
+    this.assertCanManageLinks(userRole);
     this.assertStudioRead(studioId, userRole, userStudioId);
 
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
@@ -75,7 +78,7 @@ export class ReferralLinksService {
     userRole: string,
     userStudioId?: string,
   ) {
-    this.assertOwnerOrDeputy(userRole);
+    this.assertCanManageLinks(userRole);
     this.assertStudioRead(studioId, userRole, userStudioId);
 
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);

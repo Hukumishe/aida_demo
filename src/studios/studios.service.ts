@@ -17,9 +17,31 @@ import {
   StudioLoyaltyMilestoneItemDto,
   StudioLoyaltyTierItemDto,
 } from './dto/update-studio-loyalty.dto';
-import { UserRole, isDeveloperRole, isOwnerLevelRole, canEditMasterLateFineAmount } from '../common/decorators/roles.decorator';
+import { UserRole, isDeveloperRole, isOwnerLevelRole, canEditMasterLateFineAmount, hasOrganizationWideStudioAccess, isMarketerRole } from '../common/decorators/roles.decorator';
 import { resolveAutoTierForTotalPaid } from '../common/loyalty/studio-loyalty.util';
 import { DEFAULT_IANA_TIMEZONE } from '../common/effective-timezone';
+
+/** Поля PATCH /studios/:id/settings, доступные роли MARKETER. */
+const MARKETER_STUDIO_SETTINGS_FIELDS = new Set([
+  'referFriendEnabled',
+  'referFriendInviteeRewardType',
+  'referFriendInviteeValue',
+  'referFriendReferrerRewardType',
+  'referFriendReferrerValue',
+  'marketingHoursStartHour',
+  'marketingHoursEndHour',
+  'feedbackTwoGisUrl',
+  'feedbackLowRatingTaskTitle',
+]);
+
+function assertMarketerStudioSettingsScope(dto: Record<string, unknown>): void {
+  const forbidden = Object.keys(dto).filter((key) => !MARKETER_STUDIO_SETTINGS_FIELDS.has(key));
+  if (forbidden.length > 0) {
+    throw new ForbiddenException(
+      `Маркетолог может менять только маркетинговые настройки. Запрещённые поля: ${forbidden.join(', ')}`,
+    );
+  }
+}
 
 @Injectable()
 export class StudiosService {
@@ -31,7 +53,7 @@ export class StudiosService {
         orderBy: { createdAt: 'desc' },
       });
     }
-    if (isOwnerLevelRole(userRole) || userRole === UserRole.MANAGER) {
+    if (hasOrganizationWideStudioAccess(userRole)) {
       return this.prisma.studio.findMany({
         where: { organizationId },
         orderBy: { createdAt: 'desc' },
@@ -79,7 +101,7 @@ export class StudiosService {
       throw new ForbiddenException('Access denied to this studio');
     }
 
-    if (isOwnerLevelRole(userRole) || userRole === UserRole.MANAGER) {
+    if (hasOrganizationWideStudioAccess(userRole)) {
       return studio;
     }
 
@@ -126,7 +148,7 @@ export class StudiosService {
       },
     });
     if (!studio) throw new NotFoundException('Studio not found');
-    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
+    if (!hasOrganizationWideStudioAccess(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
     }
     const org = studio.organization;
@@ -194,7 +216,9 @@ export class StudiosService {
     },
     userRole: string,
   ) {
-    if (!isOwnerLevelRole(userRole)) {
+    if (isMarketerRole(userRole)) {
+      assertMarketerStudioSettingsScope(dto as Record<string, unknown>);
+    } else if (!isOwnerLevelRole(userRole)) {
       throw new ForbiddenException('Only owner level role can change studio settings');
     }
     const touchesNextbotIntegration =

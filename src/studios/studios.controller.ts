@@ -80,10 +80,10 @@ export class StudiosController {
   }
 
   @Patch(':studioId/settings')
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE, UserRole.MARKETER)
   @ApiOperation({
     summary:
-      'Update studio settings: лимит бонусов, маркетинг «приведи друга» (уровень владельца)',
+      'Update studio settings: лимит бонусов, маркетинг «приведи друга» (уровень владельца); MARKETER — только маркетинговые поля',
   })
   @ApiResponse({ status: 200, description: 'Studio updated' })
   @ApiResponse({ status: 403, description: 'Forbidden' })

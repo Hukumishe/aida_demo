@@ -17,6 +17,8 @@ import {
 } from '@nestjs/swagger';
 import { UploadService } from './upload.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles, MARKETING_EDITOR_ROLES } from '../common/decorators/roles.decorator';
 import { memoryStorage } from 'multer';
 
 @ApiTags('upload')
@@ -83,6 +85,8 @@ export class UploadController {
   }
 
   @Post('landing')
+  @UseGuards(RolesGuard)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({
     summary: 'Загрузить изображение для карточки услуги на лендинге',
     description:

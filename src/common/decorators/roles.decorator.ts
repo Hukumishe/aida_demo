@@ -27,6 +27,33 @@ export function isOwnerLevelRole(role: string | undefined): boolean {
   );
 }
 
+export function isMarketerRole(role: string | undefined): boolean {
+  return role === UserRole.MARKETER;
+}
+
+/** Все филиалы своей организации (без CRM-операций у MARKETER). */
+export function hasOrganizationWideStudioAccess(role: string | undefined): boolean {
+  return (
+    isOwnerLevelRole(role) ||
+    role === UserRole.MANAGER ||
+    isMarketerRole(role)
+  );
+}
+
+/** Лендинг, FAQ, акции, автосообщения, реф. ссылки, часть настроек маркетинга. */
+export function canManageMarketingContent(role: string | undefined): boolean {
+  return isOwnerLevelRole(role) || isMarketerRole(role);
+}
+
+/** Роли для @Roles на маркетинговых эндпоинтах (лендинг, FAQ, автосообщения). */
+export const MARKETING_EDITOR_ROLES = [
+  UserRole.DEVELOPER,
+  UserRole.OWNER,
+  UserRole.DEPUTY_OWNER,
+  UserRole.SERVICE,
+  UserRole.MARKETER,
+] as const;
+
 /** Платформенная роль: доступ ко всем организациям и создание организаций */
 export function isDeveloperRole(role: string | undefined): boolean {
   return role === UserRole.DEVELOPER;

@@ -24,7 +24,7 @@ import { LandingService } from './landing.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
-import { Roles, UserRole } from '../common/decorators/roles.decorator';
+import { Roles, UserRole, MARKETING_EDITOR_ROLES } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { CreateLandingPromotionDto } from './dto/create-promotion.dto';
@@ -128,7 +128,7 @@ export class LandingController {
   @Post('landing/promotions')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({
     summary: 'Создать акцию (скидка / 1+1 / bundle, с on/off)',
     description:
@@ -153,7 +153,7 @@ export class LandingController {
   @Patch('landing/promotions/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({ summary: 'Обновить акцию (в т.ч. on/off через isActive)' })
   @ApiQuery({ name: 'organizationId', required: false, description: 'Только DEVELOPER — id чужой организации' })
   @ApiResponse({ status: 200, description: 'Акция обновлена' })
@@ -174,7 +174,7 @@ export class LandingController {
   @Delete('landing/promotions/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({ summary: 'Удалить акцию' })
   @ApiQuery({ name: 'organizationId', required: false, description: 'Только DEVELOPER — id чужой организации' })
   @ApiResponse({ status: 200, description: 'Акция удалена' })
@@ -294,7 +294,7 @@ export class LandingController {
   @Patch('studios/:studioId/landing/whatsapp-settings')
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({
     summary: 'Обновить WhatsApp настройки лендинга',
     description:
@@ -334,7 +334,7 @@ export class LandingController {
   @Get('organizations/:organizationId/landing/masters')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE, UserRole.MARKETER)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({
     summary: 'Единые настройки мастеров лендинга (все филиалы сети)',
     description:
@@ -355,7 +355,7 @@ export class LandingController {
   @Patch('organizations/:organizationId/landing/masters')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE, UserRole.MARKETER)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({ summary: 'Обновить единый список мастеров лендинга для всей сети' })
   @ApiResponse({ status: 200, description: 'Список мастеров обновлён' })
   async updateMastersForOrganization(
@@ -374,7 +374,7 @@ export class LandingController {
   @Patch('studios/:studioId/landing/masters')
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE, UserRole.MARKETER)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({
     summary: 'Обновить мастеров лендинга (alias организации)',
     description:
@@ -404,7 +404,7 @@ export class LandingController {
   @Get('studios/:studioId/landing/service-catalog')
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({
     summary: 'Каталог услуг для выбора в карточке лендинга (админка)',
     description:
@@ -440,7 +440,7 @@ export class LandingController {
   @Post('studios/:studioId/landing/services')
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({ summary: 'Создать карточку услуги для лендинга' })
   @ApiResponse({ status: 201 })
   async createServiceCard(
@@ -459,7 +459,7 @@ export class LandingController {
   @Patch('studios/:studioId/landing/services/:id')
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({ summary: 'Обновить карточку услуги (текст, картинка)' })
   @ApiResponse({ status: 200 })
   async updateServiceCard(
@@ -480,7 +480,7 @@ export class LandingController {
   @Delete('studios/:studioId/landing/services/:id')
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({ summary: 'Удалить карточку услуги с лендинга' })
   @ApiResponse({ status: 200 })
   async deleteServiceCard(
@@ -499,7 +499,7 @@ export class LandingController {
   @Patch('studios/:studioId/landing/services/reorder')
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({ summary: 'Обновить порядок карточек услуг (drag&drop)' })
   @ApiResponse({ status: 200 })
   async reorderServiceCards(
@@ -521,7 +521,7 @@ export class LandingController {
   @Get('studios/:studioId/landing/category-catalog')
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({
     summary: 'Каталог категорий для карточки лендинга (админка)',
     description:
@@ -555,7 +555,7 @@ export class LandingController {
   @Post('studios/:studioId/landing/categories')
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({ summary: 'Добавить категорию на лендинг' })
   @ApiResponse({ status: 201 })
   async createCategoryCard(
@@ -574,7 +574,7 @@ export class LandingController {
   @Patch('studios/:studioId/landing/categories/:id')
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({ summary: 'Обновить карточку категории (заголовок, описание)' })
   @ApiResponse({ status: 200 })
   async updateCategoryCard(
@@ -595,7 +595,7 @@ export class LandingController {
   @Delete('studios/:studioId/landing/categories/:id')
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({ summary: 'Удалить карточку категории с лендинга' })
   @ApiResponse({ status: 200 })
   async deleteCategoryCard(
@@ -614,7 +614,7 @@ export class LandingController {
   @Patch('studios/:studioId/landing/categories/reorder')
   @UseGuards(JwtAuthGuard, RolesGuard, StudioAccessGuard)
   @ApiBearerAuth()
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(...MARKETING_EDITOR_ROLES)
   @ApiOperation({ summary: 'Обновить порядок карточек категорий (drag&drop)' })
   @ApiResponse({ status: 200 })
   async reorderCategoryCards(

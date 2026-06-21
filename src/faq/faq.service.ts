@@ -8,6 +8,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import {
   UserRole,
   isDeveloperRole,
+  isMarketerRole,
 } from '../common/decorators/roles.decorator';
 import { generateId, IdPrefix } from '../common/id-generator';
 import { CreateFaqItemDto } from './dto/create-faq-item.dto';
@@ -30,16 +31,13 @@ import { ReorderFaqItemsDto } from './dto/reorder-faq-items.dto';
 export class FaqService {
   constructor(private prisma: PrismaService) {}
 
-  /**
-   * Роли, которые могут редактировать FAQ. Точечный список — сознательно не
-   * используем `isOwnerLevelRole`, чтобы MARKETER попал сюда, а SERVICE — нет.
-   */
+  /** OWNER, DEPUTY, MARKETER, DEVELOPER — без SERVICE (как было). */
   private canEditFaq(role: string | undefined): boolean {
     return (
-      role === UserRole.DEVELOPER ||
+      isDeveloperRole(role) ||
       role === UserRole.OWNER ||
       role === UserRole.DEPUTY_OWNER ||
-      role === UserRole.MARKETER
+      isMarketerRole(role)
     );
   }
 

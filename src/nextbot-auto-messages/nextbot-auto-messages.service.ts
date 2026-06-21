@@ -13,7 +13,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import {
   UserRole,
   isDeveloperRole,
-  isOwnerLevelRole,
+  canManageMarketingContent,
 } from '../common/decorators/roles.decorator';
 import { assertUserOrganizationMatchesStudio } from '../common/organization-scope';
 import { getDisabledCategoryIdsForStudio } from '../common/service-studio-offering';
@@ -57,13 +57,13 @@ export class NextbotAutoMessagesService {
   ) {}
 
   private canEdit(role: string | undefined): boolean {
-    return isDeveloperRole(role) || isOwnerLevelRole(role);
+    return isDeveloperRole(role) || canManageMarketingContent(role);
   }
 
   private assertCanEdit(role: string | undefined) {
     if (!this.canEdit(role)) {
       throw new ForbiddenException(
-        'Редактировать автосообщения может только владелец сети (или разработчик)',
+        'Редактировать автосообщения может владелец сети или маркетолог',
       );
     }
   }
