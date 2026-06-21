@@ -29,7 +29,8 @@ JWT: `role === 'MARKETER'`, `organizationId` — сеть салонов, `studi
 | **FAQ** | `GET/POST/PATCH/DELETE /admin/faq`, reorder | Организация |
 | **Автосообщения Nextbot** | `GET/POST/PATCH/DELETE /studios/:studioId/nextbot-auto-messages/*`, logs, test-send, presets | «Догоняющие» сценарии |
 | **Реф. ссылки (?ref=)** | `GET/POST/PATCH /studios/:studioId/referral-links` | UTM-источники |
-| **Настройки маркетинга** | `GET/PATCH /studios/:studioId/settings` | **Только** поля ниже |
+| **Промокоды Target** | `GET/POST/PATCH/DELETE /target-promos`, activations | Справочник промотекстов для Nextbot |
+| **Настройки маркетинга** | `GET/PATCH /studios/:studioId/settings` | Поля ниже + `permissions.canEditMarketingSettings` |
 | **Программа лояльности** | `GET/PUT /studios/:studioId/loyalty` | PRESET / CUSTOM + `permissions.canEdit`; лимит бонусов в settings; `bonusAccrualEnabled` на услугах |
 | **Список филиалов** | `GET /studios` | Все студии своей организации |
 
@@ -37,10 +38,15 @@ JWT: `role === 'MARKETER'`, `organizationId` — сеть салонов, `studi
 
 - `referFriendEnabled`, `referFriendInviteeRewardType`, `referFriendInviteeValue`, `referFriendReferrerRewardType`, `referFriendReferrerValue` — «Приведи друга»
 - `marketingHoursStartHour`, `marketingHoursEndHour` — рабочие часы отдела маркетинга (Nextbot)
+- `paymentKaspiPhone`, `paymentKaspiCardHolder`, `remotePaymentMethod`, `paymentIpRequisites` — Kaspi / ИП (дневной и ночной режим)
+- `nightHoldMinutes`, `dayInvoiceTaskDeadlineHours`, `nightReceiptTaskDeadlineHours` — тайминги оплаты
+- `highPriorityGapMinutes`, `normalPriorityToleranceMinutes` — плотность записей для бота
 - `feedbackTwoGisUrl`, `feedbackLowRatingTaskTitle` — автосообщения «запрос оценки»
 - `globalBonusPaymentLimitPercent` — лимит оплаты бонусами (0–100%)
 
-Остальные поля settings (бонусы, Kaspi, штрафы, webhook Nextbot) — **read-only или скрыть** для маркетолога.
+Остальные поля settings (`masterLateFineAmount`, webhook Nextbot) — **read-only или скрыть** для маркетолога.
+
+**Полная матрица меню «Настройки»:** см. **`LOVABLE_MARKETER_FULL_MENU_ACCESS_PROMPT.md`**
 
 ---
 

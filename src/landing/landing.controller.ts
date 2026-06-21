@@ -311,6 +311,7 @@ export class LandingController {
       dto,
       user?.role,
       user?.studioId,
+      user?.organizationId,
     );
   }
 
@@ -453,6 +454,7 @@ export class LandingController {
       dto,
       user?.role,
       user?.studioId,
+      user?.organizationId,
     );
   }
 
@@ -474,6 +476,7 @@ export class LandingController {
       dto,
       user?.role,
       user?.studioId,
+      user?.organizationId,
     );
   }
 
@@ -493,6 +496,7 @@ export class LandingController {
       id,
       user?.role,
       user?.studioId,
+      user?.organizationId,
     );
   }
 
@@ -512,6 +516,7 @@ export class LandingController {
       dto,
       user?.role,
       user?.studioId,
+      user?.organizationId,
     );
   }
 
@@ -568,6 +573,7 @@ export class LandingController {
       dto,
       user?.role,
       user?.studioId,
+      user?.organizationId,
     );
   }
 
@@ -589,6 +595,7 @@ export class LandingController {
       dto,
       user?.role,
       user?.studioId,
+      user?.organizationId,
     );
   }
 
@@ -608,6 +615,7 @@ export class LandingController {
       id,
       user?.role,
       user?.studioId,
+      user?.organizationId,
     );
   }
 
@@ -627,6 +635,7 @@ export class LandingController {
       dto,
       user?.role,
       user?.studioId,
+      user?.organizationId,
     );
   }
 }

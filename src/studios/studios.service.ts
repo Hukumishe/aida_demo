@@ -31,6 +31,15 @@ const MARKETER_STUDIO_SETTINGS_FIELDS = new Set([
   'referFriendReferrerValue',
   'marketingHoursStartHour',
   'marketingHoursEndHour',
+  'paymentKaspiPhone',
+  'paymentKaspiCardHolder',
+  'remotePaymentMethod',
+  'paymentIpRequisites',
+  'nightHoldMinutes',
+  'dayInvoiceTaskDeadlineHours',
+  'nightReceiptTaskDeadlineHours',
+  'highPriorityGapMinutes',
+  'normalPriorityToleranceMinutes',
   'feedbackTwoGisUrl',
   'feedbackLowRatingTaskTitle',
   'globalBonusPaymentLimitPercent',
@@ -180,6 +189,7 @@ export class StudiosService {
         canEditMasterLateFineAmount: canEditMasterLateFineAmount(userRole),
         canEditLoyalty: canManageMarketingContent(userRole),
         canEditGlobalBonusLimit: canManageMarketingContent(userRole),
+        canEditMarketingSettings: canManageMarketingContent(userRole),
       },
     };
     if (!isDeveloperRole(userRole)) {

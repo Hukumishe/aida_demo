@@ -9,7 +9,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { generateId, IdPrefix } from '../common/id-generator';
 import {
   isDeveloperRole,
-  isOwnerLevelRole,
+  canManageMarketingContent,
 } from '../common/decorators/roles.decorator';
 import { CreateTargetPromoDto } from './dto/create-target-promo.dto';
 import { UpdateTargetPromoDto } from './dto/update-target-promo.dto';
@@ -25,9 +25,9 @@ export class TargetPromoService {
   constructor(private readonly prisma: PrismaService) {}
 
   private assertCanManage(role?: string) {
-    if (!isDeveloperRole(role) && !isOwnerLevelRole(role)) {
+    if (!canManageMarketingContent(role)) {
       throw new ForbiddenException(
-        'Промокоды Target может настраивать только владелец сети (или разработчик)',
+        'Промокоды Target может настраивать владелец сети, маркетолог или разработчик',
       );
     }
   }

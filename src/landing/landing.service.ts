@@ -41,7 +41,7 @@ import {
   isServiceOfferedInStudio,
 } from '../common/service-studio-offering';
 import { getStaffUserIdsOfferingAllServicesInStudio } from '../common/staff-service-offering';
-import { isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
+import { isDeveloperRole, hasOrganizationWideStudioAccess } from '../common/decorators/roles.decorator';
 import { ServicesService } from '../services/services.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -147,8 +147,9 @@ export class LandingService {
     dto: UpdateLandingWhatsAppSettingsDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    this.ensureStudioAccess(studioId, userRole, userStudioId);
+    await this.ensureStudioAccess(studioId, userRole, userStudioId, userOrganizationId);
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
     const data: {
       landingWhatsappPhone?: string | null;
@@ -690,8 +691,9 @@ export class LandingService {
     dto: CreateLandingServiceCardDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    this.ensureStudioAccess(studioId, userRole, userStudioId);
+    await this.ensureStudioAccess(studioId, userRole, userStudioId, userOrganizationId);
 
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
@@ -721,8 +723,9 @@ export class LandingService {
     dto: UpdateLandingServiceCardDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    this.ensureStudioAccess(studioId, userRole, userStudioId);
+    await this.ensureStudioAccess(studioId, userRole, userStudioId, userOrganizationId);
 
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
@@ -749,8 +752,9 @@ export class LandingService {
     id: string,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    this.ensureStudioAccess(studioId, userRole, userStudioId);
+    await this.ensureStudioAccess(studioId, userRole, userStudioId, userOrganizationId);
 
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
@@ -770,8 +774,9 @@ export class LandingService {
     dto: ReorderLandingServiceCardsDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    this.ensureStudioAccess(studioId, userRole, userStudioId);
+    await this.ensureStudioAccess(studioId, userRole, userStudioId, userOrganizationId);
 
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
@@ -833,8 +838,9 @@ export class LandingService {
     dto: CreateLandingCategoryCardDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    this.ensureStudioAccess(studioId, userRole, userStudioId);
+    await this.ensureStudioAccess(studioId, userRole, userStudioId, userOrganizationId);
 
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
@@ -870,8 +876,9 @@ export class LandingService {
     dto: UpdateLandingCategoryCardDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    this.ensureStudioAccess(studioId, userRole, userStudioId);
+    await this.ensureStudioAccess(studioId, userRole, userStudioId, userOrganizationId);
 
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
@@ -900,8 +907,9 @@ export class LandingService {
     id: string,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    this.ensureStudioAccess(studioId, userRole, userStudioId);
+    await this.ensureStudioAccess(studioId, userRole, userStudioId, userOrganizationId);
 
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
@@ -921,8 +929,9 @@ export class LandingService {
     dto: ReorderLandingCategoryCardsDto,
     userRole?: string,
     userStudioId?: string,
+    userOrganizationId?: string,
   ) {
-    this.ensureStudioAccess(studioId, userRole, userStudioId);
+    await this.ensureStudioAccess(studioId, userRole, userStudioId, userOrganizationId);
 
     const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
 
@@ -949,11 +958,27 @@ export class LandingService {
 
   // --- Helpers ---
 
-  private ensureStudioAccess(studioId: string, userRole?: string, userStudioId?: string) {
-    if (!isOwnerLevelRole(userRole)) {
-      if (userStudioId !== studioId) {
-        throw new ForbiddenException('Access denied to this studio');
+  private async ensureStudioAccess(
+    studioId: string,
+    userRole?: string,
+    userStudioId?: string,
+    userOrganizationId?: string,
+  ) {
+    if (isDeveloperRole(userRole)) return;
+    if (hasOrganizationWideStudioAccess(userRole)) {
+      if (!userOrganizationId?.trim()) {
+        throw new BadRequestException('Organization context required');
       }
+      await assertUserOrganizationMatchesStudio(
+        this.prisma,
+        studioId,
+        userOrganizationId,
+        userRole,
+      );
+      return;
+    }
+    if (userStudioId !== studioId) {
+      throw new ForbiddenException('Access denied to this studio');
     }
   }
 
