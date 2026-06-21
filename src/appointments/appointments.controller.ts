@@ -20,6 +20,7 @@ import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { MarkAppointmentDoneDto } from './dto/mark-appointment-done.dto';
+import { ListAppointmentsQueryDto } from './dto/list-appointments-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
@@ -85,8 +86,14 @@ export class AppointmentsController {
   }
 
   @Get('studios/:studioId/appointments')
-  @ApiOperation({ summary: 'Get all appointments for a studio' })
+  @ApiOperation({
+    summary: 'Get all appointments for a studio',
+    description:
+      'Без from/to — массив записей (журнал на день: ?date=). С from+to — объект { period, summary, items } для «Мои записи за месяц»; опционально limit/offset.',
+  })
   @ApiQuery({ name: 'date', required: false, description: 'Filter by date (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'from', required: false, description: 'Начало периода YYYY-MM-DD (с to)' })
+  @ApiQuery({ name: 'to', required: false, description: 'Конец периода YYYY-MM-DD (с from)' })
   @ApiQuery({
     name: 'createdByUserId',
     required: false,
@@ -102,29 +109,34 @@ export class AppointmentsController {
     required: false,
     description: 'Только записи к указанному мастеру (исполнитель визита)',
   })
-  @ApiResponse({ status: 200, description: 'List of appointments' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Пагинация items (только с from+to)' })
+  @ApiQuery({ name: 'offset', required: false, description: 'Пагинация items (только с from+to)' })
+  @ApiResponse({ status: 200, description: 'List of appointments or period report' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAll(
     @Param('studioId') studioId: string,
-    @Query('date') date?: string,
-    @Query('createdByUserId') createdByUserId?: string,
-    @Query('onlyMine') onlyMine?: string,
-    @Query('staffUserId') staffUserId?: string,
+    @Query() query: ListAppointmentsQueryDto,
     @CurrentUser() user?: any,
   ) {
     const authorFilter = this.resolveAppointmentAuthorFilter(
-      createdByUserId,
-      onlyMine,
+      query.createdByUserId,
+      query.onlyMine,
       user?.userId,
     );
     return this.appointmentsService.findAll(
       studioId,
-      date,
+      query.date,
       user?.role,
       user?.studioId,
       user?.userId,
       authorFilter,
-      staffUserId?.trim() || undefined,
+      query.staffUserId?.trim() || undefined,
+      {
+        from: query.from,
+        to: query.to,
+        limit: query.limit,
+        offset: query.offset,
+      },
     );
   }
 

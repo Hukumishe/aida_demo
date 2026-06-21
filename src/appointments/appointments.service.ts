@@ -62,6 +62,11 @@ import { AppointmentHistoryService } from './appointment-history.service';
 import { formatDateTime, formatMoneyTenge, formatStatus } from './appointment-history.util';
 import { PayrollService } from '../payroll/payroll.service';
 import { computeVisitCheckout } from './visit-checkout.util';
+import {
+  buildAppointmentsListSummary,
+  resolveAppointmentsListPeriod,
+  revenueSummarySelect,
+} from './appointments-list.util';
 
 const doneCheckoutInclude = {
   client: true,
@@ -204,6 +209,12 @@ export class AppointmentsService {
     userStaffId?: string,
     createdByUserIdFilter?: string,
     staffUserIdFilter?: string,
+    listOptions?: {
+      from?: string;
+      to?: string;
+      limit?: number;
+      offset?: number;
+    },
   ) {
     // Check access
     if (!isOwnerLevelRole(userRole) && userRole !== UserRole.MANAGER) {
@@ -230,15 +241,31 @@ export class AppointmentsService {
       where.staffUserId = staffId;
     }
 
-    if (date) {
-      const dateStr = date.includes('T') ? date.split('T')[0] : date;
-      const studio = await this.prisma.studio.findUnique({
+    const periodFrom = listOptions?.from?.trim();
+    const periodTo = listOptions?.to?.trim();
+    const usePeriodList = Boolean(periodFrom && periodTo);
+
+    let studioForTz: { timezone: string | null; organization: { ianaTimezone?: string | null } } | null =
+      null;
+    if (date || usePeriodList) {
+      studioForTz = await this.prisma.studio.findUnique({
         where: { id: studioId },
         include: { organization: true },
       });
-      const tz = studio
-        ? studioWallClockTimezone(studio, studio.organization)
-        : DEFAULT_IANA_TIMEZONE;
+    }
+    const tz = studioForTz
+      ? studioWallClockTimezone(studioForTz, studioForTz.organization)
+      : DEFAULT_IANA_TIMEZONE;
+
+    let resolvedPeriod: ReturnType<typeof resolveAppointmentsListPeriod> | undefined;
+    if (usePeriodList) {
+      resolvedPeriod = resolveAppointmentsListPeriod(periodFrom!, periodTo!, tz);
+      where.startAt = {
+        gte: resolvedPeriod.startAtGte,
+        lt: resolvedPeriod.startAtLt,
+      };
+    } else if (date) {
+      const dateStr = date.includes('T') ? date.split('T')[0] : date;
       const { dayStart, nextDayStart } = zonedDayRangeUtc(dateStr, tz);
       where.startAt = {
         gte: dayStart,
@@ -246,29 +273,64 @@ export class AppointmentsService {
       };
     }
 
+    const appointmentInclude = {
+      staff: {
+        include: {
+          staffProfile: true,
+        },
+      },
+      client: true,
+      service: true,
+      serviceItems: {
+        include: { service: true },
+        orderBy: { sortOrder: 'asc' as const },
+      },
+      arrivedByUser: {
+        select: {
+          id: true,
+          email: true,
+          phone: true,
+        },
+      },
+      ...appointmentCreatedByInclude,
+    };
+
+    if (usePeriodList && resolvedPeriod) {
+      const limit = listOptions?.limit;
+      const offset = listOptions?.offset ?? 0;
+
+      const [totalCount, appointments, revenueRows] = await Promise.all([
+        this.prisma.appointment.count({ where }),
+        this.prisma.appointment.findMany({
+          where,
+          include: appointmentInclude,
+          orderBy: { startAt: 'asc' },
+          ...(limit != null ? { take: limit, skip: offset } : {}),
+        }),
+        this.prisma.appointment.findMany({
+          where,
+          select: revenueSummarySelect,
+        }),
+      ]);
+
+      const items = maskAppointmentsClientForRole(
+        appointments.map((appointment) => enrichAppointmentWithAuthor(appointment)),
+        userRole,
+      );
+
+      return {
+        period: { from: resolvedPeriod.from, to: resolvedPeriod.to },
+        summary: buildAppointmentsListSummary(revenueRows, totalCount),
+        items,
+        ...(limit != null
+          ? { pagination: { limit, offset, total: totalCount } }
+          : {}),
+      };
+    }
+
     const appointments = await this.prisma.appointment.findMany({
       where,
-      include: {
-        staff: {
-          include: {
-            staffProfile: true,
-          },
-        },
-        client: true,
-        service: true,
-        serviceItems: {
-          include: { service: true },
-          orderBy: { sortOrder: 'asc' },
-        },
-        arrivedByUser: {
-          select: {
-            id: true,
-            email: true,
-            phone: true,
-          },
-        },
-        ...appointmentCreatedByInclude,
-      },
+      include: appointmentInclude,
       orderBy: {
         startAt: 'asc',
       },
