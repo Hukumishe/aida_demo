@@ -440,6 +440,13 @@ export class AppointmentsService {
       throw new NotFoundException('Client does not belong to this organization');
     }
     if (client.isBlacklisted) {
+      void this.notificationsService
+        .maybeNotifyBlacklistedBookingAttempt(studioId, client, {
+          userRole,
+          actingUserId,
+          createdSource: createAppointmentDto.createdSource,
+        })
+        .catch(() => undefined);
       throw new BadRequestException('Cannot create appointment for a blacklisted client');
     }
 

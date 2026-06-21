@@ -43,6 +43,7 @@ import {
 import { getStaffUserIdsOfferingAllServicesInStudio } from '../common/staff-service-offering';
 import { isDeveloperRole, isOwnerLevelRole } from '../common/decorators/roles.decorator';
 import { ServicesService } from '../services/services.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   assertLandingMasterStaffIdsBelongToOrganization,
   filterLandingMastersForStudio,
@@ -82,6 +83,7 @@ export class LandingService {
     private readonly appointmentsService: AppointmentsService,
     private readonly availabilityService: AvailabilityService,
     private readonly clientsService: ClientsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -1160,6 +1162,12 @@ export class LandingService {
     });
 
     if (client?.isBlacklisted) {
+      void this.notificationsService
+        .maybeNotifyBlacklistedBookingAttempt(dto.studioId, client, {
+          actingUserId: 'api-key',
+          createdSource: AppointmentCreatedSource.LANDING,
+        })
+        .catch(() => undefined);
       throw new BadRequestException('Запись недоступна для этого номера телефона');
     }
 

@@ -2,8 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { getOrganizationIdForStudio } from '../common/organization-scope';
 import { generateId, IdPrefix } from '../common/id-generator';
-import { NotificationType } from '@prisma/client';
+import { NotificationType, AppointmentCreatedSource } from '@prisma/client';
 import { UserRole } from '../common/decorators/roles.decorator';
+import {
+  formatClientDisplayName,
+  getBlacklistBookingAttemptSourceLabel,
+  resolveBlacklistBookingAttemptSource,
+  shouldNotifyManagersOnBlacklistBookingAttempt,
+} from '../common/blacklist-booking-attempt.util';
 
 @Injectable()
 export class NotificationsService {
@@ -199,6 +205,99 @@ export class NotificationsService {
               clientName,
               requestedByName,
               reason,
+            }),
+          },
+        }),
+      ),
+    );
+
+    return notifications;
+  }
+
+  /**
+   * Уведомление менеджерам филиала, если клиент из ЧС пытался записаться (лендинг / Nextbot).
+   * Для CRM-попыток сотрудника — не отправляет.
+   */
+  async maybeNotifyBlacklistedBookingAttempt(
+    studioId: string,
+    client: {
+      id: string;
+      firstName: string;
+      lastName?: string | null;
+      patronymic?: string | null;
+      phone: string;
+      blacklistReason?: string | null;
+    },
+    context: {
+      userRole?: string;
+      actingUserId?: string;
+      createdSource?: AppointmentCreatedSource;
+    },
+  ) {
+    if (
+      !shouldNotifyManagersOnBlacklistBookingAttempt(context)
+    ) {
+      return [];
+    }
+    const source = resolveBlacklistBookingAttemptSource(
+      context.createdSource,
+      context.actingUserId,
+    );
+    return this.createBlacklistedBookingAttemptNotification(studioId, {
+      clientId: client.id,
+      clientName: formatClientDisplayName(client),
+      phone: client.phone,
+      sourceLabel: getBlacklistBookingAttemptSourceLabel(source),
+      blacklistReason: client.blacklistReason,
+    });
+  }
+
+  async createBlacklistedBookingAttemptNotification(
+    studioId: string,
+    params: {
+      clientId: string;
+      clientName: string;
+      phone: string;
+      sourceLabel: string;
+      blacklistReason?: string | null;
+    },
+  ) {
+    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const managers = await this.prisma.user.findMany({
+      where: {
+        studioId,
+        role: UserRole.MANAGER,
+        isActive: true,
+      },
+    });
+
+    if (managers.length === 0) {
+      return [];
+    }
+
+    const reasonText = params.blacklistReason?.trim()
+      ? ` Причина в ЧС: ${params.blacklistReason.trim()}`
+      : '';
+    const message = `Клиент из чёрного списка пытался записаться через ${params.sourceLabel}: ${params.clientName} (${params.phone}).${reasonText}`;
+
+    const notifications = await Promise.all(
+      managers.map((manager) =>
+        this.prisma.notification.create({
+          data: {
+            id: generateId(IdPrefix.Notification),
+            userId: manager.id,
+            organizationId,
+            studioId,
+            type: NotificationType.BLACKLIST_BOOKING_ATTEMPT,
+            title: 'Попытка записи из ЧС',
+            message,
+            data: JSON.stringify({
+              clientId: params.clientId,
+              clientName: params.clientName,
+              phone: params.phone,
+              sourceLabel: params.sourceLabel,
+              blacklistReason: params.blacklistReason ?? null,
+              studioId,
             }),
           },
         }),

@@ -106,6 +106,7 @@ enum NotificationType {
   NEW_APPOINTMENT // Новая запись для мастера
   APPOINTMENT_CANCELLED // Отмена записи для менеджера
   BLACKLIST_REQUEST // Запрос на добавление в черный список для владельца
+  BLACKLIST_BOOKING_ATTEMPT // Попытка записи клиента из ЧС (лендинг / Nextbot) — менеджерам
   NEW_TASK // Назначена новая задача (исполнителю)
   TASK_DEADLINE_APPROACHING // Напоминание о приближающемся сроке задачи
   TASK_REJECTED // Мастер отказался от задачи (уведомление постановщику)

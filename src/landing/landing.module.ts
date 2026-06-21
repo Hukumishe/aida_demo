@@ -7,6 +7,7 @@ import { ServicesModule } from '../services/services.module';
 import { AppointmentsModule } from '../appointments/appointments.module';
 import { AvailabilityModule } from '../availability/availability.module';
 import { ClientsModule } from '../clients/clients.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { ClientsModule } from '../clients/clients.module';
     AppointmentsModule,
     AvailabilityModule,
     ClientsModule,
+    NotificationsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
