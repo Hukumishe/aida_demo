@@ -6,10 +6,7 @@ import {
 } from '@nestjs/common';
 import { BirthdayBonusType, ClientLevel, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
-import {
-  isDeveloperRole,
-  isOwnerLevelRole,
-} from '../common/decorators/roles.decorator';
+import { canManageMarketingContent } from '../common/decorators/roles.decorator';
 import { assertUserOrganizationMatchesStudio } from '../common/organization-scope';
 import { UpsertBirthdaySettingsDto } from './dto/upsert-birthday-settings.dto';
 
@@ -18,9 +15,9 @@ export class NextbotBirthdaySettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
   private assertCanEdit(role?: string) {
-    if (!isDeveloperRole(role) && !isOwnerLevelRole(role)) {
+    if (!canManageMarketingContent(role)) {
       throw new ForbiddenException(
-        'Настройки дня рождения может менять только владелец сети (или разработчик)',
+        'Настройки дня рождения может менять владелец сети или маркетолог',
       );
     }
   }
