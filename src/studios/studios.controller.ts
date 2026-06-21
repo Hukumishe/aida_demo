@@ -91,7 +91,7 @@ export class StudiosController {
   @ApiOperation({
     summary: 'Удалить филиал (только DEVELOPER)',
     description:
-      'Полное удаление филиала и связанных данных. Запрещено, если к филиалу привязаны сотрудники.',
+      'Полное удаление филиала. Филиальные сотрудники (ADMIN, MASTER и др. с primary studioId) удаляются; сетевые роли (OWNER, MANAGER, MARKETER…) не затрагиваются; у мульти-филиальных мастеров снимается только membership.',
   })
   @ApiResponse({ status: 200, description: 'Studio deleted' })
   @ApiResponse({ status: 400, description: 'Studio has linked users' })

@@ -54,6 +54,19 @@ export const MARKETING_EDITOR_ROLES = [
   UserRole.MARKETER,
 ] as const;
 
+/** Роли сети: studioId = null, не привязаны к одному филиалу. */
+export const NETWORK_STAFF_ROLES: UserRole[] = [
+  UserRole.OWNER,
+  UserRole.DEPUTY_OWNER,
+  UserRole.SERVICE,
+  UserRole.MANAGER,
+  UserRole.MARKETER,
+];
+
+export function isNetworkStaffRole(role: string | undefined): boolean {
+  return role != null && NETWORK_STAFF_ROLES.includes(role as UserRole);
+}
+
 /** Платформенная роль: доступ ко всем организациям и создание организаций */
 export function isDeveloperRole(role: string | undefined): boolean {
   return role === UserRole.DEVELOPER;

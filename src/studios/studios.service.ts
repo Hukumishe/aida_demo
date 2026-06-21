@@ -18,7 +18,7 @@ import {
   StudioLoyaltyMilestoneItemDto,
   StudioLoyaltyTierItemDto,
 } from './dto/update-studio-loyalty.dto';
-import { UserRole, isDeveloperRole, isOwnerLevelRole, canEditMasterLateFineAmount, hasOrganizationWideStudioAccess, isMarketerRole, canManageMarketingContent } from '../common/decorators/roles.decorator';
+import { UserRole, isDeveloperRole, isOwnerLevelRole, canEditMasterLateFineAmount, hasOrganizationWideStudioAccess, isMarketerRole, canManageMarketingContent, NETWORK_STAFF_ROLES } from '../common/decorators/roles.decorator';
 import { resolveAutoTierForTotalPaid } from '../common/loyalty/studio-loyalty.util';
 import { LEVEL_ORDER, LEVEL_THRESHOLDS } from '../clients/constants/levels.constants';
 import { DEFAULT_IANA_TIMEZONE } from '../common/effective-timezone';
@@ -197,24 +197,72 @@ export class StudiosService {
       throw new NotFoundException('Studio not found');
     }
 
-    const linkedUsers = await this.prisma.user.count({
-      where: {
-        OR: [{ studioId }, { studioMemberships: { some: { studioId } } }],
-      },
+    const deletedUserIds = await this.prisma.$transaction(async (tx) => {
+      const deleted = await this.purgeBranchStaffBeforeStudioDelete(tx, studioId);
+      await tx.appointmentHistoryEntry.deleteMany({ where: { studioId } });
+      await tx.nextbotBirthdayMessageLog.deleteMany({ where: { studioId } });
+      await tx.studio.delete({ where: { id: studioId } });
+      return deleted;
     });
-    if (linkedUsers > 0) {
-      throw new BadRequestException(
-        'Нельзя удалить филиал: к нему привязаны сотрудники. Переназначьте или удалите пользователей.',
-      );
+
+    return {
+      success: true,
+      id: studioId,
+      deletedUserIds,
+    };
+  }
+
+  /** Удалить филиальных сотрудников; сетевые роли и membership-only не трогаем (кроме снятия membership). */
+  private async purgeBranchStaffBeforeStudioDelete(
+    tx: Pick<
+      PrismaService,
+      'user' | 'userStudioMembership' | 'devTicket' | 'devTicketMessage'
+    >,
+    studioId: string,
+  ): Promise<string[]> {
+    await tx.user.updateMany({
+      where: {
+        studioId,
+        role: { in: [...NETWORK_STAFF_ROLES] },
+      },
+      data: { studioId: null },
+    });
+
+    const branchUsers = await tx.user.findMany({
+      where: {
+        studioId,
+        role: { notIn: [...NETWORK_STAFF_ROLES, UserRole.DEVELOPER] },
+      },
+      select: { id: true },
+    });
+
+    for (const { id } of branchUsers) {
+      await this.hardDeleteUserInTx(tx, id);
     }
 
-    await this.prisma.$transaction([
-      this.prisma.appointmentHistoryEntry.deleteMany({ where: { studioId } }),
-      this.prisma.nextbotBirthdayMessageLog.deleteMany({ where: { studioId } }),
-      this.prisma.studio.delete({ where: { id: studioId } }),
-    ]);
+    await tx.userStudioMembership.deleteMany({ where: { studioId } });
 
-    return { success: true, id: studioId };
+    return branchUsers.map((u) => u.id);
+  }
+
+  private async hardDeleteUserInTx(
+    tx: Pick<PrismaService, 'devTicket' | 'devTicketMessage' | 'user'>,
+    userId: string,
+  ): Promise<void> {
+    const createdTicketIds = await tx.devTicket.findMany({
+      where: { createdByUserId: userId },
+      select: { id: true },
+    });
+    if (createdTicketIds.length > 0) {
+      const ticketIds = createdTicketIds.map((t) => t.id);
+      await tx.devTicketMessage.deleteMany({
+        where: { ticketId: { in: ticketIds } },
+      });
+      await tx.devTicket.deleteMany({
+        where: { id: { in: ticketIds } },
+      });
+    }
+    await tx.user.delete({ where: { id: userId } });
   }
 
   async getSettings(studioId: string, userRole: string, userStudioId: string | undefined) {

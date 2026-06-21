@@ -35,6 +35,7 @@ import {
   isOwnerLevelRole,
   canManageOwners,
   canManageDeputies,
+  NETWORK_STAFF_ROLES,
 } from '../common/decorators/roles.decorator';
 import { assertStaffWorksAtStudio } from '../common/staff-studio-membership';
 import { StaffProfileQueryDto } from './dto/staff-profile-query.dto';
@@ -45,15 +46,6 @@ import {
   resolveStaffProfileStatsPeriod,
   timezoneFromStudio,
 } from './staff-profile-appointment-stats.util';
-
-/** Роли, которые могут быть на уровне сети (`studioId` = null) и показываются во всех филиалах. */
-const NETWORK_STAFF_ROLES: UserRole[] = [
-  UserRole.OWNER,
-  UserRole.DEPUTY_OWNER,
-  UserRole.SERVICE,
-  UserRole.MANAGER,
-  UserRole.MARKETER,
-];
 
 @Injectable()
 export class UsersService {
