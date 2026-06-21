@@ -4,21 +4,25 @@
 
 Backend AIDA уже реализован: отдельные заметки мастера, не путать с `Client.notes` и `Appointment.comment`.
 
+**Типы заметок (личная / общая):** см. `LOVABLE_MASTER_CLIENT_DIARY_NOTE_TYPES_PROMPT.md`.
+
 ---
 
 ## Промпт
 
 ### Задача
 
-Добавь **личный дневник мастера** о клиенте с быстрым доступом **до / во время / после** визита.
+Добавь **дневник мастера** о клиенте с быстрым доступом **до / во время / после** визита.
+
+При создании заметки — выбор типа **личная** / **общая** (см. `LOVABLE_MASTER_CLIENT_DIARY_NOTE_TYPES_PROMPT.md`).
 
 Правила доступа:
 
 | Роль | Что видит |
 |------|-----------|
-| **MASTER** | только **свои** заметки |
-| **OWNER / DEPUTY_OWNER** | **все** заметки всех мастеров |
-| **ADMIN / MANAGER / SERVICE** | **нет доступа** |
+| **MASTER** (своя запись) | свои **личные** + все **общие** |
+| **ADMIN / MANAGER** | только **общие** |
+| **OWNER / DEPUTY / SERVICE** | **все** заметки всех мастеров |
 
 Не смешивать с:
 
@@ -64,8 +68,10 @@ Backend AIDA уже реализован: отдельные заметки ма
 `POST /appointments/:appointmentId/staff-diary`
 
 ```json
-{ "body": "Текст заметки" }
+{ "body": "Текст заметки", "visibility": "PRIVATE" }
 ```
+
+`visibility`: `PRIVATE` (по умолчанию) | `SHARED`. Опции подписей: `GET /staff-diary/visibility-options`.
 
 Сервер сам подставляет `clientId`, `appointmentId`, `staffUserId`.
 

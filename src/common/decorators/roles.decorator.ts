@@ -37,12 +37,17 @@ export function canEditMasterLateFineAmount(role: string | undefined): boolean {
   return isOwnerLevelRole(role);
 }
 
-/** Личный дневник мастера: OWNER, DEPUTY_OWNER, DEVELOPER видят все записи; MASTER — только свои. */
+/** Личный дневник: OWNER, DEPUTY, DEVELOPER, SERVICE — все записи; MASTER — свои PRIVATE + все SHARED. */
 export function canViewAllClientStaffDiaryEntries(role: string | undefined): boolean {
+  return isOwnerLevelRole(role);
+}
+
+/** Общие заметки дневника: ADMIN/MANAGER + роли из canUseClientStaffDiary. */
+export function canViewSharedClientStaffDiaryEntries(role: string | undefined): boolean {
   return (
-    role === UserRole.DEVELOPER ||
-    role === UserRole.OWNER ||
-    role === UserRole.DEPUTY_OWNER
+    canUseClientStaffDiary(role) ||
+    role === UserRole.ADMIN ||
+    role === UserRole.MANAGER
   );
 }
 

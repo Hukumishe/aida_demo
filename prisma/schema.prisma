@@ -71,6 +71,12 @@ enum AppointmentCreatedSource {
   LANDING
 }
 
+/// Личный дневник мастера: PRIVATE — автор + owner/deputy; SHARED — все роли CRM с доступом к клиенту.
+enum ClientStaffDiaryVisibility {
+  PRIVATE
+  SHARED
+}
+
 enum ClientLevel {
   BRONZE // при регистрации, 3%
   SILVER // 50 000 ₸ оплачено, 5%
@@ -1295,16 +1301,17 @@ model AppointmentHistoryEntry {
   @@map("appointment_history_entries")
 }
 
-/// Личный дневник мастера о клиенте (видит автор и owner/deputy).
+/// Личный дневник мастера о клиенте (PRIVATE: автор + owner/deputy; SHARED: все с доступом).
 model ClientStaffDiaryEntry {
-  id             String   @id
+  id             String                      @id
   organizationId String
   clientId       String
   staffUserId    String
   appointmentId  String?
+  visibility     ClientStaffDiaryVisibility  @default(PRIVATE)
   body           String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client       Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)

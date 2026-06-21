@@ -19,6 +19,7 @@ import {
 import { ClientStaffDiaryService } from './client-staff-diary.service';
 import { CreateClientStaffDiaryEntryDto } from './dto/create-client-staff-diary-entry.dto';
 import { UpdateClientStaffDiaryEntryDto } from './dto/update-client-staff-diary-entry.dto';
+import { listClientStaffDiaryVisibilityOptions } from './client-staff-diary.constants';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StudioAccessGuard } from '../common/guards/studio-access.guard';
@@ -32,12 +33,39 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 export class ClientStaffDiaryController {
   constructor(private readonly clientStaffDiaryService: ClientStaffDiaryService) {}
 
+  @Get('staff-diary/visibility-options')
+  @Roles(
+    UserRole.MASTER,
+    UserRole.OWNER,
+    UserRole.DEPUTY_OWNER,
+    UserRole.DEVELOPER,
+    UserRole.SERVICE,
+    UserRole.ADMIN,
+    UserRole.MANAGER,
+  )
+  @ApiOperation({
+    summary: 'Типы заметок дневника (для селекта в UI)',
+    description:
+      'PRIVATE — в UI описание «видите только вы»; фактически owner/deputy тоже видят личные.',
+  })
+  listVisibilityOptions() {
+    return listClientStaffDiaryVisibilityOptions();
+  }
+
   @Get('appointments/:appointmentId/staff-diary')
-  @Roles(UserRole.MASTER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.DEVELOPER)
+  @Roles(
+    UserRole.MASTER,
+    UserRole.OWNER,
+    UserRole.DEPUTY_OWNER,
+    UserRole.DEVELOPER,
+    UserRole.SERVICE,
+    UserRole.ADMIN,
+    UserRole.MANAGER,
+  )
   @ApiOperation({
     summary: 'Дневник мастера по клиенту из контекста записи',
     description:
-      'MASTER видит только свои заметки по clientId записи. OWNER/DEPUTY/DEVELOPER — все заметки всех мастеров по этому клиенту.',
+      'MASTER: свои личные + все общие. ADMIN/MANAGER: только общие. OWNER/DEPUTY/SERVICE: все.',
   })
   @ApiResponse({ status: 200 })
   listForAppointment(
@@ -56,9 +84,9 @@ export class ClientStaffDiaryController {
   @Post('appointments/:appointmentId/staff-diary')
   @Roles(UserRole.MASTER)
   @ApiOperation({
-    summary: 'Добавить заметку в личный дневник (из записи)',
+    summary: 'Добавить заметку в дневник (из записи)',
     description:
-      'Быстрый сценарий для мастера: clientId и appointmentId подставляются на сервере.',
+      'visibility: PRIVATE (по умолчанию) или SHARED. clientId и appointmentId подставляются на сервере.',
   })
   @ApiResponse({ status: 201 })
   createForAppointment(
@@ -77,10 +105,18 @@ export class ClientStaffDiaryController {
   }
 
   @Get('clients/:clientId/staff-diary')
-  @Roles(UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.DEVELOPER)
+  @Roles(
+    UserRole.OWNER,
+    UserRole.DEPUTY_OWNER,
+    UserRole.DEVELOPER,
+    UserRole.SERVICE,
+    UserRole.ADMIN,
+    UserRole.MANAGER,
+  )
   @ApiOperation({
-    summary: 'Все заметки мастеров по клиенту (owner/deputy)',
-    description: 'Для вкладки «Заметки мастеров» в карточке клиента.',
+    summary: 'Заметки мастеров по клиенту',
+    description:
+      'OWNER/DEPUTY/SERVICE: все типы. ADMIN/MANAGER: только общие (SHARED).',
   })
   @ApiQuery({
     name: 'organizationId',
@@ -98,12 +134,13 @@ export class ClientStaffDiaryController {
       user?.role,
       user?.organizationId,
       organizationId,
+      user?.userId,
     );
   }
 
   @Patch('staff-diary/:id')
   @Roles(UserRole.MASTER)
-  @ApiOperation({ summary: 'Изменить свою заметку дневника' })
+  @ApiOperation({ summary: 'Изменить свою заметку дневника (текст и тип)' })
   @ApiResponse({ status: 200 })
   update(
     @Param('id') id: string,

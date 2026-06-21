@@ -4,17 +4,22 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { ClientStaffDiaryVisibility } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { generateId, IdPrefix } from '../common/id-generator';
 import {
   UserRole,
-  canUseClientStaffDiary,
   canViewAllClientStaffDiaryEntries,
+  canViewSharedClientStaffDiaryEntries,
 } from '../common/decorators/roles.decorator';
 import { assertUserOrganizationMatchesStudio } from '../common/organization-scope';
+import { assertUserStudioAccessForResource } from '../common/studio-access.util';
 import { CreateClientStaffDiaryEntryDto } from './dto/create-client-staff-diary-entry.dto';
 import { UpdateClientStaffDiaryEntryDto } from './dto/update-client-staff-diary-entry.dto';
-import { mapClientStaffDiaryEntry } from './client-staff-diary.util';
+import {
+  buildClientStaffDiaryReadWhere,
+  mapClientStaffDiaryEntry,
+} from './client-staff-diary.util';
 
 const diaryInclude = {
   staff: {
@@ -32,7 +37,7 @@ export class ClientStaffDiaryService {
   constructor(private readonly prisma: PrismaService) {}
 
   private assertDiaryRole(userRole?: string) {
-    if (!canUseClientStaffDiary(userRole)) {
+    if (!canViewSharedClientStaffDiaryEntries(userRole)) {
       throw new ForbiddenException('Access denied to client staff diary');
     }
   }
@@ -77,6 +82,16 @@ export class ClientStaffDiaryService {
       return;
     }
 
+    if (userRole === UserRole.ADMIN || userRole === UserRole.MANAGER) {
+      await assertUserStudioAccessForResource(this.prisma, {
+        userRole,
+        userId: userStaffId,
+        userStudioId,
+        studioId: appointment.studioId,
+      });
+      return;
+    }
+
     if (userRole !== UserRole.MASTER) {
       throw new ForbiddenException('Access denied to this appointment diary');
     }
@@ -104,13 +119,12 @@ export class ClientStaffDiaryService {
       userOrganizationId,
     );
 
-    const where = {
-      clientId: appointment.clientId,
-      organizationId: appointment.studio.organizationId,
-      ...(canViewAllClientStaffDiaryEntries(userRole)
-        ? {}
-        : { staffUserId: userStaffId! }),
-    };
+    const where = buildClientStaffDiaryReadWhere(
+      appointment.clientId,
+      appointment.studio.organizationId,
+      userRole,
+      userStaffId,
+    );
 
     const [items, myNotesCount] = await Promise.all([
       this.prisma.clientStaffDiaryEntry.findMany({
@@ -131,7 +145,7 @@ export class ClientStaffDiaryService {
 
     return {
       items: items.map((entry) =>
-        mapClientStaffDiaryEntry(entry, canViewAllClientStaffDiaryEntries(userRole)),
+        mapClientStaffDiaryEntry(entry, userRole, userStaffId),
       ),
       myNotesCount,
     };
@@ -166,6 +180,8 @@ export class ClientStaffDiaryService {
       throw new BadRequestException('Diary entry body is required');
     }
 
+    const visibility = dto.visibility ?? ClientStaffDiaryVisibility.PRIVATE;
+
     const entry = await this.prisma.clientStaffDiaryEntry.create({
       data: {
         id: generateId(IdPrefix.ClientStaffDiaryEntry),
@@ -173,12 +189,13 @@ export class ClientStaffDiaryService {
         clientId: appointment.clientId,
         staffUserId: userStaffId,
         appointmentId: appointment.id,
+        visibility,
         body,
       },
       include: diaryInclude,
     });
 
-    return mapClientStaffDiaryEntry(entry, false);
+    return mapClientStaffDiaryEntry(entry, userRole, userStaffId);
   }
 
   async listForClient(
@@ -186,9 +203,17 @@ export class ClientStaffDiaryService {
     userRole?: string,
     userOrganizationId?: string,
     organizationIdQuery?: string,
+    userStaffId?: string,
   ) {
-    if (!canViewAllClientStaffDiaryEntries(userRole)) {
-      throw new ForbiddenException('Only owner or deputy can view all diary entries');
+    if (!canViewSharedClientStaffDiaryEntries(userRole)) {
+      throw new ForbiddenException('Access denied to client staff diary');
+    }
+    if (
+      !canViewAllClientStaffDiaryEntries(userRole) &&
+      userRole !== UserRole.ADMIN &&
+      userRole !== UserRole.MANAGER
+    ) {
+      throw new ForbiddenException('Only owner, deputy, admin or manager can view client diary');
     }
 
     const client = await this.prisma.client.findUnique({
@@ -210,17 +235,23 @@ export class ClientStaffDiaryService {
       throw new ForbiddenException('Access denied to this client');
     }
 
+    const where = buildClientStaffDiaryReadWhere(
+      client.id,
+      client.organizationId,
+      userRole,
+      userStaffId,
+    );
+
     const items = await this.prisma.clientStaffDiaryEntry.findMany({
-      where: {
-        clientId: client.id,
-        organizationId: client.organizationId,
-      },
+      where,
       include: diaryInclude,
       orderBy: [{ createdAt: 'desc' }],
     });
 
     return {
-      items: items.map((entry) => mapClientStaffDiaryEntry(entry, true)),
+      items: items.map((entry) =>
+        mapClientStaffDiaryEntry(entry, userRole, userStaffId),
+      ),
     };
   }
 
@@ -255,11 +286,14 @@ export class ClientStaffDiaryService {
 
     const entry = await this.prisma.clientStaffDiaryEntry.update({
       where: { id },
-      data: { body },
+      data: {
+        body,
+        ...(dto.visibility !== undefined ? { visibility: dto.visibility } : {}),
+      },
       include: diaryInclude,
     });
 
-    return mapClientStaffDiaryEntry(entry, false);
+    return mapClientStaffDiaryEntry(entry, userRole, userStaffId);
   }
 
   async remove(id: string, userRole?: string, userStaffId?: string) {
