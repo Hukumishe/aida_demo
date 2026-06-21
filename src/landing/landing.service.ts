@@ -1201,6 +1201,7 @@ export class LandingService {
         waitlistSource: WaitlistEntrySource.LANDING,
         createdSource: AppointmentCreatedSource.LANDING,
         promoCode: dto.promoCode?.trim() || undefined,
+        tentative: true,
       };
 
       try {
