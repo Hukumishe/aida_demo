@@ -30,6 +30,7 @@ JWT: `role === 'MARKETER'`, `organizationId` — сеть салонов, `studi
 | **Автосообщения Nextbot** | `GET/POST/PATCH/DELETE /studios/:studioId/nextbot-auto-messages/*`, logs, test-send, presets | «Догоняющие» сценарии |
 | **Реф. ссылки (?ref=)** | `GET/POST/PATCH /studios/:studioId/referral-links` | UTM-источники |
 | **Настройки маркетинга** | `GET/PATCH /studios/:studioId/settings` | **Только** поля ниже |
+| **Программа лояльности** | `GET/PUT /studios/:studioId/loyalty` | PRESET / CUSTOM: уровни, % кэшбэка, вехи |
 | **Список филиалов** | `GET /studios` | Все студии своей организации |
 
 **PATCH settings — разрешённые поля для MARKETER:**
@@ -59,7 +60,8 @@ JWT: `role === 'MARKETER'`, `organizationId` — сеть салонов, `studi
 1. **Лендинг** — подразделы: акции, услуги, категории, мастера, WhatsApp, FAQ  
 2. **Автосообщения** — шаблоны + журнал отправок по выбранному филиалу  
 3. **Реферальные ссылки** — список `?ref=` по сети  
-4. **Маркетинг** (или блок в настройках) — «Приведи друга», часы маркетинга, 2GIS для отзывов  
+4. **Программа лояльности** — режим PRESET/CUSTOM, уровни и вехи (`GET/PUT .../loyalty`)  
+5. **Маркетинг** (или блок в настройках) — «Приведи друга», часы маркетинга, 2GIS для отзывов  
 
 **Селектор филиала** в шапке: все студии из `GET /studios` (маркетолог видит всю сеть).
 
@@ -74,7 +76,7 @@ const isMarketer = user.role === 'MARKETER';
 
 function canAccessMarketingSection(section: string): boolean {
   if (!isMarketer) return true; // остальные роли — по вашей текущей матрице
-  const allowed = ['landing', 'auto-messages', 'referral-links', 'marketing-settings', 'faq'];
+  const allowed = ['landing', 'auto-messages', 'referral-links', 'loyalty', 'marketing-settings', 'faq'];
   return allowed.includes(section);
 }
 ```
@@ -97,6 +99,7 @@ function canAccessMarketingSection(section: string): boolean {
 - [ ] Все лендинг-редакторы доступны с JWT MARKETER
 - [ ] Автосообщения: CRUD + logs + test-send
 - [ ] Реф. ссылки: список и создание
+- [ ] Программа лояльности: GET/PUT `/studios/:studioId/loyalty`
 - [ ] Settings: форма только маркетинговых полей
 - [ ] FAQ в админке
 - [ ] Не показывать webhook Nextbot маркетологу

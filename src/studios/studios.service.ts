@@ -17,7 +17,7 @@ import {
   StudioLoyaltyMilestoneItemDto,
   StudioLoyaltyTierItemDto,
 } from './dto/update-studio-loyalty.dto';
-import { UserRole, isDeveloperRole, isOwnerLevelRole, canEditMasterLateFineAmount, hasOrganizationWideStudioAccess, isMarketerRole } from '../common/decorators/roles.decorator';
+import { UserRole, isDeveloperRole, isOwnerLevelRole, canEditMasterLateFineAmount, hasOrganizationWideStudioAccess, isMarketerRole, canManageMarketingContent } from '../common/decorators/roles.decorator';
 import { resolveAutoTierForTotalPaid } from '../common/loyalty/studio-loyalty.util';
 import { DEFAULT_IANA_TIMEZONE } from '../common/effective-timezone';
 
@@ -452,7 +452,7 @@ export class StudiosService {
       select: { id: true, organizationId: true, organization: { select: { loyaltyMode: true } } },
     });
     if (!studio) throw new NotFoundException('Studio not found');
-    if (!isOwnerLevelRole(userRole) && userStudioId !== studioId) {
+    if (!hasOrganizationWideStudioAccess(userRole) && userStudioId !== studioId) {
       throw new ForbiddenException('Access denied to this studio');
     }
     const orgId = studio.organizationId;
@@ -479,8 +479,10 @@ export class StudiosService {
     userRole: string,
     userStudioId: string | undefined,
   ) {
-    if (!isOwnerLevelRole(userRole)) {
-      throw new ForbiddenException('Only owner level role can change loyalty settings');
+    if (!canManageMarketingContent(userRole)) {
+      throw new ForbiddenException(
+        'Настройки программы лояльности может менять владелец сети или маркетолог',
+      );
     }
     const studio = await this.prisma.studio.findUnique({ where: { id: studioId } });
     if (!studio) throw new NotFoundException('Studio not found');

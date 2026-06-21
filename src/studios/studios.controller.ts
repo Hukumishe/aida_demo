@@ -106,10 +106,10 @@ export class StudiosController {
   }
 
   @Put(':studioId/loyalty')
-  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE)
+  @Roles(UserRole.DEVELOPER, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.SERVICE, UserRole.MARKETER)
   @ApiOperation({
     summary:
-      'Задать режим лояльности: PRESET или полная замена CUSTOM (tiers + milestones). Только уровень владельца.',
+      'Задать режим лояльности: PRESET или полная замена CUSTOM (tiers + milestones). Владелец или MARKETER.',
   })
   @ApiResponse({ status: 200 })
   async updateLoyalty(
