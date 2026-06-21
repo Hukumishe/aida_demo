@@ -87,6 +87,8 @@ function canAccessMarketingSection(section: string): boolean {
 
 Владелец создаёт через существующий CRUD сотрудников: роль **`MARKETER`**, `studioId = null` (уровень сети). См. `POST /studios/:studioId/staff` с `role: "MARKETER"`.
 
+**Форма «Добавить сотрудника»:** для роли MARKETER (и MANAGER) **не отправлять** `studioIds` / блок «Филиалы» можно скрыть — бэкенд всё равно игнорирует филиалы, но лучше не показывать лишнее.
+
 ---
 
 ### Чеклист

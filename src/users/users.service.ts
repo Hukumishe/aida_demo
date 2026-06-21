@@ -356,18 +356,9 @@ export class UsersService {
     }
 
     /** Роли уровня сети: без привязки к филиалу (см. GET .../staff/network). */
-    const orgWideRoles: UserRole[] = [
-      UserRole.MANAGER,
-      UserRole.OWNER,
-      UserRole.DEPUTY_OWNER,
-      UserRole.SERVICE,
-      UserRole.MARKETER,
-    ];
-    const assignStudioId = orgWideRoles.includes(createStaffDto.role) ? null : studioId;
-
-    if (createStaffDto.studioIds?.length && assignStudioId === null) {
-      throw new BadRequestException('studioIds applies only to staff assigned to a branch');
-    }
+    const assignStudioId = NETWORK_STAFF_ROLES.includes(createStaffDto.role)
+      ? null
+      : studioId;
 
     let primaryStudioId: string | null = assignStudioId;
     let membershipStudioIds: string[] = [];
@@ -644,16 +635,20 @@ export class UsersService {
 
     let membershipStudioIds: string[] | undefined;
     if (updateStaffDto.studioIds !== undefined) {
-      if (user.studioId === null) {
-        throw new BadRequestException(
-          'studioIds can only be set for staff assigned to a branch',
+      const roleAfterUpdate = (updateStaffDto.role ?? user.role) as UserRole;
+      if (!NETWORK_STAFF_ROLES.includes(roleAfterUpdate)) {
+        if (user.studioId === null) {
+          throw new BadRequestException(
+            'studioIds can only be set for staff assigned to a branch',
+          );
+        }
+        membershipStudioIds = await this.validateStudioIdsBelongToOrganization(
+          updateStaffDto.studioIds,
+          user.organizationId,
         );
+        updateData.studioId = membershipStudioIds[0]!;
       }
-      membershipStudioIds = await this.validateStudioIdsBelongToOrganization(
-        updateStaffDto.studioIds,
-        user.organizationId,
-      );
-      updateData.studioId = membershipStudioIds[0]!;
+      // Для MARKETER / MANAGER / OWNER и др. studioIds из формы игнорируем
     }
 
     const updatedUser = await this.prisma.$transaction(async (tx) => {
