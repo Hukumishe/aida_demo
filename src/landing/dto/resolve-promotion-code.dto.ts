@@ -35,4 +35,12 @@ export class ResolvePromotionCodeDto {
   @ArrayMinSize(1)
   @IsString({ each: true })
   serviceIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Мастер из выбранного слота. Вместе с studioId и serviceIds вернёт checkout с finalPrice для экрана «Условия записи».',
+  })
+  @IsOptional()
+  @IsString()
+  staffUserId?: string;
 }

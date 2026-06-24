@@ -261,6 +261,7 @@ export class LandingService {
     rawCode: string,
     studioIdForFilter?: string,
     requestedServiceIds?: string[],
+    staffUserIdForCheckout?: string,
   ) {
     await this.assertOrganizationExists(organizationId);
     if (studioIdForFilter) {
@@ -345,19 +346,26 @@ export class LandingService {
           disabledCategoryIds,
         ),
       );
-      return {
+      return this.withPromoCheckoutPreview(
+        organizationId,
+        studioIdForFilter,
         code,
-        promotionId: promotion.id,
-        type: promotion.type,
-        title: promotion.title,
-        description: promotion.description,
-        autoFill: {
-          mode: 'ONE_PLUS_ONE',
-          serviceIds: [promotion.serviceIdA, promotion.serviceIdB],
-          services,
-          finalPrice: promotion.bundlePrice,
+        requestedServiceIds,
+        staffUserIdForCheckout,
+        {
+          code,
+          promotionId: promotion.id,
+          type: promotion.type,
+          title: promotion.title,
+          description: promotion.description,
+          autoFill: {
+            mode: 'ONE_PLUS_ONE',
+            serviceIds: [promotion.serviceIdA, promotion.serviceIdB],
+            services,
+            finalPrice: promotion.bundlePrice,
+          },
         },
-      };
+      );
     }
 
     if (promotion.type === 'SERVICE_BUNDLE') {
@@ -380,19 +388,26 @@ export class LandingService {
           defaultPrice: s.defaultPrice,
           defaultDurationMin: s.defaultDurationMin,
         }));
-      return {
+      return this.withPromoCheckoutPreview(
+        organizationId,
+        studioIdForFilter,
         code,
-        promotionId: promotion.id,
-        type: promotion.type,
-        title: promotion.title,
-        description: promotion.description,
-        autoFill: {
-          mode: 'SERVICE_BUNDLE',
-          serviceIds: services.map((s) => s.id),
-          services,
-          finalPrice: promotion.bundlePrice,
+        requestedServiceIds,
+        staffUserIdForCheckout,
+        {
+          code,
+          promotionId: promotion.id,
+          type: promotion.type,
+          title: promotion.title,
+          description: promotion.description,
+          autoFill: {
+            mode: 'SERVICE_BUNDLE',
+            serviceIds: services.map((s) => s.id),
+            services,
+            finalPrice: promotion.bundlePrice,
+          },
         },
-      };
+      );
     }
 
     if (promotion.type === 'DISCOUNT') {
@@ -423,27 +438,96 @@ export class LandingService {
         requestedServiceIds,
       );
       const suggestedServiceIdWhenEmpty = services[0]?.id ?? null;
-      return {
+      return this.withPromoCheckoutPreview(
+        organizationId,
+        studioIdForFilter,
         code,
-        promotionId: promotion.id,
-        type: promotion.type,
-        title: promotion.title,
-        description: promotion.description,
-        ...(selection ? { selection } : {}),
-        autoFill: {
-          mode: 'DISCOUNT',
-          discountPercent,
-          serviceIds: promoServiceIds,
-          /** @deprecated используйте suggestedServiceIdWhenEmpty; не подставляйте, если услуга уже выбрана */
-          defaultServiceId: suggestedServiceIdWhenEmpty,
-          suggestedServiceIdWhenEmpty,
-          replaceUserSelection: false,
-          services,
+        requestedServiceIds,
+        staffUserIdForCheckout,
+        {
+          code,
+          promotionId: promotion.id,
+          type: promotion.type,
+          title: promotion.title,
+          description: promotion.description,
+          ...(selection ? { selection } : {}),
+          autoFill: {
+            mode: 'DISCOUNT',
+            discountPercent,
+            serviceIds: promoServiceIds,
+            /** @deprecated используйте suggestedServiceIdWhenEmpty; не подставляйте, если услуга уже выбрана */
+            defaultServiceId: suggestedServiceIdWhenEmpty,
+            suggestedServiceIdWhenEmpty,
+            replaceUserSelection: false,
+            services,
+          },
         },
-      };
+      );
     }
 
     throw new BadRequestException('Unsupported promotion type');
+  }
+
+  private async withPromoCheckoutPreview<T extends Record<string, unknown>>(
+    organizationId: string,
+    studioId: string | undefined,
+    code: string,
+    requestedServiceIds: string[] | undefined,
+    staffUserId: string | undefined,
+    payload: T,
+  ): Promise<
+    T & {
+      checkout?: {
+        lines: Array<{
+          serviceId: string;
+          name: string;
+          durationMin: number;
+          originalPrice: number;
+          finalPrice: number;
+          promoApplied: boolean;
+        }>;
+        totalOriginal: number;
+        totalFinal: number;
+        partialApplication: boolean;
+      };
+    }
+  > {
+    const serviceIds = [
+      ...new Set((requestedServiceIds ?? []).map((id) => id.trim()).filter(Boolean)),
+    ];
+    if (!studioId || serviceIds.length === 0) {
+      return payload;
+    }
+    const checkout = await this.buildPromoCheckoutPreview(
+      organizationId,
+      studioId,
+      code,
+      serviceIds,
+      staffUserId,
+    );
+    return { ...payload, checkout };
+  }
+
+  private async buildPromoCheckoutPreview(
+    organizationId: string,
+    studioId: string,
+    code: string,
+    serviceIds: string[],
+    staffUserId?: string,
+  ) {
+    const quote = await this.quotePromotionForBooking({
+      organizationId,
+      studioId,
+      code,
+      serviceIds,
+      staffUserId,
+    });
+    return {
+      lines: quote.lines,
+      totalOriginal: quote.totalOriginal,
+      totalFinal: quote.totalFinal,
+      partialApplication: quote.partialApplication,
+    };
   }
 
   private buildDiscountPromoSelection(
