@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ArrayMinSize, IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class ResolvePromotionCodeDto {
   @ApiProperty({ example: 'ABC123', description: 'Промокод акции' })
@@ -23,4 +23,16 @@ export class ResolvePromotionCodeDto {
   @IsOptional()
   @IsString()
   studioId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Услуги, уже выбранные клиентом в форме. Для DISCOUNT промокод не должен их заменять — ' +
+      'бэкенд проверит, подходит ли выбор под акцию, и вернёт selection.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  serviceIds?: string[];
 }

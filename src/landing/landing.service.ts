@@ -234,6 +234,7 @@ export class LandingService {
     organizationId: string,
     rawCode: string,
     studioIdForFilter?: string,
+    requestedServiceIds?: string[],
   ) {
     await this.assertOrganizationExists(organizationId);
     if (studioIdForFilter) {
@@ -390,23 +391,68 @@ export class LandingService {
           defaultDurationMin: s.defaultDurationMin,
           discountedPrice: Math.round(((s.defaultPrice ?? 0) * (100 - discountPercent)) / 100),
         }));
+      const promoServiceIds = services.map((s) => s.id);
+      const selection = this.buildDiscountPromoSelection(
+        promoServiceIds,
+        requestedServiceIds,
+      );
+      const suggestedServiceIdWhenEmpty = services[0]?.id ?? null;
       return {
         code,
         promotionId: promotion.id,
         type: promotion.type,
         title: promotion.title,
         description: promotion.description,
+        ...(selection ? { selection } : {}),
         autoFill: {
           mode: 'DISCOUNT',
           discountPercent,
-          serviceIds: services.map((s) => s.id),
-          defaultServiceId: services[0]?.id ?? null,
+          serviceIds: promoServiceIds,
+          /** @deprecated используйте suggestedServiceIdWhenEmpty; не подставляйте, если услуга уже выбрана */
+          defaultServiceId: suggestedServiceIdWhenEmpty,
+          suggestedServiceIdWhenEmpty,
+          replaceUserSelection: false,
           services,
         },
       };
     }
 
     throw new BadRequestException('Unsupported promotion type');
+  }
+
+  private buildDiscountPromoSelection(
+    promoServiceIds: string[],
+    requestedServiceIds?: string[],
+  ):
+    | {
+        requestedServiceIds: string[];
+        eligibleServiceIds: string[];
+        ineligibleServiceIds: string[];
+        partialApplication: boolean;
+      }
+    | undefined {
+    const requested = [
+      ...new Set((requestedServiceIds ?? []).map((id) => id.trim()).filter(Boolean)),
+    ];
+    if (requested.length === 0) {
+      return undefined;
+    }
+    const allowed = new Set(promoServiceIds);
+    const eligible = requested.filter((id) => allowed.has(id));
+    const ineligible = requested.filter((id) => !allowed.has(id));
+    if (eligible.length === 0) {
+      throw new BadRequestException(
+        requested.length === 1
+          ? 'К выбранной услуге нельзя применить эту акцию'
+          : 'К выбранным услугам нельзя применить эту акцию',
+      );
+    }
+    return {
+      requestedServiceIds: requested,
+      eligibleServiceIds: eligible,
+      ineligibleServiceIds: ineligible,
+      partialApplication: ineligible.length > 0 && eligible.length > 0,
+    };
   }
 
   /**

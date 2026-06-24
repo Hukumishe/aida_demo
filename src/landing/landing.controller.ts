@@ -111,7 +111,8 @@ export class LandingController {
     summary: 'Проверить промокод и получить автоподстановку услуг/цены',
     description:
       'Публичный эндпоинт. В body обязательно `code` и `organizationId`. Опциональный `studioId` ' +
-      '— чтобы отфильтровать услуги по тому, что доступно для записи в конкретном филиале.',
+      '— фильтр услуг по филиалу. Опциональный `serviceIds` — уже выбранные услуги: для DISCOUNT ' +
+      'не заменяют выбор, а проверяются (400, если ни одна не подходит).',
   })
   @ApiResponse({ status: 200, description: 'Данные акции для автозаполнения формы записи' })
   async resolvePromotionCode(@Body() dto: ResolvePromotionCodeDto) {
@@ -123,6 +124,7 @@ export class LandingController {
       orgId,
       dto.code,
       dto.studioId?.trim() || undefined,
+      dto.serviceIds,
     );
   }
 

@@ -66,7 +66,7 @@ Backend AIDA **обновлён** (коммит `ae87fc0`): промокод а�
 
 | `type` | `autoFill.mode` | Что сделать в UI |
 |--------|-----------------|------------------|
-| `DISCOUNT` | `DISCOUNT` | Подставить `defaultServiceId` или первую из `services`; показать зачёркнутую цену и `discountedPrice` |
+| `DISCOUNT` | `DISCOUNT` | **Не менять** уже выбранные услуги. Передать их в `serviceIds` body resolve-code; показать скидку на месте. `defaultServiceId` / `suggestedServiceIdWhenEmpty` — только если корзина пуста |
 | `ONE_PLUS_ONE` | `ONE_PLUS_ONE` | Выбрать **обе** услуги из `serviceIds`; показать `finalPrice` (bundle) |
 | `SERVICE_BUNDLE` | `SERVICE_BUNDLE` | Выбрать **все** услуги из `serviceIds`; показать `finalPrice` |
 
@@ -125,9 +125,12 @@ Backend AIDA **обновлён** (коммит `ae87fc0`): промокод а�
    - для DISCOUNT: «Скидка {discountPercent}%»
    - для bundle: «Цена по акции: {finalPrice} ₸»
 
-4. **Автоподстановка из `autoFill`:**
-   - DISCOUNT → select «Услуга» = `defaultServiceId` или первая из списка
-   - ONE_PLUS_ONE / SERVICE_BUNDLE → multi-select или две услуги в форме; сохранить массив `serviceIds` в state для submit
+4. **После применения промокода (DISCOUNT):**
+   - **Не заменять** `selectedServiceIds`, если услуги уже выбраны
+   - В `resolve-code` передать `"serviceIds": selectedServiceIds`
+   - Показать скидку на уже выбранных услугах (`quote` или `discountedPrice`)
+   - `suggestedServiceIdWhenEmpty` — только когда услуга ещё не выбрана
+   - ONE_PLUS_ONE / SERVICE_BUNDLE → multi-select по `autoFill.serviceIds`
 
 5. Кнопка **«Сбросить промокод»** — очистить input, бейдж, сбросить скидочные цены в UI.
 

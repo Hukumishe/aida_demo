@@ -52,7 +52,7 @@ Content-Type: application/json
 
 | `type` | Действие в форме |
 |--------|------------------|
-| `DISCOUNT` | Показать список услуг акции; при выборе услуги вызывать `POST /landing/promotions/quote` — если **400** «К выбранной услуге нельзя применить эту акцию», показать ошибку и **сбросить промокод** |
+| `DISCOUNT` | **Не менять** выбранные услуги. Передать `serviceIds` в resolve-code; при 400 — ошибка и сброс промокода. Скидка через `quote` |
 | `ONE_PLUS_ONE` | Выбрать **обе** услуги из `autoFill.serviceIds`; показать `autoFill.finalPrice` ₸ |
 | `SERVICE_BUNDLE` | Выбрать **все** услуги из `autoFill.serviceIds`; показать `autoFill.finalPrice` ₸ |
 
