@@ -50,6 +50,13 @@ import {
   findOrganizationLandingStaff,
   mapStaffToLandingMasterItems,
 } from './landing-masters.util';
+import {
+  formatLandingPromoComment,
+  incrementLandingPromoUsedCount,
+  landingPromoToClientPayload,
+  resolveLandingPromoForBooking,
+  type LandingPromoClientPayload,
+} from '../common/landing-promo/landing-promo-booking.util';
 
 function normalizeLandingPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '');
@@ -1165,7 +1172,7 @@ export class LandingService {
 
   /**
    * Публичная отправка формы «Запись в удобное время».
-   * Полная запись: startAt + serviceId + staffUserId (staff из выбранного слота).
+   * Полная запись: startAt + serviceId/serviceIds + staffUserId (staff из выбранного слота).
    * Иначе — заявка на обратный звонок (обновление notes у клиента).
    */
   async submitBookingRequest(dto: LandingBookingRequestDto) {
@@ -1212,14 +1219,18 @@ export class LandingService {
       );
     }
 
+    const bookingServiceIds = this.resolveBookingServiceIds(dto);
+
     const wantsBooking =
-      !!dto.startAt?.trim() && !!dto.serviceId?.trim() && !!dto.staffUserId?.trim();
+      !!dto.startAt?.trim() &&
+      bookingServiceIds.length > 0 &&
+      !!dto.staffUserId?.trim();
 
     if (wantsBooking) {
       const createDto = {
         staffUserId: dto.staffUserId!.trim(),
         clientId: client.id,
-        serviceIds: [dto.serviceId!.trim()],
+        serviceIds: bookingServiceIds,
         startAt: dto.startAt!.trim(),
         comment: dto.comment?.trim() || undefined,
         preferWaitlist: true,
@@ -1239,35 +1250,68 @@ export class LandingService {
           'api-key',
         );
 
+        const landingPromotion = this.extractLandingPromotionFromCreateResult(created);
+
         if (created && typeof created === 'object' && 'outcome' in created) {
           const wrapped = created as {
             outcome: 'booked' | 'waitlist';
             appointment?: { id: string; status: string; startAt: string };
             waitlistEntry?: { id: string };
+            landingPromotion?: LandingPromoClientPayload;
           };
+          const promo = landingPromotion ?? wrapped.landingPromotion;
           if (wrapped.outcome === 'waitlist') {
             return {
               outcome: 'waitlist' as const,
-              message:
+              message: this.buildLandingBookingUserMessage(
                 'Выбранное время занято. Мы добавили вас в лист ожидания и свяжемся, когда появится окно.',
+                promo,
+              ),
               waitlistEntryId: wrapped.waitlistEntry?.id,
               clientId: client.id,
+              landingPromotion: promo,
             };
           }
           return {
             outcome: 'booked' as const,
-            message: 'Запись создана. Мы свяжемся с вами для подтверждения.',
+            message: this.buildLandingBookingUserMessage(
+              'Запись создана. Мы свяжемся с вами для подтверждения.',
+              promo,
+            ),
             appointmentId: wrapped.appointment?.id,
             clientId: client.id,
+            landingPromotion: promo,
+          };
+        }
+
+        if (created && typeof created === 'object' && 'appointment' in created) {
+          const wrapped = created as {
+            appointment: { id: string };
+            landingPromotion?: LandingPromoClientPayload;
+          };
+          const promo = landingPromotion ?? wrapped.landingPromotion;
+          return {
+            outcome: 'booked' as const,
+            message: this.buildLandingBookingUserMessage(
+              'Запись создана. Мы свяжемся с вами для подтверждения.',
+              promo,
+            ),
+            appointmentId: wrapped.appointment.id,
+            clientId: client.id,
+            landingPromotion: promo,
           };
         }
 
         const appt = created as { id: string };
         return {
           outcome: 'booked' as const,
-          message: 'Запись создана. Мы свяжемся с вами для подтверждения.',
+          message: this.buildLandingBookingUserMessage(
+            'Запись создана. Мы свяжемся с вами для подтверждения.',
+            landingPromotion,
+          ),
           appointmentId: appt.id,
           clientId: client.id,
+          landingPromotion,
         };
       } catch (e) {
         if (e instanceof ConflictException) {
@@ -1279,14 +1323,43 @@ export class LandingService {
       }
     }
 
+    let landingPromotion: LandingPromoClientPayload | undefined;
+    if (dto.promoCode?.trim()) {
+      const applied = await resolveLandingPromoForBooking(this.prisma, {
+        organizationId,
+        studioId: dto.studioId,
+        rawCode: dto.promoCode,
+        appointmentServiceIds: bookingServiceIds,
+      });
+      await incrementLandingPromoUsedCount(this.prisma, applied.codeId);
+      landingPromotion = landingPromoToClientPayload(applied, bookingServiceIds);
+    }
+
     const noteBlock = [
       '[Заявка с лендинга — перезвоним]',
-      dto.serviceId ? `Услуга (id): ${dto.serviceId}` : 'Услуга: не выбрана',
+      bookingServiceIds.length
+        ? `Услуга (id): ${bookingServiceIds.join(', ')}`
+        : dto.serviceId
+          ? `Услуга (id): ${dto.serviceId}`
+          : 'Услуга: не выбрана',
       dto.startAt
         ? `Желаемое время: ${dto.startAt}`
         : 'Желаемое время: не указано',
       dto.comment?.trim() ? `Комментарий: ${dto.comment.trim()}` : 'Комментарий: —',
-      dto.promoCode?.trim() ? `Промокод: ${dto.promoCode.trim()}` : null,
+      landingPromotion
+        ? formatLandingPromoComment({
+            codeId: '',
+            code: landingPromotion.code,
+            promotionId: landingPromotion.promotionId,
+            type: landingPromotion.type,
+            title: landingPromotion.title,
+            description: landingPromotion.description,
+            discountPercent: landingPromotion.discountPercent,
+            bundlePrice: landingPromotion.bundlePrice,
+          })
+        : dto.promoCode?.trim()
+          ? `Промокод: ${dto.promoCode.trim()}`
+          : null,
     ]
       .filter(Boolean)
       .join('\n');
@@ -1300,9 +1373,50 @@ export class LandingService {
 
     return {
       outcome: 'callback' as const,
-      message: 'Заявка принята. Мы перезвоним и подберём удобное время.',
+      message: this.buildLandingBookingUserMessage(
+        'Заявка принята. Мы перезвоним и подберём удобное время.',
+        landingPromotion,
+      ),
       clientId: client.id,
+      landingPromotion,
     };
+  }
+
+  private resolveBookingServiceIds(dto: LandingBookingRequestDto): string[] {
+    const fromArray = (dto.serviceIds ?? []).map((s) => s.trim()).filter(Boolean);
+    if (fromArray.length > 0) {
+      return [...new Set(fromArray)];
+    }
+    const single = dto.serviceId?.trim();
+    return single ? [single] : [];
+  }
+
+  private extractLandingPromotionFromCreateResult(
+    created: unknown,
+  ): LandingPromoClientPayload | undefined {
+    if (!created || typeof created !== 'object' || !('landingPromotion' in created)) {
+      return undefined;
+    }
+    const promo = (created as { landingPromotion?: LandingPromoClientPayload }).landingPromotion;
+    return promo ?? undefined;
+  }
+
+  private buildLandingBookingUserMessage(
+    base: string,
+    promo?: LandingPromoClientPayload,
+  ): string {
+    if (!promo) return base;
+    const parts = [`Акция «${promo.title}»`];
+    if (promo.description?.trim()) {
+      parts.push(promo.description.trim());
+    }
+    if (promo.discountPercent != null && promo.discountPercent > 0) {
+      parts.push(`скидка ${promo.discountPercent}%`);
+    }
+    if (promo.bundlePrice != null) {
+      parts.push(`цена по акции ${promo.bundlePrice} ₸`);
+    }
+    return `${base} ${parts.join('. ')}.`;
   }
 }
 

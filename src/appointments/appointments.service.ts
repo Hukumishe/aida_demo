@@ -39,6 +39,14 @@ import {
   normalizeReferralCodeInput,
 } from '../common/referral-code.util';
 import {
+  applyLandingPromoPrices,
+  formatLandingPromoComment,
+  incrementLandingPromoUsedCount,
+  landingPromoToClientPayload,
+  resolveLandingPromoForBooking,
+  type AppliedLandingPromo,
+} from '../common/landing-promo/landing-promo-booking.util';
+import {
   assertUserOrganizationMatchesStudio,
   assertUserOrganizationMatchesStudioOrganizationId,
 } from '../common/organization-scope';
@@ -451,12 +459,34 @@ export class AppointmentsService {
     }
 
     const appointmentServiceIds = this.buildAppointmentServiceIds(createAppointmentDto);
+
+    let landingPromoApplied: AppliedLandingPromo | null = null;
+    if (createAppointmentDto.promoCode?.trim()) {
+      landingPromoApplied = await resolveLandingPromoForBooking(this.prisma, {
+        organizationId: studio.organizationId,
+        studioId,
+        rawCode: createAppointmentDto.promoCode,
+        appointmentServiceIds: appointmentServiceIds,
+      });
+    }
+
     const resolvedServices = await this.resolveAppointmentServices(
       studioId,
       studio.organizationId,
       createAppointmentDto.staffUserId,
       appointmentServiceIds,
     );
+
+    if (landingPromoApplied && resolvedServices.length > 0) {
+      applyLandingPromoPrices(resolvedServices, landingPromoApplied);
+    }
+
+    let appointmentComment = this.normalizeAppointmentComment(createAppointmentDto.comment);
+    if (landingPromoApplied) {
+      const promoLine = formatLandingPromoComment(landingPromoApplied);
+      appointmentComment = [appointmentComment, promoLine].filter(Boolean).join('\n');
+    }
+
     const durationMinutes = resolvedServices.reduce((sum, s) => sum + s.durationMin, 0);
 
     const startAt = new Date(createAppointmentDto.startAt);
@@ -486,7 +516,16 @@ export class AppointmentsService {
             endAt,
             waitlistSource,
           );
-          return { outcome: 'waitlist' as const, waitlistEntry: entry };
+          if (landingPromoApplied) {
+            await incrementLandingPromoUsedCount(this.prisma, landingPromoApplied.codeId);
+          }
+          return {
+            outcome: 'waitlist' as const,
+            waitlistEntry: entry,
+            landingPromotion: landingPromoApplied
+              ? landingPromoToClientPayload(landingPromoApplied, appointmentServiceIds)
+              : undefined,
+          };
         }
         throw e;
       }
@@ -566,7 +605,7 @@ export class AppointmentsService {
           startAt,
           endAt,
           prepaymentAmount: createAppointmentDto.prepaymentAmount,
-          comment: this.normalizeAppointmentComment(createAppointmentDto.comment),
+          comment: appointmentComment,
           status: initialStatus,
           createdSource,
           createdByUserId,
@@ -603,6 +642,10 @@ export class AppointmentsService {
             price: s.price,
           })),
         });
+      }
+
+      if (landingPromoApplied) {
+        await incrementLandingPromoUsedCount(tx, landingPromoApplied.codeId);
       }
 
       const appointmentWithItems = enrichAppointmentWithAuthor(
@@ -647,8 +690,19 @@ export class AppointmentsService {
         console.error('Failed to create notification:', error);
       }
 
+      const promoPayload = landingPromoApplied
+        ? landingPromoToClientPayload(landingPromoApplied, appointmentServiceIds)
+        : undefined;
+
       if (preferWaitlist) {
-        return { outcome: 'booked' as const, appointment: appointmentWithItems };
+        return {
+          outcome: 'booked' as const,
+          appointment: appointmentWithItems,
+          landingPromotion: promoPayload,
+        };
+      }
+      if (promoPayload) {
+        return { appointment: appointmentWithItems, landingPromotion: promoPayload };
       }
       return appointmentWithItems;
     }).then(async (result) => {

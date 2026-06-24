@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsNotEmpty, IsOptional, IsString, IsArray } from 'class-validator';
 
 export class LandingBookingRequestDto {
   @ApiProperty({ description: 'Филиал записи' })
@@ -36,6 +36,16 @@ export class LandingBookingRequestDto {
   @IsOptional()
   @IsString()
   serviceId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Несколько услуг для акций 1+1 / bundle (если задано — serviceId игнорируется)',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  serviceIds?: string[];
 
   @ApiPropertyOptional({
     description: 'Мастер; не передавать при «Любой мастер» — обязателен staffUserId из выбранного слота',
