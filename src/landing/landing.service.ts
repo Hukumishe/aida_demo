@@ -51,12 +51,14 @@ import {
   mapStaffToLandingMasterItems,
 } from './landing-masters.util';
 import {
+  applyLandingPromoPrices,
   formatLandingPromoComment,
   incrementLandingPromoUsedCount,
   landingPromoToClientPayload,
   resolveLandingPromoForBooking,
   type LandingPromoClientPayload,
 } from '../common/landing-promo/landing-promo-booking.util';
+import { LandingPromoQuoteDto } from './dto/landing-promo-quote.dto';
 
 function normalizeLandingPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '');
@@ -398,6 +400,106 @@ export class LandingService {
     }
 
     throw new BadRequestException('Unsupported promotion type');
+  }
+
+  /**
+   * Расчёт цен для экрана «Условия записи» / checkout с промокодом.
+   * Учитывает override мастера (если слот уже выбран) и применяет скидку/bundle как при submit.
+   */
+  async quotePromotionForBooking(dto: LandingPromoQuoteDto) {
+    const organizationId = dto.organizationId.trim();
+    const studioId = dto.studioId.trim();
+    const serviceIds = [...new Set(dto.serviceIds.map((id) => id.trim()).filter(Boolean))];
+    if (serviceIds.length === 0) {
+      throw new BadRequestException('serviceIds is required');
+    }
+
+    await this.assertOrganizationExists(organizationId);
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      select: { organizationId: true },
+    });
+    if (!studio || studio.organizationId !== organizationId) {
+      throw new BadRequestException('studioId не принадлежит этой организации');
+    }
+
+    const applied = await resolveLandingPromoForBooking(this.prisma, {
+      organizationId,
+      studioId,
+      rawCode: dto.code,
+      appointmentServiceIds: serviceIds,
+    });
+
+    const lines: Array<{
+      serviceId: string;
+      name: string;
+      durationMin: number;
+      originalPrice: number;
+      finalPrice: number;
+      promoApplied: boolean;
+    }> = [];
+
+    for (const serviceId of serviceIds) {
+      const service = await assertServiceBookableAtStudio(
+        this.prisma,
+        studioId,
+        serviceId,
+        organizationId,
+      );
+
+      let durationMin = service.defaultDurationMin;
+      let originalPrice = service.defaultPrice ?? 0;
+
+      if (dto.staffUserId?.trim()) {
+        const staffUserId = dto.staffUserId.trim();
+        const staffOverride = await this.prisma.staffServiceOverride.findUnique({
+          where: {
+            studioId_staffUserId_serviceId: {
+              studioId,
+              staffUserId,
+              serviceId,
+            },
+          },
+        });
+        if (staffOverride?.durationMin && staffOverride.isActive) {
+          durationMin = staffOverride.durationMin;
+        }
+        if (staffOverride?.price != null && staffOverride.isActive) {
+          originalPrice = staffOverride.price;
+        }
+      }
+
+      lines.push({
+        serviceId,
+        name: service.name,
+        durationMin,
+        originalPrice,
+        finalPrice: originalPrice,
+        promoApplied: false,
+      });
+    }
+
+    const priceRows = lines.map((l) => ({ serviceId: l.serviceId, price: l.finalPrice }));
+    applyLandingPromoPrices(priceRows, applied);
+    const eligibleSet = new Set(applied.eligibleServiceIds ?? []);
+    for (let i = 0; i < lines.length; i++) {
+      const promoApplied = eligibleSet.has(lines[i].serviceId);
+      lines[i].promoApplied = promoApplied;
+      lines[i].finalPrice = priceRows[i].price ?? lines[i].originalPrice;
+    }
+
+    const totalOriginal = lines.reduce((sum, l) => sum + l.originalPrice, 0);
+    const totalFinal = lines.reduce((sum, l) => sum + l.finalPrice, 0);
+    const promotion = landingPromoToClientPayload(applied, serviceIds);
+
+    return {
+      promotion,
+      lines,
+      partialApplication: promotion.partialApplication ?? false,
+      ineligibleServiceIds: promotion.ineligibleServiceIds,
+      totalOriginal,
+      totalFinal,
+    };
   }
 
   async createPromotionForOrganization(
@@ -1412,6 +1514,9 @@ export class LandingService {
     }
     if (promo.discountPercent != null && promo.discountPercent > 0) {
       parts.push(`скидка ${promo.discountPercent}%`);
+      if (promo.partialApplication) {
+        parts.push('скидка применена только к услугам акции');
+      }
     }
     if (promo.bundlePrice != null) {
       parts.push(`цена по акции ${promo.bundlePrice} ₸`);

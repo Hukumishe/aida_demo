@@ -24,6 +24,10 @@ export type AppliedLandingPromo = {
   description: string | null;
   discountPercent: number | null;
   bundlePrice: number | null;
+  /** DISCOUNT: услуги записи, на которые действует скидка */
+  eligibleServiceIds?: string[];
+  /** DISCOUNT: услуги записи без скидки (смешанная корзина) */
+  ineligibleServiceIds?: string[];
 };
 
 export type LandingPromoClientPayload = {
@@ -35,12 +39,22 @@ export type LandingPromoClientPayload = {
   discountPercent: number | null;
   bundlePrice: number | null;
   appliedServiceIds: string[];
+  /** true, если скидка применена не ко всем услугам в записи */
+  partialApplication?: boolean;
+  ineligibleServiceIds?: string[];
 };
 
 export function landingPromoToClientPayload(
   applied: AppliedLandingPromo,
-  appliedServiceIds: string[],
+  appointmentServiceIds: string[],
 ): LandingPromoClientPayload {
+  const eligible =
+    applied.eligibleServiceIds ??
+    (applied.type === 'DISCOUNT' ? [] : appointmentServiceIds);
+  const ineligible = applied.ineligibleServiceIds ?? [];
+  const appliedServiceIds =
+    applied.type === 'DISCOUNT' ? eligible : appointmentServiceIds;
+
   return {
     code: applied.code,
     promotionId: applied.promotionId,
@@ -50,6 +64,12 @@ export function landingPromoToClientPayload(
     discountPercent: applied.discountPercent,
     bundlePrice: applied.bundlePrice,
     appliedServiceIds,
+    partialApplication:
+      applied.type === 'DISCOUNT' &&
+      ineligible.length > 0 &&
+      eligible.length > 0,
+    ineligibleServiceIds:
+      ineligible.length > 0 ? ineligible : undefined,
   };
 }
 
@@ -60,6 +80,9 @@ export function formatLandingPromoComment(applied: AppliedLandingPromo): string 
   }
   if (applied.type === 'DISCOUNT' && applied.discountPercent != null) {
     parts.push(`скидка ${applied.discountPercent}%`);
+    if (applied.ineligibleServiceIds?.length) {
+      parts.push('применена частично');
+    }
   }
   if (
     (applied.type === 'ONE_PLUS_ONE' || applied.type === 'SERVICE_BUNDLE') &&
@@ -159,14 +182,22 @@ export async function resolveLandingPromoForBooking(
         )
         .map((s) => s!.id),
     );
-    for (const sid of serviceIds) {
-      if (!allowedIds.has(sid)) {
-        throw new BadRequestException(
-          `Услуга не участвует в акции «${promotion.title}»`,
-        );
-      }
+    const eligible = serviceIds.filter((id) => allowedIds.has(id));
+    const ineligible = serviceIds.filter((id) => !allowedIds.has(id));
+
+    if (eligible.length === 0) {
+      throw new BadRequestException(
+        serviceIds.length === 1
+          ? 'К выбранной услуге нельзя применить эту акцию'
+          : 'К выбранным услугам нельзя применить эту акцию',
+      );
     }
-    return base;
+
+    return {
+      ...base,
+      eligibleServiceIds: eligible,
+      ineligibleServiceIds: ineligible,
+    };
   }
 
   if (promotion.type === 'ONE_PLUS_ONE') {
@@ -254,7 +285,12 @@ export function applyLandingPromoPrices(
   if (applied.type === 'DISCOUNT') {
     const pct = applied.discountPercent ?? 0;
     if (pct <= 0) return;
+    const eligible = new Set(
+      applied.eligibleServiceIds ??
+        resolvedServices.map((row) => row.serviceId),
+    );
     for (const row of resolvedServices) {
+      if (!eligible.has(row.serviceId)) continue;
       const base = row.price ?? 0;
       row.price = Math.round((base * (100 - pct)) / 100);
     }

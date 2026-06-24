@@ -38,6 +38,7 @@ import { UpdateLandingCategoryCardDto } from './dto/update-category-card.dto';
 import { ReorderLandingCategoryCardsDto } from './dto/reorder-category-cards.dto';
 import { UpdateLandingWhatsAppSettingsDto } from './dto/update-whatsapp-settings.dto';
 import { ResolvePromotionCodeDto } from './dto/resolve-promotion-code.dto';
+import { LandingPromoQuoteDto } from './dto/landing-promo-quote.dto';
 import { LandingBookingRequestDto } from './dto/landing-booking-request.dto';
 
 @ApiTags('landing')
@@ -123,6 +124,20 @@ export class LandingController {
       dto.code,
       dto.studioId?.trim() || undefined,
     );
+  }
+
+  @Public()
+  @Post('landing/promotions/quote')
+  @ApiOperation({
+    summary: 'Расчёт итога с промокодом для экрана подтверждения записи',
+    description:
+      'Публичный эндпоинт. Передайте выбранные serviceIds, промокод и филиал. ' +
+      'DISCOUNT: скидка только на услуги из акции; если ни одна не подходит — 400. ' +
+      'Смешанная корзина: в lines[].promoApplied и partialApplication.',
+  })
+  @ApiResponse({ status: 200, description: 'Строки услуг и итог с учётом акции' })
+  async quotePromotionForBooking(@Body() dto: LandingPromoQuoteDto) {
+    return this.landingService.quotePromotionForBooking(dto);
   }
 
   @Post('landing/promotions')
