@@ -102,7 +102,12 @@ export class LandingController {
         'organizationId is required (query parameter or Bearer JWT with organizationId)',
       );
     }
-    return this.landingService.getPromotionsForOrganization(orgId);
+    const authHeader = req.headers.authorization;
+    const isAuthenticated =
+      typeof authHeader === 'string' && authHeader.startsWith('Bearer ');
+    return this.landingService.getPromotionsForOrganization(orgId, {
+      publicOnly: !isAuthenticated,
+    });
   }
 
   @Public()

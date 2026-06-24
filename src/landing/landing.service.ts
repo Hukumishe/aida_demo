@@ -205,12 +205,16 @@ export class LandingService {
    * Список активных акций организации. Акции общие по всей сети — studioId не нужен.
    * Публичный вызов (лендинг): `organizationId` передаётся в query.
    */
-  async getPromotionsForOrganization(organizationId: string) {
+  async getPromotionsForOrganization(
+    organizationId: string,
+    options?: { publicOnly?: boolean },
+  ) {
     await this.assertOrganizationExists(organizationId);
     const now = new Date();
-    return this.prisma.landingPromotion.findMany({
+    const rows = await this.prisma.landingPromotion.findMany({
       where: {
         organizationId,
+        isActive: options?.publicOnly ? true : undefined,
         OR: [{ validUntil: null }, { validUntil: { gt: now } }],
       },
       include: {
@@ -221,6 +225,28 @@ export class LandingService {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    if (!options?.publicOnly) {
+      return rows;
+    }
+
+    return rows
+      .map((promotion) => {
+        const codes = promotion.codes.filter(
+          (c) =>
+            c.isActive &&
+            (!c.expiresAt || c.expiresAt > now) &&
+            (c.usageLimit == null || c.usedCount < c.usageLimit),
+        );
+        if (codes.length === 0) {
+          return null;
+        }
+        return {
+          ...promotion,
+          codes,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
   }
 
   /**
