@@ -197,13 +197,16 @@ export class StudiosService {
       throw new NotFoundException('Studio not found');
     }
 
-    const deletedUserIds = await this.prisma.$transaction(async (tx) => {
-      const deleted = await this.purgeBranchStaffBeforeStudioDelete(tx, studioId);
-      await tx.appointmentHistoryEntry.deleteMany({ where: { studioId } });
-      await tx.nextbotBirthdayMessageLog.deleteMany({ where: { studioId } });
-      await tx.studio.delete({ where: { id: studioId } });
-      return deleted;
-    });
+    const deletedUserIds = await this.prisma.$transaction(
+      async (tx) => {
+        const deleted = await this.purgeBranchStaffBeforeStudioDelete(tx, studioId);
+        await tx.appointmentHistoryEntry.deleteMany({ where: { studioId } });
+        await tx.nextbotBirthdayMessageLog.deleteMany({ where: { studioId } });
+        await tx.studio.delete({ where: { id: studioId } });
+        return deleted;
+      },
+      { timeout: 120_000, maxWait: 15_000 },
+    );
 
     return {
       success: true,
@@ -235,34 +238,30 @@ export class StudiosService {
       },
       select: { id: true },
     });
+    const branchUserIds = branchUsers.map((u) => u.id);
 
-    for (const { id } of branchUsers) {
-      await this.hardDeleteUserInTx(tx, id);
+    if (branchUserIds.length > 0) {
+      const createdTickets = await tx.devTicket.findMany({
+        where: { createdByUserId: { in: branchUserIds } },
+        select: { id: true },
+      });
+      const ticketIds = createdTickets.map((t) => t.id);
+      if (ticketIds.length > 0) {
+        await tx.devTicketMessage.deleteMany({
+          where: { ticketId: { in: ticketIds } },
+        });
+        await tx.devTicket.deleteMany({
+          where: { id: { in: ticketIds } },
+        });
+      }
+      await tx.user.deleteMany({
+        where: { id: { in: branchUserIds } },
+      });
     }
 
     await tx.userStudioMembership.deleteMany({ where: { studioId } });
 
-    return branchUsers.map((u) => u.id);
-  }
-
-  private async hardDeleteUserInTx(
-    tx: Pick<PrismaService, 'devTicket' | 'devTicketMessage' | 'user'>,
-    userId: string,
-  ): Promise<void> {
-    const createdTicketIds = await tx.devTicket.findMany({
-      where: { createdByUserId: userId },
-      select: { id: true },
-    });
-    if (createdTicketIds.length > 0) {
-      const ticketIds = createdTicketIds.map((t) => t.id);
-      await tx.devTicketMessage.deleteMany({
-        where: { ticketId: { in: ticketIds } },
-      });
-      await tx.devTicket.deleteMany({
-        where: { id: { in: ticketIds } },
-      });
-    }
-    await tx.user.delete({ where: { id: userId } });
+    return branchUserIds;
   }
 
   async getSettings(studioId: string, userRole: string, userStudioId: string | undefined) {
