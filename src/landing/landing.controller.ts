@@ -241,7 +241,8 @@ export class LandingController {
   @ApiOperation({
     summary: 'Мастера филиала для формы записи (публично)',
     description:
-      'Все активные мастера/админы филиала (без фильтра «на лендинге»). Опционально serviceId — по staff_services.',
+      'Активные мастера/админы филиала с рабочим графиком (хотя бы один рабочий день вперёд). ' +
+      'Опционально serviceId — по staff_services.',
   })
   @ApiQuery({
     name: 'serviceId',
@@ -255,6 +256,40 @@ export class LandingController {
   ) {
     const ids = serviceId == null ? [] : Array.isArray(serviceId) ? serviceId : [serviceId];
     return this.landingService.getPublicBookableMasters(studioId, ids);
+  }
+
+  @Public()
+  @Get('landing/studios/:studioId/working-days')
+  @ApiOperation({
+    summary: 'Рабочие дни мастера для календаря записи (публично)',
+    description:
+      'Возвращает YYYY-MM-DD, когда у мастера рабочий день (не выходной). ' +
+      'staffUserId — только этот мастер; без него — объединение по bookable-masters. ' +
+      'from/to — диапазон (по умолчанию сегодня … +60 дней в TZ филиала).',
+  })
+  @ApiQuery({ name: 'staffUserId', required: false })
+  @ApiQuery({
+    name: 'serviceId',
+    required: false,
+    isArray: true,
+    description: 'Фильтр мастеров по услугам (как в bookable-masters)',
+  })
+  @ApiQuery({ name: 'from', required: false, description: 'YYYY-MM-DD' })
+  @ApiQuery({ name: 'to', required: false, description: 'YYYY-MM-DD' })
+  getPublicWorkingDays(
+    @Param('studioId') studioId: string,
+    @Query('staffUserId') staffUserId?: string,
+    @Query('serviceId') serviceId?: string | string[],
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const ids = serviceId == null ? [] : Array.isArray(serviceId) ? serviceId : [serviceId];
+    return this.landingService.getPublicWorkingDays(studioId, {
+      staffUserId,
+      serviceIds: ids,
+      from,
+      to,
+    });
   }
 
   @Public()

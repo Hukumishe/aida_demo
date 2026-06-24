@@ -42,6 +42,13 @@ import {
 } from '../common/service-studio-offering';
 import { getStaffUserIdsOfferingAllServicesInStudio } from '../common/staff-service-offering';
 import { isDeveloperRole, hasOrganizationWideStudioAccess } from '../common/decorators/roles.decorator';
+import { studioWallClockTimezone } from '../common/effective-timezone';
+import {
+  addDaysToDateString,
+  findStaffUserIdsWithWorkScheduleFrom,
+  findWorkingDayStringsInRange,
+  todayDateStringInTimeZone,
+} from '../common/work-schedule-query.util';
 import { ServicesService } from '../services/services.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -1185,11 +1192,19 @@ export class LandingService {
   }
 
   /**
-   * Мастера для формы записи: все активные MASTER/ADMIN в филиале (+ membership).
-   * Настройки «Показывать на сайте» (landing_masters) здесь не используются — только для витрины GET .../landing/masters.
+   * Мастера для формы записи: активные MASTER/ADMIN в филиале с рабочим графиком.
+   * Без графика (нет ни одного рабочего дня вперёд) в список не попадают.
    */
   async getPublicBookableMasters(studioId: string, serviceIds?: string[]) {
-    const organizationId = await getOrganizationIdForStudio(this.prisma, studioId);
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      include: { organization: { select: { ianaTimezone: true } } },
+    });
+    if (!studio) {
+      throw new NotFoundException('Studio not found');
+    }
+    const organizationId = studio.organizationId;
+    const wallTz = studioWallClockTimezone(studio, studio.organization);
     const filterServiceIds = (serviceIds ?? [])
       .map((id) => id.trim())
       .filter(Boolean);
@@ -1201,13 +1216,6 @@ export class LandingService {
         filterServiceIds,
       );
       allowedStaffIds = new Set(offering);
-    }
-    const studio = await this.prisma.studio.findUnique({
-      where: { id: studioId },
-      select: { id: true },
-    });
-    if (!studio) {
-      throw new NotFoundException('Studio not found');
     }
 
     const configs = await this.prisma.landingMaster.findMany({
@@ -1230,7 +1238,7 @@ export class LandingService {
       orderBy: { createdAt: 'asc' },
     });
 
-    const items = staff
+    const candidateItems = staff
       .map((u) => {
         if (allowedStaffIds && !allowedStaffIds.has(u.id)) {
           return null;
@@ -1245,8 +1253,81 @@ export class LandingService {
       })
       .filter((row): row is NonNullable<typeof row> => row !== null);
 
+    const todayStr = todayDateStringInTimeZone(wallTz);
+    const withSchedule = await findStaffUserIdsWithWorkScheduleFrom(
+      this.prisma,
+      studioId,
+      {
+        candidateStaffUserIds: candidateItems.map((i) => i.staffUserId),
+        fromDateStr: todayStr,
+      },
+    );
+
+    const items = candidateItems.filter((i) => withSchedule.has(i.staffUserId));
     items.sort((a, b) => a.order - b.order || a.staffUserId.localeCompare(b.staffUserId));
     return items;
+  }
+
+  /**
+   * Рабочие дни мастера(ов) для календаря записи на лендинге.
+   * staffUserId — только дни этого мастера; без него — объединение по всем bookable-masters.
+   */
+  async getPublicWorkingDays(
+    studioId: string,
+    options: {
+      staffUserId?: string;
+      serviceIds?: string[];
+      from?: string;
+      to?: string;
+    },
+  ) {
+    const studio = await this.prisma.studio.findUnique({
+      where: { id: studioId },
+      include: { organization: { select: { ianaTimezone: true } } },
+    });
+    if (!studio) {
+      throw new NotFoundException('Studio not found');
+    }
+    const wallTz = studioWallClockTimezone(studio, studio.organization);
+    const todayStr = todayDateStringInTimeZone(wallTz);
+    const fromStr = options.from?.trim() || todayStr;
+    const toStr =
+      options.to?.trim() || addDaysToDateString(fromStr, 60);
+
+    let staffUserIds: string[];
+    const staffUserId = options.staffUserId?.trim();
+    const bookable = await this.getPublicBookableMasters(
+      studioId,
+      options.serviceIds,
+    );
+    if (staffUserId) {
+      if (!bookable.some((m) => m.staffUserId === staffUserId)) {
+        throw new BadRequestException(
+          'Мастер недоступен для записи в этом филиале или не имеет рабочего графика',
+        );
+      }
+      staffUserIds = [staffUserId];
+    } else {
+      staffUserIds = bookable.map((m) => m.staffUserId);
+    }
+
+    const dates =
+      staffUserIds.length === 0
+        ? []
+        : await findWorkingDayStringsInRange(this.prisma, studioId, {
+            staffUserIds,
+            fromDateStr: fromStr,
+            toDateStr: toStr,
+          });
+
+    return {
+      studioId,
+      timezone: wallTz,
+      staffUserId: staffUserId ?? null,
+      from: fromStr,
+      to: toStr,
+      dates,
+    };
   }
 
   /** Публичные свободные слоты для формы записи на лендинге. */
