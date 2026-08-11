@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Public } from '../common/decorators/public.decorator';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -19,6 +20,18 @@ export class OrganizationsController {
     private readonly organizationsService: OrganizationsService,
     private readonly usersService: UsersService,
   ) {}
+
+  @Get('resolve/:slug')
+  @Public()
+  @ApiOperation({
+    summary: 'Найти организацию по slug (публичный, без JWT)',
+    description: 'Возвращает id, name, slug, ianaTimezone. Используется фронтом для определения тенанта по hostname.',
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 404, description: 'Organization not found' })
+  resolveBySlug(@Param('slug') slug: string) {
+    return this.organizationsService.findBySlug(slug);
+  }
 
   @Get()
   @Roles(UserRole.DEVELOPER)

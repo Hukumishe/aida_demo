@@ -33,6 +33,17 @@ export class OrganizationsService {
     });
   }
 
+  async findBySlug(slug: string) {
+    const org = await this.prisma.organization.findUnique({
+      where: { slug },
+      select: { id: true, name: true, slug: true, ianaTimezone: true },
+    });
+    if (!org) {
+      throw new NotFoundException(`Organization with slug "${slug}" not found`);
+    }
+    return org;
+  }
+
   async update(id: string, dto: UpdateOrganizationDto) {
     const org = await this.findOne(id);
     if (dto.ianaTimezone == null) {
