@@ -30,6 +30,7 @@ import {
   AppointmentHistoryAction,
   AppointmentStatus,
   ClientLevel,
+  Prisma,
   WaitlistEntrySource,
   WaitlistEntryStatus,
 } from '@prisma/client';
@@ -75,6 +76,13 @@ import {
   resolveAppointmentsListPeriod,
   revenueSummarySelect,
 } from './appointments-list.util';
+import {
+  MOVABLE_APPOINTMENT_STATUSES,
+  assertRescheduleDurationMatches,
+  parseRescheduleDate,
+  remapAvailabilityErrorForReschedule,
+  throwRescheduleError,
+} from './appointment-reschedule.util';
 
 const doneCheckoutInclude = {
   client: true,
@@ -944,6 +952,43 @@ export class AppointmentsService {
     }
   }
 
+  /**
+   * Кто может менять startAt / endAt / staffUserId (перенос).
+   * MASTER — только свои записи; менять мастера на другого нельзя.
+   */
+  private assertCanRescheduleAppointment(
+    userRole: string | undefined,
+    userStaffId: string | undefined,
+    appointmentStaffUserId: string,
+    nextStaffUserId: string,
+  ) {
+    const role = userRole as UserRole | undefined;
+    const canRescheduleAny =
+      isOwnerLevelRole(role) ||
+      role === UserRole.ADMIN ||
+      role === UserRole.DEVELOPER;
+
+    if (canRescheduleAny) {
+      return;
+    }
+
+    if (role === UserRole.MASTER) {
+      if (userStaffId !== appointmentStaffUserId) {
+        throw new ForbiddenException('Access denied to this appointment');
+      }
+      if (nextStaffUserId !== appointmentStaffUserId) {
+        throw new ForbiddenException(
+          'MASTER не может переназначить запись другому мастеру',
+        );
+      }
+      return;
+    }
+
+    throw new ForbiddenException(
+      'Недостаточно прав для переноса записи (нужны OWNER / DEPUTY_OWNER / ADMIN / DEVELOPER или MASTER для своих)',
+    );
+  }
+
   async update(
     id: string,
     updateAppointmentDto: UpdateAppointmentDto,
@@ -957,19 +1002,28 @@ export class AppointmentsService {
       include: {
         service: true,
         serviceItems: true,
+        staff: { include: { staffProfile: true } },
       },
     });
 
     if (!appointment) {
-      throw new NotFoundException(`Appointment with ID ${id} not found`);
+      throwRescheduleError(
+        404,
+        'NOT_FOUND',
+        `Appointment with ID ${id} not found`,
+      );
     }
 
-    await assertUserOrganizationMatchesStudio(
-      this.prisma,
-      appointment.studioId,
-      userOrganizationId,
-      userRole,
-    );
+    try {
+      await assertUserOrganizationMatchesStudio(
+        this.prisma,
+        appointment.studioId,
+        userOrganizationId,
+        userRole,
+      );
+    } catch {
+      throwRescheduleError(404, 'NOT_FOUND', `Appointment with ID ${id} not found`);
+    }
 
     // Check access
     // OWNER, DEPUTY_OWNER and MANAGER have access to all studios
@@ -985,12 +1039,83 @@ export class AppointmentsService {
       throw new ForbiddenException('Access denied to this appointment');
     }
 
-    // If startAt is being updated, recalculate endAt and check availability
+    const isReschedule =
+      updateAppointmentDto.startAt !== undefined ||
+      updateAppointmentDto.endAt !== undefined ||
+      updateAppointmentDto.staffUserId !== undefined;
+
     let startAt = appointment.startAt;
     let endAt = appointment.endAt;
+    let nextStaffUserId = appointment.staffUserId;
 
-    if (updateAppointmentDto.startAt) {
-      startAt = new Date(updateAppointmentDto.startAt);
+    if (isReschedule) {
+      nextStaffUserId =
+        updateAppointmentDto.staffUserId?.trim() || appointment.staffUserId;
+
+      this.assertCanRescheduleAppointment(
+        userRole,
+        userStaffId,
+        appointment.staffUserId,
+        nextStaffUserId,
+      );
+
+      if (!MOVABLE_APPOINTMENT_STATUSES.includes(appointment.status)) {
+        throwRescheduleError(
+          409,
+          'STATUS_NOT_MOVABLE',
+          `Запись со статусом ${appointment.status} нельзя переносить`,
+        );
+      }
+
+      if (updateAppointmentDto.startAt) {
+        startAt = parseRescheduleDate(updateAppointmentDto.startAt, 'startAt');
+      } else if (updateAppointmentDto.endAt || updateAppointmentDto.staffUserId) {
+        // Перенос без startAt: оставляем текущее время, меняем только мастера / endAt
+        startAt = appointment.startAt;
+      }
+
+      const currentDurationMs =
+        appointment.endAt.getTime() - appointment.startAt.getTime();
+
+      if (updateAppointmentDto.endAt) {
+        endAt = parseRescheduleDate(updateAppointmentDto.endAt, 'endAt');
+        assertRescheduleDurationMatches(startAt, endAt, currentDurationMs);
+      } else {
+        endAt = new Date(startAt.getTime() + currentDurationMs);
+      }
+
+      // Идемпотентность: ничего не меняется
+      const sameStart = startAt.getTime() === appointment.startAt.getTime();
+      const sameEnd = endAt.getTime() === appointment.endAt.getTime();
+      const sameStaff = nextStaffUserId === appointment.staffUserId;
+      if (
+        sameStart &&
+        sameEnd &&
+        sameStaff &&
+        updateAppointmentDto.prepaymentAmount === undefined &&
+        updateAppointmentDto.comment === undefined &&
+        updateAppointmentDto.status === undefined
+      ) {
+        const current = await this.prisma.appointment.findUnique({
+          where: { id },
+          include: {
+            staff: { include: { staffProfile: true } },
+            client: true,
+            service: true,
+            serviceItems: {
+              include: { service: true },
+              orderBy: { sortOrder: 'asc' },
+            },
+          },
+        });
+        return maskAppointmentClientForRole(current!, userRole);
+      }
+
+      await assertStaffWorksAtStudio(
+        this.prisma,
+        nextStaffUserId,
+        appointment.studioId,
+      );
 
       const serviceIds =
         appointment.serviceItems.length > 0
@@ -998,120 +1123,137 @@ export class AppointmentsService {
               .sort((a, b) => a.sortOrder - b.sortOrder)
               .map((x) => x.serviceId)
           : [appointment.serviceId];
-      const resolved = await this.resolveAppointmentServices(
+
+      // Новый мастер должен оказывать те же услуги
+      await this.resolveAppointmentServices(
         appointment.studioId,
         appointment.service.organizationId,
-        appointment.staffUserId,
+        nextStaffUserId,
         serviceIds,
       );
-      const durationMinutes = resolved.reduce((sum, s) => sum + s.durationMin, 0);
 
-      endAt = this.calculateEndAt(startAt, durationMinutes);
-
-      // Check availability (excluding current appointment)
-      await this.availabilityService.checkAppointmentAvailability(
-        appointment.studioId,
-        appointment.staffUserId,
-        startAt,
-        endAt,
-        id,
-      );
-    }
-
-    const previousStatus = appointment.status;
-
-    // Use transaction for update
-    return this.prisma.$transaction(async (tx) => {
-      if (updateAppointmentDto.startAt) {
-        // Double-check availability within transaction
+      try {
         await this.availabilityService.checkAppointmentAvailability(
           appointment.studioId,
-          appointment.staffUserId,
+          nextStaffUserId,
           startAt,
           endAt,
           id,
         );
+      } catch (e) {
+        remapAvailabilityErrorForReschedule(e);
       }
+    }
 
-      /** Поздняя отмена (< 4 ч до начала): сгоревшая предоплата на записи → дашборд (forfeitedPrepaymentAmount). Без NoShowIncome — иначе двойной учёт в revenue. */
-      let forfeitedToSet: number | undefined;
-      const effectiveStart = updateAppointmentDto.startAt ? startAt : appointment.startAt;
-      if (updateAppointmentDto.status === AppointmentStatus.CANCELLED) {
-        if (appointment.status === AppointmentStatus.DONE) {
-          throw new BadRequestException('Cannot cancel a completed appointment');
-        }
-        if (appointment.status === AppointmentStatus.CANCELLED) {
-          throw new BadRequestException('Appointment is already cancelled');
-        }
-        const now = new Date();
-        const hoursUntilStart =
-          (new Date(effectiveStart).getTime() - now.getTime()) / (1000 * 60 * 60);
-        if (hoursUntilStart < 4) {
-          const alreadyForfeited = (appointment.forfeitedPrepaymentAmount ?? 0) > 0;
-          const appointmentServicesTotal =
-            appointment.serviceItems.length > 0
-              ? appointment.serviceItems.reduce((sum, item) => sum + (item.price ?? 0), 0)
-              : (appointment.service.defaultPrice ?? 0);
-          const amountToForfeit =
-            appointment.prepaymentAmount ?? appointmentServicesTotal;
-          if (amountToForfeit > 0 && !alreadyForfeited) {
-            forfeitedToSet = amountToForfeit;
+    const previousStatus = appointment.status;
+
+    // Use transaction for update (Serializable — защита от гонок при пересечении слотов)
+    return this.prisma.$transaction(
+      async (tx) => {
+        if (isReschedule) {
+          try {
+            // Повторная проверка внутри транзакции (через основной клиент availability;
+            // Serializable снижает риск двойного бронирования).
+            await this.availabilityService.checkAppointmentAvailability(
+              appointment.studioId,
+              nextStaffUserId,
+              startAt,
+              endAt,
+              id,
+            );
+          } catch (e) {
+            remapAvailabilityErrorForReschedule(e);
           }
         }
-      }
 
-      /**
-       * Таймер удержания предварительной брони (holdExpiresAt) очищаем при переходе в любой стабильный
-       * статус (PENDING_CONFIRMATION, BOOKED, DONE) или при финальной отмене — чтобы крон авто-освобождения
-       * слотов не трогал запись после явного подтверждения/отмены менеджером или агентом.
-       */
-      const clearHoldStatuses: AppointmentStatus[] = [
-        AppointmentStatus.PENDING_CONFIRMATION,
-        AppointmentStatus.AWAITING_PREPAYMENT,
-        AppointmentStatus.BOOKED,
-        AppointmentStatus.DONE,
-        AppointmentStatus.ARRIVED,
-        AppointmentStatus.CANCELLED,
-      ];
-      const shouldClearHold =
-        updateAppointmentDto.status !== undefined &&
-        clearHoldStatuses.includes(updateAppointmentDto.status);
+        /** Поздняя отмена (< 4 ч до начала): сгоревшая предоплата на записи → дашборд (forfeitedPrepaymentAmount). Без NoShowIncome — иначе двойной учёт в revenue. */
+        let forfeitedToSet: number | undefined;
+        const effectiveStart = isReschedule ? startAt : appointment.startAt;
+        if (updateAppointmentDto.status === AppointmentStatus.CANCELLED) {
+          if (appointment.status === AppointmentStatus.DONE) {
+            throw new BadRequestException('Cannot cancel a completed appointment');
+          }
+          if (appointment.status === AppointmentStatus.CANCELLED) {
+            throw new BadRequestException('Appointment is already cancelled');
+          }
+          const now = new Date();
+          const hoursUntilStart =
+            (new Date(effectiveStart).getTime() - now.getTime()) / (1000 * 60 * 60);
+          if (hoursUntilStart < 4) {
+            const alreadyForfeited = (appointment.forfeitedPrepaymentAmount ?? 0) > 0;
+            const appointmentServicesTotal =
+              appointment.serviceItems.length > 0
+                ? appointment.serviceItems.reduce((sum, item) => sum + (item.price ?? 0), 0)
+                : (appointment.service.defaultPrice ?? 0);
+            const amountToForfeit =
+              appointment.prepaymentAmount ?? appointmentServicesTotal;
+            if (amountToForfeit > 0 && !alreadyForfeited) {
+              forfeitedToSet = amountToForfeit;
+            }
+          }
+        }
 
-      const becomingBooked =
-        updateAppointmentDto.status === AppointmentStatus.BOOKED &&
-        appointment.status !== AppointmentStatus.BOOKED;
+        /**
+         * Таймер удержания предварительной брони (holdExpiresAt) очищаем при переходе в любой стабильный
+         * статус (PENDING_CONFIRMATION, BOOKED, DONE) или при финальной отмене — чтобы крон авто-освобождения
+         * слотов не трогал запись после явного подтверждения/отмены менеджером или агентом.
+         */
+        const clearHoldStatuses: AppointmentStatus[] = [
+          AppointmentStatus.PENDING_CONFIRMATION,
+          AppointmentStatus.AWAITING_PREPAYMENT,
+          AppointmentStatus.BOOKED,
+          AppointmentStatus.DONE,
+          AppointmentStatus.ARRIVED,
+          AppointmentStatus.CANCELLED,
+        ];
+        const shouldClearHold =
+          updateAppointmentDto.status !== undefined &&
+          clearHoldStatuses.includes(updateAppointmentDto.status);
 
-      const updated = await tx.appointment.update({
-        where: { id },
-        data: {
-          startAt: updateAppointmentDto.startAt ? startAt : undefined,
-          endAt: updateAppointmentDto.startAt ? endAt : undefined,
-          prepaymentAmount: updateAppointmentDto.prepaymentAmount,
-          ...(updateAppointmentDto.comment !== undefined
-            ? { comment: this.normalizeAppointmentComment(updateAppointmentDto.comment) }
-            : {}),
-          status: updateAppointmentDto.status,
-          ...(becomingBooked ? { bookedAt: new Date() } : {}),
-          ...(shouldClearHold ? { holdExpiresAt: null } : {}),
-          ...(forfeitedToSet !== undefined ? { forfeitedPrepaymentAmount: forfeitedToSet } : {}),
-        },
-        include: {
-          staff: {
-            include: {
-              staffProfile: true,
+        const becomingBooked =
+          updateAppointmentDto.status === AppointmentStatus.BOOKED &&
+          appointment.status !== AppointmentStatus.BOOKED;
+
+        const updated = await tx.appointment.update({
+          where: { id },
+          data: {
+            ...(isReschedule
+              ? {
+                  startAt,
+                  endAt,
+                  staffUserId: nextStaffUserId,
+                }
+              : {}),
+            prepaymentAmount: updateAppointmentDto.prepaymentAmount,
+            ...(updateAppointmentDto.comment !== undefined
+              ? { comment: this.normalizeAppointmentComment(updateAppointmentDto.comment) }
+              : {}),
+            status: updateAppointmentDto.status,
+            ...(becomingBooked ? { bookedAt: new Date() } : {}),
+            ...(shouldClearHold ? { holdExpiresAt: null } : {}),
+            ...(forfeitedToSet !== undefined
+              ? { forfeitedPrepaymentAmount: forfeitedToSet }
+              : {}),
+          },
+          include: {
+            staff: {
+              include: {
+                staffProfile: true,
+              },
+            },
+            client: true,
+            service: true,
+            serviceItems: {
+              include: { service: true },
+              orderBy: { sortOrder: 'asc' },
             },
           },
-          client: true,
-          service: true,
-          serviceItems: {
-            include: { service: true },
-            orderBy: { sortOrder: 'asc' },
-          },
-        },
-      });
+        });
 
-      return { updated, previousStatus };
-    })
+        return { updated, previousStatus };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    )
       .then(async ({ updated, previousStatus }) => {
         if (
           updateAppointmentDto.status !== undefined &&

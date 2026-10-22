@@ -26,12 +26,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let code: string | undefined;
     let errorDetails: any = null;
 
+    let errorCode: string | undefined;
+
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse();
       if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
-        message = (exceptionResponse as any).message || exception.message;
-        code = (exceptionResponse as any).code;
+        const body = exceptionResponse as Record<string, unknown>;
+        message = (body.message as string) || exception.message;
+        code = (body.code as string) || undefined;
+        // Reschedule / domain errors: { error: "SLOT_BUSY", message: "..." }
+        errorCode =
+          typeof body.error === 'string' ? body.error : code;
         errorDetails = exceptionResponse;
       } else {
         message = exceptionResponse as string;
@@ -65,12 +71,37 @@ export class HttpExceptionFilter implements ExceptionFilter {
       },
     );
 
-    response.status(status).json({
+    const payload: Record<string, unknown> = {
       statusCode: status,
       message,
-      code,
       timestamp: new Date().toISOString(),
-    });
+    };
+    if (errorCode) {
+      payload.error = errorCode;
+    }
+    if (code && code !== errorCode) {
+      payload.code = code;
+    }
+    // Пробрасываем доп. поля домена (например conflictingAppointmentId)
+    if (
+      errorDetails &&
+      typeof errorDetails === 'object' &&
+      !Array.isArray(errorDetails)
+    ) {
+      for (const key of Object.keys(errorDetails)) {
+        if (
+          key === 'statusCode' ||
+          key === 'message' ||
+          key === 'error' ||
+          key === 'code'
+        ) {
+          continue;
+        }
+        payload[key] = (errorDetails as Record<string, unknown>)[key];
+      }
+    }
+
+    response.status(status).json(payload);
   }
 }
 

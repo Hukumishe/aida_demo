@@ -269,11 +269,17 @@ export class AppointmentsController {
   }
 
   @Patch('appointments/:id')
-  @ApiOperation({ summary: 'Update appointment' })
+  @ApiOperation({
+    summary: 'Update / reschedule appointment',
+    description:
+      'Частичное обновление. Перенос: передать startAt, endAt (опц.), staffUserId. ' +
+      'Длительность не меняется. Ошибки переноса: SLOT_BUSY, OUTSIDE_WORKING_HOURS, STATUS_NOT_MOVABLE, INVALID_DATE, NOT_FOUND.',
+  })
   @ApiResponse({ status: 200, description: 'Appointment updated' })
+  @ApiResponse({ status: 400, description: 'SLOT_BUSY / OUTSIDE_WORKING_HOURS / INVALID_DATE' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Appointment not found' })
-  @ApiResponse({ status: 409, description: 'Conflict - time slot not available' })
+  @ApiResponse({ status: 404, description: 'NOT_FOUND' })
+  @ApiResponse({ status: 409, description: 'STATUS_NOT_MOVABLE' })
   async update(
     @Param('id') id: string,
     @Body() updateAppointmentDto: UpdateAppointmentDto,

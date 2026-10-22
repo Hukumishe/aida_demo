@@ -98,6 +98,8 @@ export class AppointmentHistoryService {
     after: Appointment,
     dto: {
       startAt?: string;
+      endAt?: string;
+      staffUserId?: string;
       prepaymentAmount?: number;
       comment?: string | null;
       status?: AppointmentStatus;
@@ -107,23 +109,50 @@ export class AppointmentHistoryService {
   ) {
     const changes: HistoryChangeRow[] = [];
 
-    if (dto.startAt) {
-      const newStart = new Date(dto.startAt);
-      if (newStart.getTime() !== before.startAt.getTime()) {
+    const timeChanged =
+      after.startAt.getTime() !== before.startAt.getTime() ||
+      after.endAt.getTime() !== before.endAt.getTime();
+    const staffChanged = after.staffUserId !== before.staffUserId;
+
+    if (timeChanged || staffChanged) {
+      if (timeChanged) {
         changes.push({
           field: 'Время',
           from: formatDateTime(before.startAt),
-          to: formatDateTime(newStart),
-        });
-        await this.record({
-          appointmentId: after.id,
-          studioId: after.studioId,
-          action: AppointmentHistoryAction.RESCHEDULED,
-          summary: `Перенос: ${formatDateTime(before.startAt)} → ${formatDateTime(newStart)}`,
-          payload: { appointmentId: after.id, changes },
-          actorUserId,
+          to: formatDateTime(after.startAt),
         });
       }
+      if (staffChanged) {
+        changes.push({
+          field: 'Мастер',
+          from: before.staffUserId,
+          to: after.staffUserId,
+        });
+      }
+      const parts: string[] = [];
+      if (timeChanged) {
+        parts.push(
+          `${formatDateTime(before.startAt)} → ${formatDateTime(after.startAt)}`,
+        );
+      }
+      if (staffChanged) {
+        parts.push(`мастер ${before.staffUserId} → ${after.staffUserId}`);
+      }
+      await this.record({
+        appointmentId: after.id,
+        studioId: after.studioId,
+        action: AppointmentHistoryAction.RESCHEDULED,
+        summary: `Перенос: ${parts.join('; ')}`,
+        payload: {
+          appointmentId: after.id,
+          changes,
+          fromStaffUserId: before.staffUserId,
+          toStaffUserId: after.staffUserId,
+          fromStartAt: before.startAt.toISOString(),
+          toStartAt: after.startAt.toISOString(),
+        },
+        actorUserId,
+      });
     }
 
     if (

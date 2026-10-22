@@ -5,7 +5,7 @@ import {
   CallHandler,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { mergeMap } from 'rxjs/operators';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   DEFAULT_IANA_TIMEZONE,
@@ -22,30 +22,37 @@ export class TimezoneInterceptor implements NestInterceptor {
 
   async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<any>> {
     const request = context.switchToHttp().getRequest();
-    const studioId = request.params?.studioId || request.user?.studioId;
-    
-    // Получаем таймзону студии или используем дефолтную
-    let timezone = DEFAULT_IANA_TIMEZONE;
-    if (studioId) {
-      try {
-        const studio = await this.prisma.studio.findUnique({
-          where: { id: studioId },
-          select: {
-            timezone: true,
-            organization: { select: { ianaTimezone: true } },
-          },
-        });
-        if (studio) {
-          timezone = studioWallClockTimezone(studio, studio.organization);
-        }
-      } catch (error) {
-        // Если не удалось получить таймзону, используем дефолтную
-        console.warn(`Failed to get timezone for studio ${studioId}, using default:`, error);
-      }
-    }
+    const paramStudioId = request.params?.studioId || request.user?.studioId;
 
     return next.handle().pipe(
-      map((data) => this.transformDates(data, timezone)),
+      mergeMap(async (data) => {
+        const studioIdFromBody =
+          data && typeof data === 'object' && !Array.isArray(data)
+            ? (data as { studioId?: string }).studioId
+            : undefined;
+        const studioId = paramStudioId || studioIdFromBody;
+        let timezone = DEFAULT_IANA_TIMEZONE;
+        if (studioId) {
+          try {
+            const studio = await this.prisma.studio.findUnique({
+              where: { id: studioId },
+              select: {
+                timezone: true,
+                organization: { select: { ianaTimezone: true } },
+              },
+            });
+            if (studio) {
+              timezone = studioWallClockTimezone(studio, studio.organization);
+            }
+          } catch (error) {
+            console.warn(
+              `Failed to get timezone for studio ${studioId}, using default:`,
+              error,
+            );
+          }
+        }
+        return this.transformDates(data, timezone);
+      }),
     );
   }
 

@@ -133,7 +133,10 @@ export class AvailabilityService {
     });
 
     if (!schedule || schedule.isDayOff) {
-      throw new ConflictException('No work schedule for this date or day is off', 'APPOINTMENT_NO_SCHEDULE');
+      throw new ConflictException({
+        message: 'No work schedule for this date or day is off',
+        error: 'APPOINTMENT_NO_SCHEDULE',
+      });
     }
 
     const startTime = extractLocalTimeHHMM(startAt, tz);
@@ -143,10 +146,10 @@ export class AvailabilityService {
       !this.isTimeInRange(startTime, schedule.startTime, schedule.endTime) ||
       !this.isTimeInRange(endTime, schedule.startTime, schedule.endTime)
     ) {
-      throw new ConflictException(
-        `Appointment is outside work hours. Start: ${startTime}, End: ${endTime}, Schedule: ${schedule.startTime}-${schedule.endTime}`,
-        'APPOINTMENT_OUTSIDE_HOURS'
-      );
+      throw new ConflictException({
+        message: `Appointment is outside work hours. Start: ${startTime}, End: ${endTime}, Schedule: ${schedule.startTime}-${schedule.endTime}`,
+        error: 'APPOINTMENT_OUTSIDE_HOURS',
+      });
     }
 
     if (schedule.breakStart && schedule.breakEnd) {
@@ -154,7 +157,10 @@ export class AvailabilityService {
       const breakEnd = utcAtWallClockInTimeZone(dateStr, schedule.breakEnd, tz);
 
       if (this.isTimeRangeOverlapping(breakStart, breakEnd, startAt, endAt)) {
-        throw new ConflictException('Appointment overlaps with break time', 'APPOINTMENT_IN_BREAK');
+        throw new ConflictException({
+          message: 'Appointment overlaps with break time',
+          error: 'APPOINTMENT_IN_BREAK',
+        });
       }
     }
 
@@ -187,7 +193,11 @@ export class AvailabilityService {
     });
 
     if (conflictingBusySlot) {
-      throw new ConflictException('Appointment overlaps with busy slot', 'APPOINTMENT_BUSY_SLOT_CONFLICT');
+      throw new ConflictException({
+        message: 'Appointment overlaps with busy slot',
+        error: 'APPOINTMENT_BUSY_SLOT_CONFLICT',
+        conflictingBusySlotId: conflictingBusySlot.id,
+      });
     }
 
     // 5. Check if appointment overlaps with other appointments (except CANCELLED)
@@ -221,7 +231,11 @@ export class AvailabilityService {
     });
 
     if (conflictingAppointment) {
-      throw new ConflictException('Appointment overlaps with another appointment', 'APPOINTMENT_APPOINTMENT_CONFLICT');
+      throw new ConflictException({
+        message: 'Appointment overlaps with another appointment',
+        error: 'APPOINTMENT_APPOINTMENT_CONFLICT',
+        conflictingAppointmentId: conflictingAppointment.id,
+      });
     }
   }
 
